@@ -4,6 +4,7 @@
 package extract
 
 import (
+	"crypto/sha256"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +26,22 @@ type Options struct {
 	Base      string // git ref; "" = merge-base with the default branch
 	WithTests bool
 	Parsers   []lang.Parser
+	// Cache, if set, remembers parse results by file content between runs
+	// (used by `archmap serve` so a rebuild re-parses only edited files).
+	Cache *ParseCache
 }
+
+// ParseCache keeps parsed files keyed by path and a hash of their content.
+// It is not safe for concurrent runs.
+type ParseCache struct{ m map[string]cached }
+
+type cached struct {
+	sum [sha256.Size]byte
+	f   lang.File
+}
+
+// NewParseCache returns an empty cache.
+func NewParseCache() *ParseCache { return &ParseCache{m: map[string]cached{}} }
 
 // fn is a parsed function plus the data the orchestrator attaches.
 type fn struct {
@@ -78,9 +94,19 @@ func Run(opts Options) (*facts.Facts, error) {
 		if ps == nil {
 			return lang.File{}
 		}
+		var sum [sha256.Size]byte
+		if opts.Cache != nil {
+			sum = sha256.Sum256(src)
+			if c, ok := opts.Cache.m[p]; ok && c.sum == sum {
+				return c.f
+			}
+		}
 		f, err := ps.Parse(p, src)
 		if err != nil {
 			return lang.File{}
+		}
+		if opts.Cache != nil {
+			opts.Cache.m[p] = cached{sum, f}
 		}
 		return f
 	}

@@ -70,7 +70,7 @@ func TestVersionServeAndUsage(t *testing.T) {
 		t.Errorf("version: %d %q", code, out.String())
 	}
 	errb.Reset()
-	if code := run([]string{"serve"}, &out, &errb); code != 2 || !strings.Contains(errb.String(), "not implemented") {
+	if code := run([]string{"serve", "--addr", "0.0.0.0:0"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "loopback") {
 		t.Errorf("serve: %d %q", code, errb.String())
 	}
 	if code := run(nil, &out, &errb); code != 2 {
