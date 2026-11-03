@@ -16,5 +16,13 @@ require (
 )
 
 require (
+	github.com/UserNobody14/tree-sitter-dart v0.0.0-20261018035034-0038280b774b // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
+	github.com/tree-sitter/tree-sitter-c-sharp v0.23.5 // indirect
+	github.com/tree-sitter/tree-sitter-elixir v0.3.5
+	github.com/tree-sitter/tree-sitter-haskell v0.24.1 // indirect
+	github.com/tree-sitter/tree-sitter-php v0.25.1 // indirect
+	github.com/tree-sitter/tree-sitter-scala v0.26.4 // indirect
 )
+
+replace github.com/tree-sitter/tree-sitter-elixir => github.com/elixir-lang/tree-sitter-elixir v0.3.5

@@ -79,7 +79,7 @@ step is an existing function id (`path/file.ext::Class.method`). See
 - **Hand-written parsers** (most precise): Python, Go, JS/TS (JSX/TSX), Swift,
   Kotlin. Source: `internal/lang/<name>`.
 - **Through tree-sitter tags queries** (`internal/lang/generic`): Java, Rust,
-  Ruby. A language is one `Spec` (name, extensions, grammar, tags query,
+  Ruby, C#, PHP, Scala, Dart, Elixir, Haskell. A language is one `Spec` (name, extensions, grammar, tags query,
   optional import query); the shared code turns `@definition.*` /
   `@reference.call` captures into functions, owners, line ranges, signatures,
   doc comments, calls with receivers and imports. Expect less precision than
