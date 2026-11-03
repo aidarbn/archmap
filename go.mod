@@ -12,4 +12,9 @@ require (
 	github.com/tree-sitter/tree-sitter-typescript v0.23.2
 )
 
-require github.com/mattn/go-pointer v0.0.1 // indirect
+require (
+	github.com/mattn/go-pointer v0.0.1 // indirect
+	github.com/tree-sitter/tree-sitter-java v0.23.5 // indirect
+	github.com/tree-sitter/tree-sitter-ruby v0.23.1 // indirect
+	github.com/tree-sitter/tree-sitter-rust v0.23.2 // indirect
+)

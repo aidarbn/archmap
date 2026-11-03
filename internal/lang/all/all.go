@@ -3,6 +3,7 @@ package all
 
 import (
 	"github.com/aidarbn/archmap/internal/lang"
+	"github.com/aidarbn/archmap/internal/lang/generic"
 	"github.com/aidarbn/archmap/internal/lang/golang"
 	"github.com/aidarbn/archmap/internal/lang/js"
 	"github.com/aidarbn/archmap/internal/lang/kotlin"
@@ -12,5 +13,9 @@ import (
 
 // Parsers returns one instance of each built-in parser.
 func Parsers() []lang.Parser {
-	return []lang.Parser{python.New(), golang.New(), js.New(), swift.New(), kotlin.New()}
+	ps := []lang.Parser{python.New(), golang.New(), js.New(), swift.New(), kotlin.New()}
+	for _, g := range generic.Parsers() {
+		ps = append(ps, g)
+	}
+	return ps
 }
