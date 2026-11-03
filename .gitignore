@@ -1,0 +1,7 @@
+/bin/
+/dist/
+/.archmap/
+facts.json
+*.test
+*.out
+.DS_Store
