@@ -115,12 +115,25 @@ header .sum b{color:var(--fg)}
 @keyframes pulse{from{opacity:.9;stroke-width:3}to{opacity:0;stroke-width:14}}
 @media (prefers-reduced-motion:reduce){.flow,.pulse{animation:none}}
 #empty{padding:30px;color:var(--mut)}
+.live{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border:1px solid var(--bd);border-radius:12px;color:var(--mut);font-size:12px}
+.live[hidden]{display:none}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--add)}
+.live.building i{background:var(--mod);animation:blink .7s ease-in-out infinite alternate}
+.live.error{border-color:var(--del);color:var(--del)}
+.live.error i{background:var(--del)}
+@keyframes blink{from{opacity:1}to{opacity:.25}}
+.node.flash rect:not(.stack){animation:flashn 2.6s ease-out 1}
+@keyframes flashn{0%{stroke:var(--hl);stroke-width:7}60%{stroke:var(--hl);stroke-width:4}100%{stroke:var(--bd);stroke-width:1.2}}
+.row.flash,#detail.flash{animation:flashr 2.6s ease-out 1}
+@keyframes flashr{0%{background:color-mix(in srgb,var(--hl) 55%,transparent)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){.live.building i,.node.flash rect:not(.stack),.row.flash,#detail.flash{animation:none}.node.flash rect:not(.stack){stroke:var(--hl);stroke-width:3}.row.flash{background:color-mix(in srgb,var(--hl) 25%,transparent)}}
 </style>
 </head>
 <body>
 <header>
   <h1 id="title"><!--TITLE--></h1>
   <span class="sum" id="sum"></span>
+  <span class="live" id="live" hidden title=""><i></i><b>живое</b><span id="liveInfo"></span></span>
   <span style="flex:1"></span>
   <label><input type="checkbox" id="onlyChanged"> только изменённые</label>
   <input type="search" id="q" placeholder="Поиск: функция или файл…" autocomplete="off">
@@ -171,10 +184,11 @@ const NS = "http://www.w3.org/2000/svg";
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 if (!DATA || !DATA.facts) { $("#sidebody").innerHTML = '<div id="empty">Нет данных: файл нужно собирать командой <code>arch.py render</code>.</div>'; return; }
 
-const F = DATA.facts, M = DATA.model || {};
-const fns = F.functions || {};
-const fids = Object.keys(fns);
-const MM = M.modules || {};
+let F = DATA.facts, M = DATA.model || {};
+const LIVE = DATA.serve || null;
+let fns = F.functions || {};
+let fids = Object.keys(fns);
+let MM = M.modules || {};
 const LAYERS = ["entry","ui","domain","adapter","infra","test","other"];
 const LAYER_RU = {entry:"Входы", ui:"Интерфейс", domain:"Домен", adapter:"Адаптеры", infra:"Инфраструктура", test:"Тесты", other:"Прочее"};
 const STATUS_RU = {added:"добавлена", modified:"изменена", deleted:"удалена"};
@@ -183,26 +197,30 @@ const shortMod = m => { const p = modLabel(m).split("/"); return p.slice(-2).joi
 const fname = f => (f.cls ? f.cls + "." : "") + f.name;
 
 /* ---------- индексы ---------- */
-const callers = {};
-const byMod = {};
-fids.forEach(id => { callers[id] = []; });
-fids.forEach(id => {
-  const f = fns[id];
-  (byMod[f.module] = byMod[f.module] || []).push(id);
-  (f.callees || []).forEach(c => { if (callers[c]) callers[c].push(id); });
-});
-const changed = fids.filter(id => fns[id].status);
-const entries = fids.filter(id => fns[id].entry);
-const deleted = F.deleted || [];
-const importedBy = {};
-Object.keys(F.modules).forEach(a => (F.modules[a].imports || []).forEach(b => { if (a !== b) (importedBy[b] = importedBy[b] || []).push(a); }));
-const modChg = {};
+let callers, byMod, changed, entries, deleted, importedBy, modChg, nLocal, nAdded, nMod;
 const bump = (m, k) => { const o = modChg[m] = modChg[m] || {added:0, modified:0, deleted:0, local:0}; o[k]++; };
-changed.forEach(id => { const f = fns[id]; bump(f.module, f.status); if (f.uncommitted) bump(f.module, "local"); });
-deleted.forEach(d => bump(d.module, "deleted"));
-const nLocal = changed.filter(id => fns[id].uncommitted).length;
-const nAdded = changed.filter(id => fns[id].status === "added").length;
-const nMod = changed.filter(id => fns[id].status === "modified").length;
+function indexData() {
+  fns = F.functions || {}; fids = Object.keys(fns); MM = M.modules || {};
+  callers = {}; byMod = {};
+  fids.forEach(id => { callers[id] = []; });
+  fids.forEach(id => {
+    const f = fns[id];
+    (byMod[f.module] = byMod[f.module] || []).push(id);
+    (f.callees || []).forEach(c => { if (callers[c]) callers[c].push(id); });
+  });
+  changed = fids.filter(id => fns[id].status);
+  entries = fids.filter(id => fns[id].entry);
+  deleted = F.deleted || [];
+  importedBy = {};
+  Object.keys(F.modules).forEach(a => (F.modules[a].imports || []).forEach(b => { if (a !== b) (importedBy[b] = importedBy[b] || []).push(a); }));
+  modChg = {};
+  changed.forEach(id => { const f = fns[id]; bump(f.module, f.status); if (f.uncommitted) bump(f.module, "local"); });
+  deleted.forEach(d => bump(d.module, "deleted"));
+  nLocal = changed.filter(id => fns[id].uncommitted).length;
+  nAdded = changed.filter(id => fns[id].status === "added").length;
+  nMod = changed.filter(id => fns[id].status === "modified").length;
+}
+indexData();
 
 /* ---------- состояние ---------- */
 const S = {
@@ -210,22 +228,26 @@ const S = {
   entOnly: false, entKind: "", fMod: null, limit: 200,
   mode: null, steps: [], idx: -1, playing: false, timer: null,
 };
+const flash = {set: new Set(), mods: new Set(), timer: null}; // что мигает после обновления (serve)
 
 /* ---------- шапка ---------- */
-$("#title").textContent = M.title || (F.repo + " — архитектура");
-document.title = $("#title").textContent;
-$("#sum").innerHTML =
-  `<b>${esc(F.repo)}</b> · ветка <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
-  `модулей <b>${Object.keys(F.modules).length}</b>, функций <b>${fids.length}</b>, точек входа <b>${entries.length}</b> · изменено: ` +
-  `<span class="chip a">+${nAdded}</span><span class="chip m">~${nMod}</span><span class="chip d">−${deleted.length}</span><span class="chip l">не в коммите ${nLocal}</span>` +
-  (M.summary ? `<br><span>${esc(M.summary)}</span>` : "");
+function drawHeader() {
+  $("#title").textContent = M.title || (F.repo + " — архитектура");
+  document.title = $("#title").textContent;
+  $("#sum").innerHTML =
+    `<b>${esc(F.repo)}</b> · ветка <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
+    `модулей <b>${Object.keys(F.modules).length}</b>, функций <b>${fids.length}</b>, точек входа <b>${entries.length}</b> · изменено: ` +
+    `<span class="chip a">+${nAdded}</span><span class="chip m">~${nMod}</span><span class="chip d">−${deleted.length}</span><span class="chip l">не в коммите ${nLocal}</span>` +
+    (M.summary ? `<br><span>${esc(M.summary)}</span>` : "");
+}
+drawHeader();
 
 /* ---------- раскладка карты ---------- */
 // Группировка: модулей больше GROUP_MIN — на карте группы по префиксу пути.
 // Дерево путей; стартовый срез жадно дробит самую крупную ветку, пока блоков <= GROUP_TARGET.
 const GROUP_MIN = 60, GROUP_TARGET = 40;
-const allMods = Object.keys(F.modules);
-const grouping = allMods.length > GROUP_MIN;
+let allMods = Object.keys(F.modules);
+let grouping = allMods.length > GROUP_MIN;
 const TN = {}, modNode = {}, userOpen = new Set(), initOpen = new Set();
 let TROOT = null;
 const isGid = id => id.startsWith("g:");
@@ -540,6 +562,7 @@ function paintMap() {
     if (caller.has(m)) cl.push("caller");
     if (callee.has(m)) cl.push("callee");
     if (hits && hits.has(m)) cl.push("hit");
+    if (flash.mods.size && U[m].mods.some(x => flash.mods.has(x))) cl.push("flash");
     if (trail.has(m)) cl.push("trail");
     if (m === cur) cl.push("cur");
     if (kidSet && kidSet.has(U[m].mods[0])) cl.push("kid");
@@ -579,7 +602,7 @@ function fnRow(id) {
   const f = fns[id];
   const st = f.status ? `<span class="st ${f.status}" title="${STATUS_RU[f.status]}${f.uncommitted ? ", не в коммите" : ""}">${f.status === "added" ? "+" : "~"}</span>` : '<span class="st"></span>';
   const en = f.entry ? `<span class="ent" title="${esc(f.entry.kind + ": " + f.entry.labels.join(", "))}">⚑</span>` : "";
-  return `<div class="row${id === S.fn ? " sel" : ""}" data-f="${esc(id)}">${st}${en}<span class="n" title="${esc(id)}">${esc(fname(f))}</span><span class="s">${esc(f.file.split("/").pop())}:${f.start}</span></div>`;
+  return `<div class="row${id === S.fn ? " sel" : ""}${flash.set.has(id) ? " flash" : ""}" data-f="${esc(id)}">${st}${en}<span class="n" title="${esc(id)}">${esc(fname(f))}</span><span class="s">${esc(f.file.split("/").pop())}:${f.start}</span></div>`;
 }
 function filteredFns() {
   const q = S.q.toLowerCase();
@@ -860,14 +883,32 @@ function buildTour(kind) {
   return {steps, name: "Обзор: вызовы от точек входа", desc: "Нет потоков в модели и изменений — показаны первые точки входа и их вызовы."};
 }
 let tour = null;
-function setupPlayer() {
+function tourOptions() {
   const opts = [];
   (M.flows || []).forEach((fl, i) => { if ((fl.steps || []).some(id => fns[id])) opts.push([`flow:${i}`, "Поток: " + fl.name]); });
   if (changed.length) opts.push(["changes", "Изменённые функции (обход от входов)"]);
   if (entries.length) opts.push(["overview", "Обзор от точек входа"]);
-  if (!opts.length && fids.length) { $("#pMode").innerHTML = ""; }
-  $("#pMode").innerHTML = opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("");
+  return opts;
+}
+const modeOptionsHTML = opts => opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("");
+function setupPlayer() {
+  const opts = tourOptions();
+  $("#pMode").innerHTML = modeOptionsHTML(opts);
   loadMode(opts.length ? opts[0][0] : null);
+}
+// после обновления данных: тот же режим и тот же шаг (по id функции), проигрывание не прерывается
+function refreshTour() {
+  const prev = S.mode, curId = S.idx >= 0 ? S.steps[S.idx] : null;
+  const opts = tourOptions();
+  $("#pMode").innerHTML = modeOptionsHTML(opts);
+  if (!opts.some(o => o[0] === prev)) { setupPlayer(); return; }
+  $("#pMode").value = prev;
+  S.steps = buildTour(prev).steps;
+  const i = curId ? S.steps.indexOf(curId) : -1;
+  if (curId && i < 0) { loadMode(prev); return; }
+  S.idx = i;
+  $("#pbar").max = Math.max(0, S.steps.length - 1); $("#pbar").value = Math.max(0, i);
+  $("#pPos").textContent = (i >= 0 ? i + 1 : 0) + "/" + S.steps.length;
 }
 function loadMode(kind) {
   pause();
@@ -926,11 +967,84 @@ document.addEventListener("keydown", e => {
   else if (e.key === "ArrowLeft") { pause(); goStep(S.idx - 1); }
 });
 
+/* ---------- живой режим (archmap serve) ---------- */
+// Данные приходят по SSE-уведомлению; состояние (выбор, раскрытые группы, камера, фильтры,
+// проигрывание) не трогаем — перестраиваются индексы, раскладка и списки.
+function applyData(d, flashIds) {
+  const focusId = S.focus ? S.focus.id : null, sc = side.scrollTop;
+  F = d.facts; M = d.model || {};
+  indexData(); drawHeader();
+  allMods = Object.keys(F.modules);
+  grouping = allMods.length > GROUP_MIN;
+  Object.keys(TN).forEach(k => delete TN[k]); Object.keys(modNode).forEach(k => delete modNode[k]); initOpen.clear();
+  TROOT = grouping ? buildTrie() : null;
+  [...userOpen].forEach(id => { if (!TN[id]) userOpen.delete(id); });
+  S.focus = grouping && focusId && TN[focusId] ? TN[focusId] : null;
+  if (S.fn && !fns[S.fn]) S.fn = null;
+  S.hist = S.hist.filter(id => fns[id]);
+  if (S.mod && !byMod[S.mod] && !modChg[S.mod]) S.mod = null;
+  if (S.fMod && !byMod[S.fMod]) S.fMod = null;
+  startFlash(flashIds || []);
+  rebuild(); refreshTour();
+  renderCrumbs(); renderDetail(); renderSide(); paintMap();
+  side.scrollTop = sc;
+}
+function startFlash(ids) {
+  const live = ids.filter(id => fns[id]);
+  clearTimeout(flash.timer);
+  flash.set = new Set(live); flash.mods = new Set(live.map(id => fns[id].module));
+  if (!live.length) return;
+  $("#detail").classList.remove("flash");
+  if (S.fn && flash.set.has(S.fn)) { void $("#detail").offsetWidth; $("#detail").classList.add("flash"); }
+  flash.timer = setTimeout(() => {
+    flash.set = new Set(); flash.mods = new Set();
+    document.querySelectorAll(".flash").forEach(e => e.classList.remove("flash"));
+  }, 2800);
+}
+function setupLive() {
+  const box = $("#live"), label = box.querySelector("b"), info = $("#liveInfo");
+  const status = (st, text, tip) => { box.hidden = false; box.className = "live" + (st === "ready" ? "" : " " + st); label.textContent = text; box.title = tip || ""; };
+  let seq = LIVE.seq || 0, want = seq, busy = false;
+  const last = {ms: 0};
+  const pend = new Set();
+  const pull = async () => {
+    if (busy) return;
+    busy = true;
+    let tip = "";
+    try {
+      while (seq !== want) {
+        const r = await fetch(LIVE.data, {cache: "no-store"});
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const d = await r.json();
+        seq = d.seq; if (seq > want) want = seq;
+        const ids = [...pend]; pend.clear();
+        applyData(d, ids);
+        info.textContent = " · " + new Date().toLocaleTimeString() + (last.ms ? " · " + last.ms + " мс" : "") + (ids.length ? " · изменено: " + ids.length : "");
+        tip = ids.slice(0, 12).map(id => fname(fns[id] || {name: id})).join("\n");
+      }
+      status("ready", "живое", tip);
+    } catch (e) { status("error", "ошибка", String(e)); }
+    finally { busy = false; }
+  };
+  status("ready", "живое");
+  const es = new EventSource(LIVE.events);
+  es.onmessage = ev => {
+    const u = JSON.parse(ev.data);
+    if (u.state === "building") { status("building", "пересборка…"); return; }
+    if (u.state === "error") { status("error", "ошибка", u.error || ""); info.textContent = " · " + (u.error || "").slice(0, 80); return; }
+    (u.flash || []).forEach(id => pend.add(id));
+    last.ms = u.ms || 0;
+    if (u.seq !== seq) { want = u.seq; pull(); } else status("ready", "живое");
+  };
+  es.onerror = () => status("error", "нет связи", "сервер archmap serve недоступен, переподключаюсь…");
+}
+
 /* ---------- старт ---------- */
 setupPlayer();
 renderCrumbs(); renderSide(); renderDetail(); paintMap();
 requestAnimationFrame(fit);
-window.__arch = {S, selectFn, selectMod, goStep, play, pause, loadMode, expandGroup, collapseAll, get units() { return units; }};
+if (LIVE) setupLive();
+window.__arch = {S, V, flash, applyData, selectFn, selectMod, goStep, play, pause, loadMode, expandGroup, collapseAll, get units() { return units; }};
 })();
 </script>
 </body>
