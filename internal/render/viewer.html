@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title><!--TITLE--></title>
+<style>
+:root{
+  --bg:#f6f7f9;--panel:#fff;--panel2:#f0f2f5;--fg:#1f2328;--mut:#656d76;--bd:#d0d7de;--acc:#0969da;
+  --add:#2da44e;--mod:#bf8700;--del:#cf222e;--loc:#8250df;--edge:#8c959f;--hl:#0969da;--caller:#bc4c00;--callee:#1a7f37;
+  --l-entry:#dbeafe;--l-ui:#fce7f3;--l-domain:#dcfce7;--l-adapter:#fef3c7;--l-infra:#e5e7eb;--l-test:#f3e8ff;--l-other:#f1f5f9;
+  --nodefg:#1f2328;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d1117;--panel:#161b22;--panel2:#1c232c;--fg:#e6edf3;--mut:#8b949e;--bd:#30363d;--acc:#58a6ff;
+  --add:#3fb950;--mod:#d29922;--del:#f85149;--loc:#a371f7;--edge:#6e7681;--hl:#58a6ff;--caller:#ffa657;--callee:#56d364;
+  --l-entry:#17304f;--l-ui:#4a1d37;--l-domain:#173a22;--l-adapter:#47391a;--l-infra:#2a3039;--l-test:#34214f;--l-other:#1e252e;
+  --nodefg:#e6edf3;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--bd);border-radius:6px;padding:3px 9px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+input[type=search],select{background:var(--panel);border:1px solid var(--bd);border-radius:6px;padding:4px 8px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+header{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--bd)}
+header h1{font-size:15px;margin:0}
+header .sum{color:var(--mut)}
+header .sum b{color:var(--fg)}
+.chip{display:inline-block;padding:0 6px;border-radius:9px;font-size:11px;border:1px solid var(--bd);margin-left:3px}
+.chip.a{color:var(--add);border-color:var(--add)}.chip.m{color:var(--mod);border-color:var(--mod)}.chip.d{color:var(--del);border-color:var(--del)}.chip.l{color:var(--loc);border-color:var(--loc)}
+#q{width:260px}
+#main{flex:1;display:flex;min-height:0}
+#side{width:340px;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--bd);min-height:0}
+#tabs{display:flex;border-bottom:1px solid var(--bd)}
+#tabs button{flex:1;border:0;border-radius:0;background:none;padding:7px 2px;border-bottom:2px solid transparent}
+#tabs button.on{background:none;color:var(--acc);border-bottom-color:var(--acc)}
+#sidebody{flex:1;overflow:auto;padding:6px 0;min-height:0}
+.filters{padding:4px 10px 6px;display:flex;flex-wrap:wrap;gap:4px 12px;border-bottom:1px solid var(--bd);color:var(--mut)}
+.filters label{white-space:nowrap}
+.row{padding:4px 10px;cursor:pointer;display:flex;gap:6px;align-items:baseline;border-left:3px solid transparent}
+.row:hover{background:var(--panel2)}
+.row.sel{background:var(--panel2);border-left-color:var(--acc)}
+.row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .s{color:var(--mut);font-size:11px}
+.row .cnt{color:var(--mut);font-size:11px}
+.st{display:inline-block;width:14px;text-align:center;font-weight:700;font-size:12px}
+.st.added{color:var(--add)}.st.modified{color:var(--mod)}.st.deleted{color:var(--del)}
+.ent{color:var(--acc);font-size:12px}
+.more{padding:6px 10px;color:var(--acc);cursor:pointer}
+.sec{padding:6px 10px 2px;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+#center{flex:1;position:relative;min-width:0;background:var(--bg)}
+#svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none;user-select:none}
+#svg.drag{cursor:grabbing}
+#zoom{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:4px}
+#legend{position:absolute;left:10px;top:8px;color:var(--mut);font-size:11px;background:color-mix(in srgb,var(--panel) 85%,transparent);padding:3px 8px;border-radius:6px;border:1px solid var(--bd);pointer-events:none}
+#detail{width:380px;background:var(--panel);border-left:1px solid var(--bd);overflow:auto;padding:10px 12px;min-height:0}
+#detail h2{font-size:14px;margin:2px 0 4px;word-break:break-word}
+#detail .kv{color:var(--mut);margin:2px 0}
+#detail pre{white-space:pre-wrap;word-break:break-word;background:var(--panel2);border-radius:6px;padding:6px 8px;margin:6px 0}
+#detail .doc{color:var(--fg);margin:6px 0;white-space:pre-wrap}
+#detail h3{font-size:12px;color:var(--mut);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+.nb{list-style:none;margin:0;padding:0}
+.nb ul{list-style:none;margin:0 0 0 16px;padding:0 0 0 6px;border-left:1px dashed var(--bd)}
+.nb li{margin:1px 0}
+.nb .it{display:flex;gap:4px;align-items:baseline}
+.nb .x{cursor:pointer;color:var(--mut);width:14px;text-align:center;flex:none}
+.nb .x:hover{color:var(--acc)}
+.nb a,#detail a{color:var(--acc);cursor:pointer;text-decoration:none;word-break:break-word}
+.nb a:hover,#detail a:hover{text-decoration:underline}
+.tag{font-size:11px;padding:0 5px;border-radius:4px;background:var(--panel2);border:1px solid var(--bd);margin-right:4px;color:var(--mut)}
+#player{background:var(--panel);border-top:1px solid var(--bd);padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+#player .ctl{display:flex;gap:4px;align-items:center}
+#pbar{flex:1;min-width:140px}
+#cap{flex-basis:100%;min-height:36px;color:var(--fg)}
+#cap .t{font-weight:600}
+#cap .s{color:var(--mut)}
+/* карта */
+.node rect{stroke:var(--bd);stroke-width:1.2;rx:6}
+.node text{fill:var(--nodefg);font-size:11px;pointer-events:none}
+.node .cnt{fill:var(--mut);font-size:9px}
+.node{cursor:pointer}
+.node.dim{opacity:.22}
+.node.sel rect{stroke:var(--hl);stroke-width:3}
+.node.caller rect{stroke:var(--caller);stroke-width:2.5}
+.node.callee rect{stroke:var(--callee);stroke-width:2.5}
+.node.hit rect{stroke:var(--acc);stroke-width:2.5;stroke-dasharray:4 2}
+.node.cur rect{stroke:var(--hl);stroke-width:4}
+.node.cur{opacity:1}
+.node.trail rect{stroke:var(--hl);stroke-width:2;stroke-dasharray:3 2}
+.node.chg-a rect{stroke:var(--add);stroke-width:2.2}
+.node.chg-m rect{stroke:var(--mod);stroke-width:2.2}
+.node.chg-d rect{stroke:var(--del);stroke-width:2.2}
+.badge{font-size:9px;font-weight:700}
+.edge{fill:none;stroke:var(--edge);stroke-width:var(--w,1);opacity:.28}
+.edge.hot{stroke:var(--hl);opacity:.95;stroke-width:calc(var(--w,1) + .8)}
+.edge.in{stroke:var(--caller);opacity:.9;stroke-width:calc(var(--w,1) + .6)}
+.edge.out{stroke:var(--callee);opacity:.9;stroke-width:calc(var(--w,1) + .6)}
+.node.grp .stack{stroke:var(--bd);stroke-width:1.2;rx:6;opacity:.7}
+.node.kid rect:not(.stack){stroke-dasharray:1 3;stroke-width:1.8}
+#crumbs{padding:6px 10px;border-bottom:1px solid var(--bd);line-height:1.9}
+#crumbs[hidden]{display:none}
+#crumbs a{color:var(--acc);cursor:pointer}
+#crumbs button{padding:0 7px;font-size:12px}
+.edge.dim{opacity:.06}
+.glabel{fill:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.glane{fill:var(--panel2);opacity:.45}
+.flow{fill:none;stroke:var(--hl);stroke-width:3;stroke-dasharray:8 5;animation:dash .8s linear infinite;marker-end:url(#arr)}
+.flow.old{opacity:.35;animation:none;stroke-width:2}
+@keyframes dash{to{stroke-dashoffset:-13}}
+.pulse{fill:none;stroke:var(--hl);stroke-width:3;animation:pulse 1.2s ease-out infinite}
+@keyframes pulse{from{opacity:.9;stroke-width:3}to{opacity:0;stroke-width:14}}
+@media (prefers-reduced-motion:reduce){.flow,.pulse{animation:none}}
+#empty{padding:30px;color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"><!--TITLE--></h1>
+  <span class="sum" id="sum"></span>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" id="onlyChanged"> только изменённые</label>
+  <input type="search" id="q" placeholder="Поиск: функция или файл…" autocomplete="off">
+</header>
+<div id="main">
+  <aside id="side">
+    <div id="tabs">
+      <button data-tab="mods" class="on">Модули</button>
+      <button data-tab="funcs">Функции</button>
+      <button data-tab="chg">Изменения</button>
+      <button data-tab="play">Видео</button>
+    </div>
+    <div id="crumbs" hidden></div>
+    <div id="sidebody"></div>
+  </aside>
+  <section id="center">
+    <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--hl)"/></marker>
+      </defs>
+      <g id="cam"><g id="lanes"></g><g id="edges"></g><g id="nodes"></g><g id="over"></g></g>
+    </svg>
+    <div id="legend">колесо — зум, перетаскивание — пан; размер блока — число функций; стопка — группа модулей (клик раскрывает), толщина связи — число импортов; рамка: <span style="color:var(--add)">добавлено</span> / <span style="color:var(--mod)">изменено</span> / <span style="color:var(--del)">удалено</span></div>
+    <div id="zoom"><button id="zin" title="Приблизить">+</button><button id="zout" title="Отдалить">−</button><button id="zfit" title="Вписать">⤢</button></div>
+  </section>
+  <aside id="detail"><div id="empty">Выберите модуль на карте или функцию в списке.</div></aside>
+</div>
+<div id="player">
+  <div class="ctl">
+    <button id="pPrev" title="Шаг назад">⏮</button>
+    <button id="pPlay" title="Проиграть / пауза">▶</button>
+    <button id="pNext" title="Шаг вперёд">⏭</button>
+  </div>
+  <select id="pMode" title="Что проигрывать"></select>
+  <label>скорость <select id="pSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+  <input type="range" id="pbar" min="0" max="0" value="0">
+  <span id="pPos" class="mono"></span>
+  <div id="cap"></div>
+</div>
+
+<script>
+"use strict";
+const DATA = /*ARCH_DATA*/null;
+
+(function(){
+const $ = s => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+if (!DATA || !DATA.facts) { $("#sidebody").innerHTML = '<div id="empty">Нет данных: файл нужно собирать командой <code>arch.py render</code>.</div>'; return; }
+
+const F = DATA.facts, M = DATA.model || {};
+const fns = F.functions || {};
+const fids = Object.keys(fns);
+const MM = M.modules || {};
+const LAYERS = ["entry","ui","domain","adapter","infra","test","other"];
+const LAYER_RU = {entry:"Входы", ui:"Интерфейс", domain:"Домен", adapter:"Адаптеры", infra:"Инфраструктура", test:"Тесты", other:"Прочее"};
+const STATUS_RU = {added:"добавлена", modified:"изменена", deleted:"удалена"};
+const modLabel = m => m === "." || m === "" ? "(корень)" : m;
+const shortMod = m => { const p = modLabel(m).split("/"); return p.slice(-2).join("/"); };
+const fname = f => (f.cls ? f.cls + "." : "") + f.name;
+
+/* ---------- индексы ---------- */
+const callers = {};
+const byMod = {};
+fids.forEach(id => { callers[id] = []; });
+fids.forEach(id => {
+  const f = fns[id];
+  (byMod[f.module] = byMod[f.module] || []).push(id);
+  (f.callees || []).forEach(c => { if (callers[c]) callers[c].push(id); });
+});
+const changed = fids.filter(id => fns[id].status);
+const entries = fids.filter(id => fns[id].entry);
+const deleted = F.deleted || [];
+const importedBy = {};
+Object.keys(F.modules).forEach(a => (F.modules[a].imports || []).forEach(b => { if (a !== b) (importedBy[b] = importedBy[b] || []).push(a); }));
+const modChg = {};
+const bump = (m, k) => { const o = modChg[m] = modChg[m] || {added:0, modified:0, deleted:0, local:0}; o[k]++; };
+changed.forEach(id => { const f = fns[id]; bump(f.module, f.status); if (f.uncommitted) bump(f.module, "local"); });
+deleted.forEach(d => bump(d.module, "deleted"));
+const nLocal = changed.filter(id => fns[id].uncommitted).length;
+const nAdded = changed.filter(id => fns[id].status === "added").length;
+const nMod = changed.filter(id => fns[id].status === "modified").length;
+
+/* ---------- состояние ---------- */
+const S = {
+  tab: "mods", mod: null, fn: null, focus: null, hist: [], q: "", only: false,
+  entOnly: false, entKind: "", fMod: null, limit: 200,
+  mode: null, steps: [], idx: -1, playing: false, timer: null,
+};
+
+/* ---------- шапка ---------- */
+$("#title").textContent = M.title || (F.repo + " — архитектура");
+document.title = $("#title").textContent;
+$("#sum").innerHTML =
+  `<b>${esc(F.repo)}</b> · ветка <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
+  `модулей <b>${Object.keys(F.modules).length}</b>, функций <b>${fids.length}</b>, точек входа <b>${entries.length}</b> · изменено: ` +
+  `<span class="chip a">+${nAdded}</span><span class="chip m">~${nMod}</span><span class="chip d">−${deleted.length}</span><span class="chip l">не в коммите ${nLocal}</span>` +
+  (M.summary ? `<br><span>${esc(M.summary)}</span>` : "");
+
+/* ---------- раскладка карты ---------- */
+// Группировка: модулей больше GROUP_MIN — на карте группы по префиксу пути.
+// Дерево путей; стартовый срез жадно дробит самую крупную ветку, пока блоков <= GROUP_TARGET.
+const GROUP_MIN = 60, GROUP_TARGET = 40;
+const allMods = Object.keys(F.modules);
+const grouping = allMods.length > GROUP_MIN;
+const TN = {}, modNode = {}, userOpen = new Set(), initOpen = new Set();
+let TROOT = null;
+const isGid = id => id.startsWith("g:");
+function buildTrie() {
+  const mk = path => ({id: "g:" + path, path, parent: null, kids: new Map(), own: [], mods: [], n: 0, label: path});
+  const root = mk("");
+  allMods.forEach(m => {
+    let node = root;
+    if (m !== "." && m !== "") {
+      let path = "";
+      m.split("/").forEach(seg => {
+        path = path ? path + "/" + seg : seg;
+        if (!node.kids.has(seg)) node.kids.set(seg, mk(path));
+        node = node.kids.get(seg);
+      });
+    }
+    node.own.push(m);
+  });
+  const compress = (n, top) => {
+    n.kids = [...n.kids.values()].map(k => compress(k, false)).sort((a, b) => a.path < b.path ? -1 : 1);
+    return (!top && !n.own.length && n.kids.length === 1) ? n.kids[0] : n;
+  };
+  const fin = (n, parent) => {
+    n.parent = parent;
+    n.label = parent && parent.path ? n.path.slice(parent.path.length + 1) : n.path;
+    n.kids.forEach(k => fin(k, n));
+    n.mods = n.own.concat(...n.kids.map(k => k.mods));
+    n.n = n.own.reduce((s, m) => s + (byMod[m] || []).length, 0) + n.kids.reduce((s, k) => s + k.n, 0);
+    TN[n.id] = n;
+    n.own.forEach(m => { modNode[m] = n; });
+  };
+  const r = compress(root, true);
+  fin(r, null);
+  // жадный стартовый срез
+  let size = 1, cut = [r];
+  const blocked = new Set();
+  initOpen.add(r.id);
+  cut = r.kids.slice(); size = r.own.length + r.kids.length; // корень раскрыт всегда
+  for (;;) {
+    const cand = cut.filter(n => n.mods.length > 1 && !blocked.has(n.id)).sort((a, b) => b.mods.length - a.mods.length)[0];
+    if (!cand) break;
+    const delta = cand.own.length + cand.kids.length - 1;
+    if (size + delta > GROUP_TARGET) { blocked.add(cand.id); continue; }
+    cut = cut.filter(n => n !== cand).concat(cand.kids);
+    size += delta; initOpen.add(cand.id);
+  }
+  return r;
+}
+if (grouping) TROOT = buildTrie();
+const isOpen = n => initOpen.has(n.id) || userOpen.has(n.id);
+
+let units = [], U = {}, unitOf = {}, nodeMods = [], edgeList = [], outE = {}, inE = {}, edgeOf = {}, depth = {}, useLayers = false;
+let POS = {}, lanes = [];
+const sumChg = mods => {
+  const o = {added: 0, modified: 0, deleted: 0, local: 0};
+  mods.forEach(m => { const c = modChg[m]; if (c) for (const k in o) o[k] += c[k]; });
+  return o;
+};
+// описание из модели: сам путь или ближайший предок
+function modelFor(path) {
+  for (let p = path; p; p = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "") if (MM[p]) return MM[p];
+  return null;
+}
+function unitInfo(u) {
+  if (u.kind === "m") return MM[u.id] || null;
+  return modelFor(u.node.path);
+}
+function unitLayer(u) {
+  const i = unitInfo(u);
+  if (i && LAYERS.includes(i.layer)) return i.layer;
+  if (u.kind === "g") { // большинство слоёв у модулей группы
+    const c = {};
+    u.mods.forEach(m => { const l = MM[m] && MM[m].layer; if (LAYERS.includes(l)) c[l] = (c[l] || 0) + 1; });
+    const best = Object.keys(c).sort((a, b) => c[b] - c[a])[0];
+    if (best) return best;
+  }
+  return null;
+}
+function computeUnits() {
+  units = []; U = {}; unitOf = {};
+  const add = u => { u.chg = sumChg(u.mods); units.push(u); U[u.id] = u; u.mods.forEach(m => { unitOf[m] = u.id; }); };
+  const modUnit = m => add({id: m, kind: "m", mods: [m], label: shortMod(m), n: (byMod[m] || []).length});
+  if (!grouping) {
+    allMods.filter(m => (byMod[m] && byMod[m].length) || modChg[m]).forEach(modUnit);
+    return;
+  }
+  const visit = n => {
+    if (n.mods.length === 1 && n.parent) { modUnit(n.mods[0]); return; }
+    if (n.parent && !isOpen(n)) { add({id: n.id, kind: "g", node: n, mods: n.mods, label: n.label, n: n.n, nm: n.mods.length}); return; }
+    n.own.forEach(modUnit);
+    n.kids.forEach(visit);
+  };
+  visit(TROOT);
+}
+function computeGraph() {
+  computeUnits();
+  nodeMods = units.map(u => u.id);
+  const w = new Map();
+  units.forEach(u => u.mods.forEach(a => ((F.modules[a] || {}).imports || []).forEach(b => {
+    const ub = unitOf[b];
+    if (ub && ub !== u.id) w.set(u.id + "\u0000" + ub, (w.get(u.id + "\u0000" + ub) || 0) + 1);
+  })));
+  edgeList = [...w.entries()].map(([k, c]) => { const p = k.split("\u0000"); return [p[0], p[1], c]; });
+  outE = {}; inE = {}; edgeOf = {};
+  nodeMods.forEach(m => { outE[m] = []; inE[m] = []; edgeOf[m] = []; });
+  edgeList.forEach(([a, b], i) => { outE[a].push(b); inE[b].push(a); edgeOf[a].push(i); edgeOf[b].push(i); });
+  const modeled = units.filter(u => unitLayer(u)).length;
+  useLayers = nodeMods.length > 0 && modeled / nodeMods.length >= 0.5;
+  depth = depths();
+}
+
+// глубина: DFS убирает обратные рёбра, затем самый длинный путь по DAG
+function depths() {
+  const state = {}, order = [], back = new Set();
+  const visit = a => {
+    state[a] = 1;
+    outE[a].forEach(b => {
+      if (state[b] === 1) back.add(a + "\u0000" + b);
+      else if (!state[b]) visit(b);
+    });
+    state[a] = 2; order.push(a);
+  };
+  nodeMods.forEach(m => { if (!state[m]) visit(m); });
+  const d = {}; nodeMods.forEach(m => d[m] = 0);
+  for (let i = order.length - 1; i >= 0; i--) {
+    const a = order[i];
+    outE[a].forEach(b => { if (!back.has(a + "\u0000" + b) && d[b] < d[a] + 1) d[b] = d[a] + 1; });
+  }
+  return d;
+}
+function layout() {
+  POS = {}; lanes = [];
+  let keyOf = m => useLayers ? Math.max(0, LAYERS.indexOf(unitLayer(U[m]) || "other")) : depth[m];
+  if (grouping && !useLayers) { // много тонких уровней — склеиваем соседние, чтобы карта не вытягивалась в столбик
+    const cnt = {}; nodeMods.forEach(m => { cnt[depth[m]] = (cnt[depth[m]] || 0) + 1; });
+    const ds = Object.keys(cnt).map(Number).sort((a, b) => a - b), map = {};
+    let k = 0, acc = 0;
+    ds.forEach(d => { map[d] = k; acc += cnt[d]; if (acc >= 7) { k++; acc = 0; } });
+    keyOf = m => map[depth[m]];
+  }
+  const groups = {};
+  nodeMods.forEach(m => (groups[keyOf(m)] = groups[keyOf(m)] || []).push(m));
+  const keys = Object.keys(groups).map(Number).sort((a, b) => a - b);
+  const NW = 150, GAP = 14, PITCH = 56, GGAP = 34, MAXW = 1000;
+  const perRow = Math.max(1, Math.floor(MAXW / (NW + GAP)));
+  const cx = {}; let y = 20; let maxX = 0;
+  keys.forEach(k => {
+    let list = groups[k].slice().sort();
+    const bary = m => { const ns = inE[m].filter(x => cx[x] != null); return ns.length ? ns.reduce((s, x) => s + cx[x], 0) / ns.length : null; };
+    if (k !== keys[0]) {
+      const withB = list.map((m, i) => [m, bary(m), i]);
+      withB.sort((a, b) => (a[1] == null ? a[2] * 40 : a[1]) - (b[1] == null ? b[2] * 40 : b[1]));
+      list = withB.map(x => x[0]);
+    }
+    const rows = Math.ceil(list.length / perRow);
+    const y0 = y;
+    for (let r = 0; r < rows; r++) {
+      const part = list.slice(r * perRow, (r + 1) * perRow);
+      const tw = part.length * (NW + GAP) - GAP;
+      let x = (MAXW - tw) / 2 + 80;
+      part.forEach(m => {
+        const n = U[m].n;
+        const h = 26 + Math.min(22, Math.round(Math.sqrt(n) * 2.2)) + (U[m].kind === "g" ? 4 : 0);
+        POS[m] = {x, y: y + (PITCH - h) / 2, w: NW, h};
+        cx[m] = x + NW / 2; maxX = Math.max(maxX, x + NW);
+        x += NW + GAP;
+      });
+      y += PITCH;
+    }
+    lanes.push({y: y0 - 4, h: y - y0 + 4, label: useLayers ? LAYER_RU[LAYERS[k]] : "уровень " + (k + 1)});
+    y += GGAP;
+  });
+  lanes.forEach(l => l.w = maxX + 40);
+}
+const gNodes = $("#nodes"), gEdges = $("#edges"), gLanes = $("#lanes"), gOver = $("#over");
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+let nodeEl = {}, edgeEl = [];
+const shortTxt = (s, n) => s.length > n ? "…" + s.slice(-(n - 1)) : s;
+const unitTitle = u => u.kind === "g" ? (u.node.path || "(корень)") : modLabel(u.id);
+
+function buildMap() {
+  gLanes.textContent = ""; gEdges.textContent = ""; gNodes.textContent = ""; nodeEl = {}; edgeEl = [];
+  lanes.forEach(l => {
+    el("rect", {class: "glane", x: 0, y: l.y, width: l.w, height: l.h, rx: 8}, gLanes);
+    const t = el("text", {class: "glabel", x: 8, y: l.y + 14}, gLanes); t.textContent = l.label;
+  });
+  edgeList.forEach(([a, b, w]) => {
+    const p = POS[a], q = POS[b];
+    const x1 = p.x + p.w / 2, y1 = p.y + p.h, x2 = q.x + q.w / 2, y2 = q.y;
+    const dy = Math.max(30, Math.abs(y2 - y1) / 2);
+    const d = y2 > y1 ? `M${x1},${y1}C${x1},${y1 + dy} ${x2},${y2 - dy} ${x2},${y2}`
+                      : `M${x1},${p.y}C${x1},${p.y - dy} ${x2},${y2 + q.h + dy} ${x2},${y2 + q.h}`;
+    const e = el("path", {class: "edge", d}, gEdges);
+    if (w > 1) e.style.setProperty("--w", (1 + Math.min(5, Math.log2(w) * 1.1)).toFixed(2));
+    const tt = el("title", {}, e); tt.textContent = unitTitle(U[a]) + " → " + unitTitle(U[b]) + (w > 1 ? "\nсвязей: " + w : "");
+    edgeEl.push(e);
+  });
+  nodeMods.forEach(m => {
+    const u = U[m], p = POS[m], isG = u.kind === "g";
+    const g = el("g", {class: "node" + (isG ? " grp" : ""), [isG ? "data-g" : "data-m"]: m, transform: `translate(${p.x},${p.y})`}, gNodes);
+    const lay = unitLayer(u) || "other";
+    if (isG) el("rect", {class: "stack", x: 4, y: 4, width: p.w, height: p.h, fill: `var(--l-${lay})`}, g);
+    el("rect", {width: p.w, height: p.h, fill: `var(--l-${lay})`}, g);
+    const t = el("text", {x: 7, y: 15}, g); t.textContent = isG ? shortTxt(shortMod(u.node.path), 21) + "/…" : shortTxt(u.label, 24);
+    const info = unitInfo(u);
+    const c = el("text", {class: "cnt", x: 7, y: p.h - 6}, g);
+    const ch = u.chg;
+    c.textContent = (isG ? u.nm + " мод. · " : "") + u.n + " ф." + (info && info.role ? " · " + info.role.slice(0, isG ? 14 : 22) : "");
+    if (ch && (ch.added || ch.modified || ch.deleted)) {
+      const parts = [];
+      if (ch.added) parts.push("+" + ch.added);
+      if (ch.modified) parts.push("~" + ch.modified);
+      if (ch.deleted) parts.push("−" + ch.deleted);
+      const b = el("text", {class: "badge", x: p.w - 5, y: 13, "text-anchor": "end", fill: ch.modified ? "var(--mod)" : ch.added ? "var(--add)" : "var(--del)"}, g);
+      b.textContent = parts.join(" ");
+    }
+    if (ch && ch.local) el("circle", {cx: p.w - 7, cy: p.h - 7, r: 3.5, fill: "var(--loc)"}, g);
+    const tt = el("title", {}, g);
+    tt.textContent = unitTitle(u) + "\n" + (isG ? u.nm + " модулей, " : "") + u.n + " функций" + (isG ? "\nклик — раскрыть" : "") + (info ? "\n" + (info.role || "") + (info.desc ? " — " + info.desc : "") : "");
+    nodeEl[m] = g;
+  });
+}
+function rebuild() { computeGraph(); layout(); buildMap(); }
+rebuild();
+
+/* ---------- камера ---------- */
+const svg = $("#svg"), cam = $("#cam");
+const V = {k: 1, tx: 0, ty: 0};
+const applyCam = () => cam.setAttribute("transform", `translate(${V.tx},${V.ty}) scale(${V.k})`);
+function fit() {
+  const r = svg.getBoundingClientRect();
+  const bb = lanes.length ? {w: lanes[0].w, h: lanes[lanes.length - 1].y + lanes[lanes.length - 1].h + 20} : {w: 400, h: 300};
+  const kw = r.width / bb.w;
+  V.k = Math.min(kw, r.height / bb.h, 1.5) * 0.96;
+  if (V.k < 0.45) V.k = Math.min(kw * 0.96, 0.6); // высокая карта: вписываем по ширине, дальше — прокрутка/пан
+  V.tx = (r.width - bb.w * V.k) / 2; V.ty = Math.max(6, (r.height - bb.h * V.k) / 2);
+  applyCam();
+}
+function zoomAt(f, mx, my) {
+  const k2 = Math.min(6, Math.max(0.05, V.k * f));
+  V.tx = mx - (mx - V.tx) * k2 / V.k; V.ty = my - (my - V.ty) * k2 / V.k; V.k = k2; applyCam();
+}
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+}, {passive: false});
+let drag = null, moved = false;
+svg.addEventListener("pointerdown", e => { drag = {x: e.clientX, y: e.clientY, tx: V.tx, ty: V.ty}; moved = false; svg.setPointerCapture(e.pointerId); });
+svg.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) { moved = true; svg.classList.add("drag"); }
+  if (moved) { V.tx = drag.tx + dx; V.ty = drag.ty + dy; applyCam(); }
+});
+const endDrag = () => { drag = null; svg.classList.remove("drag"); };
+svg.addEventListener("pointerup", endDrag); svg.addEventListener("pointercancel", endDrag);
+svg.addEventListener("click", e => {
+  if (moved) { moved = false; return; }
+  const gn = e.target.closest("[data-g]");
+  if (gn) { expandGroup(TN[gn.getAttribute("data-g")]); return; }
+  const n = e.target.closest("[data-m]");
+  selectMod(n ? n.getAttribute("data-m") : null, true);
+});
+$("#zin").onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(1.4, r.width / 2, r.height / 2); };
+$("#zout").onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(1 / 1.4, r.width / 2, r.height / 2); };
+$("#zfit").onclick = fit;
+window.addEventListener("resize", () => { if (!S.userMoved) fit(); });
+let panAnim = null;
+function panTo(m, force) {
+  const p = POS[unitOf[m]] || POS[m]; if (!p) return;
+  panToBox(p, force);
+}
+function panToBox(p, force) {
+  const r = svg.getBoundingClientRect();
+  const sx = (p.x + p.w / 2) * V.k + V.tx, sy = (p.y + p.h / 2) * V.k + V.ty;
+  if (!force && sx > 60 && sx < r.width - 60 && sy > 60 && sy < r.height - 60) return;
+  const tx = r.width / 2 - (p.x + p.w / 2) * V.k, ty = r.height / 2 - (p.y + p.h / 2) * V.k;
+  const sx0 = V.tx, sy0 = V.ty, t0 = performance.now();
+  cancelAnimationFrame(panAnim);
+  const step = t => { const u = Math.min(1, (t - t0) / 350); V.tx = sx0 + (tx - sx0) * u; V.ty = sy0 + (ty - sy0) * u; applyCam(); if (u < 1) panAnim = requestAnimationFrame(step); };
+  panAnim = requestAnimationFrame(step);
+}
+
+/* ---------- подсветка карты ---------- */
+function searchHits() {
+  if (!S.q) return null;
+  const q = S.q.toLowerCase(), set = new Set();
+  fids.forEach(id => { const f = fns[id]; if (fname(f).toLowerCase().includes(q) || f.file.toLowerCase().includes(q)) set.add(unitOf[f.module]); });
+  return set;
+}
+const uChg = u => u && u.chg && (u.chg.added || u.chg.modified || u.chg.deleted);
+function paintMap() {
+  const hits = searchHits();
+  const caller = new Set(), callee = new Set();
+  if (S.fn) {
+    const f = fns[S.fn];
+    callers[S.fn].forEach(c => caller.add(unitOf[fns[c].module]));
+    (f.callees || []).forEach(c => callee.add(unitOf[fns[c].module]));
+  }
+  const cur = S.idx >= 0 && S.steps[S.idx] ? unitOf[fns[S.steps[S.idx]].module] : null;
+  const trail = new Set();
+  if (S.idx >= 0) for (let i = 0; i < S.idx; i++) trail.add(unitOf[fns[S.steps[i]].module]);
+  const selM = S.fn ? fns[S.fn].module : S.mod;
+  let selMod = selM ? unitOf[selM] : null;
+  if (!selMod && S.focus && U[S.focus.id]) selMod = S.focus.id;
+  const kidSet = S.focus ? new Set(S.focus.mods) : null;
+  nodeMods.forEach(m => {
+    const cl = ["node" + (U[m].kind === "g" ? " grp" : "")], ch = U[m].chg;
+    if (ch && ch.modified) cl.push("chg-m"); else if (ch && ch.added) cl.push("chg-a"); else if (ch && ch.deleted) cl.push("chg-d");
+    if (m === selMod) cl.push("sel");
+    if (caller.has(m)) cl.push("caller");
+    if (callee.has(m)) cl.push("callee");
+    if (hits && hits.has(m)) cl.push("hit");
+    if (trail.has(m)) cl.push("trail");
+    if (m === cur) cl.push("cur");
+    if (kidSet && kidSet.has(U[m].mods[0])) cl.push("kid");
+    if ((S.only && !uChg(U[m])) || (hits && !hits.has(m) && m !== selMod)) cl.push("dim");
+    nodeEl[m].setAttribute("class", cl.join(" "));
+  });
+  const hot = new Set(), eIn = new Set(), eOut = new Set();
+  if (selMod && edgeOf[selMod]) edgeOf[selMod].forEach(i => { (edgeList[i][0] === selMod ? eOut : eIn).add(i); });
+  edgeEl.forEach((e, i) => {
+    const [a, b] = edgeList[i];
+    const cl = ["edge"];
+    if (selMod) { if (eOut.has(i)) cl.push("out"); else if (eIn.has(i)) cl.push("in"); else cl.push("dim"); }
+    if (S.only && !(uChg(U[a]) || uChg(U[b]))) cl.push("dim");
+    e.setAttribute("class", cl.join(" "));
+  });
+  // оверлей проигрывания
+  gOver.textContent = "";
+  if (S.idx >= 0) {
+    const from = (i) => POS[unitOf[fns[S.steps[i]].module]];
+    const start = Math.max(1, S.idx - 12);
+    for (let i = start; i <= S.idx; i++) {
+      const a = from(i - 1), b = from(i);
+      if (!a || !b) continue;
+      if (a === b) continue;
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.min(60, Math.hypot(x2 - x1, y2 - y1) / 4);
+      el("path", {class: "flow" + (i === S.idx ? "" : " old"), d: `M${x1},${y1}Q${mx},${my} ${x2},${y2}`}, gOver);
+    }
+    const p = from(S.idx);
+    if (p) el("rect", {class: "pulse", x: p.x - 3, y: p.y - 3, width: p.w + 6, height: p.h + 6, rx: 9}, gOver);
+  }
+}
+
+/* ---------- боковые списки ---------- */
+const side = $("#sidebody");
+function fnRow(id) {
+  const f = fns[id];
+  const st = f.status ? `<span class="st ${f.status}" title="${STATUS_RU[f.status]}${f.uncommitted ? ", не в коммите" : ""}">${f.status === "added" ? "+" : "~"}</span>` : '<span class="st"></span>';
+  const en = f.entry ? `<span class="ent" title="${esc(f.entry.kind + ": " + f.entry.labels.join(", "))}">⚑</span>` : "";
+  return `<div class="row${id === S.fn ? " sel" : ""}" data-f="${esc(id)}">${st}${en}<span class="n" title="${esc(id)}">${esc(fname(f))}</span><span class="s">${esc(f.file.split("/").pop())}:${f.start}</span></div>`;
+}
+function filteredFns() {
+  const q = S.q.toLowerCase();
+  const res = [];
+  const pool = S.fMod ? (byMod[S.fMod] || []) : S.focus ? [].concat(...S.focus.mods.map(m => byMod[m] || [])) : fids;
+  for (const id of pool) {
+    const f = fns[id];
+    if (S.only && !f.status) continue;
+    if (S.entOnly && (!f.entry || (S.entKind && f.entry.kind !== S.entKind))) continue;
+    if (q && !(fname(f).toLowerCase().includes(q) || f.file.toLowerCase().includes(q))) continue;
+    res.push(id);
+  }
+  return res;
+}
+function renderSide() {
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === S.tab));
+  if (S.tab === "mods") {
+    const q = S.q.toLowerCase();
+    const okMod = m => !q || m.toLowerCase().includes(q) || (byMod[m] || []).some(id => fname(fns[id]).toLowerCase().includes(q));
+    const hasC = c => c && (c.added || c.modified || c.deleted);
+    const badge = c => hasC(c) ? ` <span class="chip m">${(c.added || 0) + (c.modified || 0) + (c.deleted || 0)}</span>` : "";
+    let rows;
+    if (grouping && !S.focus) { // без фокуса — то, что сейчас на карте: группы и модули
+      rows = units.filter(u => u.mods.some(okMod) && (!S.only || uChg(u))).sort((a, b) => a.id < b.id ? -1 : 1).map(u => u.kind === "g"
+        ? `<div class="row" data-g="${esc(u.id)}"><span class="n" title="${esc(u.node.path)}">▸ ${esc(u.node.path || "(корень)")}</span><span class="cnt">${u.nm} мод · ${u.n}${badge(u.chg)}</span></div>`
+        : `<div class="row${u.id === S.mod ? " sel" : ""}" data-m="${esc(u.id)}"><span class="n" title="${esc(u.id)}">${esc(modLabel(u.id))}</span><span class="cnt">${u.n}${badge(u.chg)}</span></div>`);
+    } else {
+      const base = grouping ? S.focus.mods : Object.keys(F.modules).filter(m => byMod[m] || modChg[m]);
+      rows = base.filter(m => okMod(m) && (!S.only || hasC(modChg[m]))).sort().map(m =>
+        `<div class="row${m === S.mod ? " sel" : ""}" data-m="${esc(m)}"><span class="n" title="${esc(m)}">${esc(modLabel(m))}</span><span class="cnt">${(byMod[m] || []).length}${badge(modChg[m])}</span></div>`);
+    }
+    side.innerHTML = rows.slice(0, S.limit).join("") + (rows.length > S.limit ? `<div class="more" data-more>показать ещё (${rows.length - S.limit})</div>` : "") || '<div id="empty">Ничего не найдено.</div>';
+  } else if (S.tab === "funcs") {
+    const kinds = [...new Set(entries.map(id => fns[id].entry.kind))];
+    const res = filteredFns();
+    side.innerHTML = `<div class="filters">
+      <label><input type="checkbox" id="fEnt" ${S.entOnly ? "checked" : ""}> ⚑ точки входа</label>
+      <select id="fKind" ${S.entOnly ? "" : "disabled"}><option value="">любые</option>${kinds.map(k => `<option ${S.entKind === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
+      ${S.fMod ? `<span>модуль: <b>${esc(modLabel(S.fMod))}</b> <a style="cursor:pointer" data-clearmod>✕</a></span>` : ""}
+      <span>найдено: ${res.length}</span></div>` +
+      res.slice(0, S.limit).map(fnRow).join("") + (res.length > S.limit ? `<div class="more" data-more>показать ещё (${res.length - S.limit})</div>` : "") +
+      (res.length ? "" : '<div id="empty">Ничего не найдено.</div>');
+  } else if (S.tab === "chg") {
+    if (!changed.length && !deleted.length) { side.innerHTML = '<div id="empty">Изменений относительно базы нет.</div>'; }
+    else {
+      const q = S.q.toLowerCase();
+      const list = changed.filter(id => !q || fname(fns[id]).toLowerCase().includes(q) || fns[id].file.toLowerCase().includes(q));
+      side.innerHTML = `<div class="sec">Изменённые функции (${list.length})</div>` + list.slice(0, S.limit).map(id => {
+        const f = fns[id];
+        const co = (f.callees || []).slice(0, 4).map(c => esc(fns[c].name)).join(", ");
+        return fnRow(id) + (co ? `<div class="s" style="padding:0 10px 3px 34px;color:var(--mut)">→ ${co}${f.callees.length > 4 ? " …+" + (f.callees.length - 4) : ""}</div>` : "");
+      }).join("") + (list.length > S.limit ? `<div class="more" data-more>показать ещё (${list.length - S.limit})</div>` : "") +
+        (deleted.length ? `<div class="sec">Удалённые функции (${deleted.length})</div>` + deleted.slice(0, 200).map(d =>
+          `<div class="row" data-m="${esc(d.module)}"><span class="st deleted">−</span><span class="n" title="${esc(d.sig || "")}">${esc((d.cls ? d.cls + "." : "") + d.name)}</span><span class="s">${esc(d.file.split("/").pop())}</span></div>`).join("") : "");
+    }
+  } else if (S.tab === "play") {
+    side.innerHTML = S.steps.length ? S.steps.map((id, i) => {
+      const f = fns[id];
+      return `<div class="row${i === S.idx ? " sel" : ""}" data-step="${i}"><span class="s">${i + 1}</span><span class="n" title="${esc(id)}">${esc(fname(f))}</span><span class="s">${esc(shortMod(f.module))}</span></div>`;
+    }).join("") : '<div id="empty">Нет шагов для проигрывания.</div>';
+  }
+}
+side.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("[data-more]")) { S.limit += 400; renderSide(); return; }
+  if (t.closest("[data-clearmod]")) { S.fMod = null; renderSide(); return; }
+  const f = t.closest("[data-f]"); if (f) { selectFn(f.dataset.f, true); return; }
+  const s = t.closest("[data-step]"); if (s) { pause(); goStep(+s.dataset.step); return; }
+  const g = t.closest("[data-g]"); if (g) { expandGroup(TN[g.dataset.g]); return; }
+  const m = t.closest("[data-m]"); if (m) { selectMod(m.dataset.m, true); }
+});
+side.addEventListener("change", e => {
+  if (e.target.id === "fEnt") { S.entOnly = e.target.checked; S.limit = 200; renderSide(); }
+  if (e.target.id === "fKind") { S.entKind = e.target.value; S.limit = 200; renderSide(); }
+});
+$("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { S.tab = b.dataset.tab; S.limit = 200; renderSide(); } });
+$("#onlyChanged").onchange = e => { S.only = e.target.checked; S.limit = 200; renderSide(); paintMap(); };
+let qt = null;
+$("#q").addEventListener("input", e => {
+  clearTimeout(qt);
+  qt = setTimeout(() => { S.q = e.target.value.trim(); S.limit = 200; if (S.q && S.tab === "play") S.tab = "funcs"; renderSide(); paintMap(); }, 150);
+});
+$("#q").addEventListener("keydown", e => { // Enter — выбрать первую найденную функцию (раскроет её группу)
+  if (e.key !== "Enter") return;
+  clearTimeout(qt); S.q = e.target.value.trim(); S.limit = 200;
+  if (S.tab === "play" || S.tab === "mods") S.tab = "funcs";
+  const first = S.q ? filteredFns()[0] : null;
+  if (first) selectFn(first, true); else { renderSide(); paintMap(); }
+});
+
+/* ---------- группы: раскрытие, крошки ---------- */
+function closeBelow(n) {
+  [...userOpen].forEach(id => { const x = TN[id]; if (x !== n && (!n.path || x.path.startsWith(n.path + "/"))) userOpen.delete(id); });
+}
+function renderCrumbs() {
+  const c = $("#crumbs");
+  if (!grouping) { c.hidden = true; return; }
+  c.hidden = false;
+  const chain = [];
+  for (let n = S.focus; n && n.parent; n = n.parent) chain.unshift(n);
+  c.innerHTML = `<div class="kv">на карте ${units.length} блоков из ${allMods.length} модулей (${units.filter(u => u.kind === "g").length} групп)</div>` +
+    `<a data-crumb="">все</a>` + chain.map(n => ` › <a data-crumb="${esc(n.id)}" title="${esc(n.path)}">${esc(n.label)}</a>`).join("") +
+    (S.focus && userOpen.has(S.focus.id) ? ` <button data-collapse>свернуть</button>` : "") +
+    (userOpen.size ? ` <button data-collapseall>свернуть всё</button>` : "");
+}
+function afterRebuild(boxOf) {
+  fit();
+  if (boxOf) {
+    const set = new Set(boxOf.mods), ps = units.filter(u => set.has(u.mods[0])).map(u => POS[u.id]);
+    if (ps.length) {
+      const x1 = Math.min(...ps.map(p => p.x)), y1 = Math.min(...ps.map(p => p.y));
+      const x2 = Math.max(...ps.map(p => p.x + p.w)), y2 = Math.max(...ps.map(p => p.y + p.h));
+      panToBox({x: x1, y: y1, w: x2 - x1, h: y2 - y1}, true);
+    }
+  }
+  renderCrumbs(); renderDetail(); renderSide(); paintMap();
+}
+function expandGroup(n) {
+  if (!n) return;
+  if (!isOpen(n)) userOpen.add(n.id);
+  S.focus = n; S.fn = null; S.mod = null; S.fMod = null; S.hist = []; S.limit = 200;
+  if (S.tab !== "funcs") S.tab = "mods";
+  rebuild(); afterRebuild(n);
+}
+function collapseGroup(n) {
+  closeBelow(n); userOpen.delete(n.id);
+  S.focus = n; S.fn = null; S.mod = null; S.fMod = null;
+  rebuild(); afterRebuild(null);
+}
+function focusCrumb(n) { // n == null — корень
+  S.focus = n; S.fMod = null; S.limit = 200;
+  if (n) { closeBelow(n); rebuild(); afterRebuild(n); } else { renderCrumbs(); renderDetail(); renderSide(); paintMap(); }
+}
+function collapseAll() {
+  userOpen.clear(); S.focus = null; S.fn = null; S.mod = null; S.fMod = null; S.hist = [];
+  rebuild(); afterRebuild(null);
+}
+// выбор функции/модуля раскрывает группы на пути к нему (проигрывание — нет)
+function revealMod(m) {
+  const n = grouping && modNode[m];
+  if (!n) return false;
+  let deepest = null;
+  for (let a = n.mods.length > 1 ? n : n.parent; a && a.parent; a = a.parent) {
+    if (!isOpen(a)) { userOpen.add(a.id); if (!deepest) deepest = a; }
+  }
+  if (!deepest) return false;
+  S.focus = deepest;
+  rebuild(); fit(); renderCrumbs();
+  return true;
+}
+$("#crumbs").addEventListener("click", e => {
+  const a = e.target.closest("[data-crumb]");
+  if (a) { focusCrumb(a.dataset.crumb ? TN[a.dataset.crumb] : null); return; }
+  if (e.target.closest("[data-collapse]")) collapseGroup(S.focus);
+  else if (e.target.closest("[data-collapseall]")) collapseAll();
+});
+
+/* ---------- карточки ---------- */
+const det = $("#detail");
+function nbList(id, dir) {
+  const arr = dir === "in" ? callers[id] : (fns[id].callees || []);
+  if (!arr.length) return '<div class="kv">— нет —</div>';
+  return `<ul class="nb" data-dir="${dir}">` + arr.slice(0, 60).map(c => nbItem(c)).join("") + (arr.length > 60 ? `<li class="kv">…ещё ${arr.length - 60}</li>` : "") + "</ul>";
+}
+function nbItem(c) {
+  const f = fns[c];
+  const st = f.status ? `<span class="st ${f.status}">${f.status === "added" ? "+" : "~"}</span>` : "";
+  return `<li data-id="${esc(c)}"><div class="it"><span class="x" title="Раскрыть ещё на шаг">▸</span>${st}<a data-f="${esc(c)}" title="${esc(c)}">${esc(fname(f))}</a><span class="kv">${esc(shortMod(f.module))}</span></div></li>`;
+}
+det.addEventListener("click", e => {
+  const x = e.target.closest(".x");
+  if (x) {
+    const li = x.closest("li"), dir = li.closest("ul.nb").dataset.dir || "out";
+    const nested = li.querySelector(":scope > ul");
+    if (nested) { nested.remove(); x.textContent = "▸"; return; }
+    const id = li.dataset.id, arr = dir === "in" ? callers[id] : (fns[id].callees || []);
+    const ul = document.createElement("ul"); ul.dataset.dir = dir;
+    ul.innerHTML = arr.length ? arr.slice(0, 40).map(nbItem).join("") : '<li class="kv">— нет —</li>';
+    li.appendChild(ul); x.textContent = "▾"; return;
+  }
+  const a = e.target.closest("[data-f]"); if (a) { selectFn(a.dataset.f, true); return; }
+  const m = e.target.closest("[data-m]"); if (m) { selectMod(m.dataset.m, true); return; }
+  if (e.target.closest("[data-back]")) back();
+  if (e.target.closest("[data-showfns]")) { S.fMod = e.target.closest("[data-showfns]").dataset.showfns || null; S.tab = "funcs"; S.limit = 200; renderSide(); }
+  if (e.target.closest("[data-collapse]") && S.focus) collapseGroup(S.focus);
+});
+const modInfo = m => {
+  const i = MM[m];
+  return i ? `<div class="kv"><span class="tag">${esc(i.layer || "other")}</span><b>${esc(i.role || "")}</b>${i.desc ? "<br>" + esc(i.desc) : ""}</div>` : "";
+};
+function renderDetail() {
+  if (S.fn) {
+    const f = fns[S.fn];
+    const flows = (M.flows || []).filter(fl => (fl.steps || []).includes(S.fn));
+    det.innerHTML =
+      (S.hist.length > 1 ? '<button data-back>← назад</button>' : "") +
+      `<h2>${esc(fname(f))}</h2>` +
+      (f.status ? `<span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${STATUS_RU[f.status]}${f.uncommitted ? " · не в коммите" : ""}</span>` : "") +
+      (f.entry ? `<span class="tag" style="color:var(--acc)">⚑ ${esc(f.entry.kind)}: ${esc(f.entry.labels.join(", "))}</span>` : "") +
+      `<pre class="mono">${esc(f.sig)}</pre>` +
+      `<div class="kv mono">${esc(f.file)}:${f.start}–${f.end}</div>` +
+      `<div class="kv">модуль: <a data-m="${esc(f.module)}">${esc(modLabel(f.module))}</a></div>` + modInfo(f.module) +
+      (f.doc ? `<div class="doc">${esc(f.doc)}</div>` : "") +
+      (flows.length ? `<div class="kv">в потоках: ${flows.map(x => esc(x.name)).join(", ")}</div>` : "") +
+      `<h3>Кто вызывает (${callers[S.fn].length})</h3>` + nbList(S.fn, "in") +
+      `<h3>Кого вызывает (${(f.callees || []).length})</h3>` + nbList(S.fn, "out");
+  } else if (S.mod) {
+    const m = S.mod, c = modChg[m] || {};
+    const imps = (F.modules[m] && F.modules[m].imports) || [], by = importedBy[m] || [];
+    const link = x => `<li><a data-m="${esc(x)}">${esc(modLabel(x))}</a> <span class="kv">${(byMod[x] || []).length}</span></li>`;
+    det.innerHTML = `<h2>${esc(modLabel(m))}</h2>` + modInfo(m) +
+      `<div class="kv">функций: ${(byMod[m] || []).length}, файлов: ${((F.modules[m] || {}).files || []).length}` +
+      (c.added || c.modified || c.deleted ? ` · изменения: +${c.added} ~${c.modified} −${c.deleted}` : "") + "</div>" +
+      `<p><button data-showfns="${esc(m)}">Показать функции модуля</button></p>` +
+      `<h3>Импортирует (${imps.length})</h3><ul class="nb">${imps.map(link).join("") || '<li class="kv">— нет —</li>'}</ul>` +
+      `<h3>Импортируют его (${by.length})</h3><ul class="nb">${by.map(link).join("") || '<li class="kv">— нет —</li>'}</ul>`;
+  } else if (S.focus) {
+    const n = S.focus, c = sumChg(n.mods), info = modelFor(n.path);
+    det.innerHTML = `<h2>${esc(n.path || "(корень)")}</h2>` +
+      (info ? `<div class="kv"><span class="tag">${esc(info.layer || "other")}</span><b>${esc(info.role || "")}</b>${info.desc ? "<br>" + esc(info.desc) : ""}</div>` : "") +
+      `<div class="kv">модулей: ${n.mods.length}, функций: ${n.n}, файлов: ${n.mods.reduce((s, m) => s + ((F.modules[m] || {}).files || []).length, 0)}` +
+      (c.added || c.modified || c.deleted ? ` · изменения: +${c.added} ~${c.modified} −${c.deleted}` : "") + "</div>" +
+      `<p><button data-showfns="">Показать функции группы</button>` + (userOpen.has(n.id) ? ` <button data-collapse>Свернуть</button>` : "") + "</p>";
+  } else {
+    det.innerHTML = '<div id="empty">Выберите модуль на карте или функцию в списке.</div>';
+  }
+}
+function selectMod(m, list) {
+  const rev = m ? revealMod(m) : false;
+  S.mod = m; S.fn = null; S.hist = [];
+  if (m && list) { S.fMod = m; S.tab = "funcs"; S.limit = 200; }
+  if (!m) S.fMod = null;
+  renderDetail(); renderSide(); paintMap();
+  if (rev) panTo(m, true);
+}
+function selectFn(id, push, keepTab) {
+  if (!fns[id]) return;
+  const rev = revealMod(fns[id].module);
+  S.fn = id; S.mod = fns[id].module;
+  if (push) S.hist.push(id);
+  renderDetail(); paintMap();
+  if (!keepTab || rev) renderSide();
+  panTo(fns[id].module, rev);
+  if (S.tab === "funcs") { const r = side.querySelector(".row.sel"); if (r) r.scrollIntoView({block: "nearest"}); }
+}
+function back() { S.hist.pop(); const id = S.hist[S.hist.length - 1]; if (id) selectFn(id, false); }
+
+/* ---------- «видео» ---------- */
+function buildTour(kind) {
+  if (kind.startsWith("flow:")) {
+    const fl = M.flows[+kind.slice(5)];
+    return {steps: (fl.steps || []).filter(id => fns[id]), name: fl.name, desc: fl.desc || ""};
+  }
+  // BFS от точек входа по вызовам
+  const par = {}, dist = {};
+  const q = [];
+  entries.forEach(id => { dist[id] = 0; par[id] = null; q.push(id); });
+  for (let h = 0; h < q.length; h++) {
+    const id = q[h];
+    (fns[id].callees || []).forEach(c => { if (dist[c] == null) { dist[c] = dist[id] + 1; par[c] = id; q.push(c); } });
+  }
+  const steps = [];
+  const push = id => { if (steps[steps.length - 1] !== id) steps.push(id); };
+  if (kind === "changes") {
+    const ch = changed.slice().sort((a, b) => (dist[a] == null ? 1e9 : dist[a]) - (dist[b] == null ? 1e9 : dist[b]) || a.localeCompare(b));
+    const seen = new Set();
+    for (const id of ch) {
+      if (seen.has(id) || steps.length > 400) continue;
+      const path = []; for (let c = id; c != null; c = par[c]) path.push(c);
+      path.reverse().forEach(p => { push(p); seen.add(p); });
+    }
+    return {steps, name: "Изменённые функции: путь от точек входа", desc: "Обход изменений ветки в порядке вызовов, начиная с точек входа."};
+  }
+  // обзор от точек входа: глубина до 4, не более 60 шагов
+  const seen = new Set();
+  const walk = (id, d) => { if (steps.length >= 60 || seen.has(id) || d > 4) return; seen.add(id); push(id); (fns[id].callees || []).slice(0, 3).forEach(c => walk(c, d + 1)); };
+  entries.slice(0, 6).forEach(e => walk(e, 0));
+  return {steps, name: "Обзор: вызовы от точек входа", desc: "Нет потоков в модели и изменений — показаны первые точки входа и их вызовы."};
+}
+let tour = null;
+function setupPlayer() {
+  const opts = [];
+  (M.flows || []).forEach((fl, i) => { if ((fl.steps || []).some(id => fns[id])) opts.push([`flow:${i}`, "Поток: " + fl.name]); });
+  if (changed.length) opts.push(["changes", "Изменённые функции (обход от входов)"]);
+  if (entries.length) opts.push(["overview", "Обзор от точек входа"]);
+  if (!opts.length && fids.length) { $("#pMode").innerHTML = ""; }
+  $("#pMode").innerHTML = opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("");
+  loadMode(opts.length ? opts[0][0] : null);
+}
+function loadMode(kind) {
+  pause();
+  S.mode = kind; S.idx = -1;
+  tour = kind ? buildTour(kind) : {steps: [], name: "", desc: ""};
+  S.steps = tour.steps;
+  $("#pbar").max = Math.max(0, S.steps.length - 1); $("#pbar").value = 0;
+  $("#pPos").textContent = "0/" + S.steps.length;
+  $("#cap").innerHTML = S.steps.length ? `<span class="t">${esc(tour.name)}</span> <span class="s">— ${S.steps.length} шаг. ${esc(tour.desc)} Нажмите ▶.</span>` : '<span class="s">Нет данных для проигрывания.</span>';
+  gOver.textContent = "";
+  if (S.tab === "play") renderSide();
+  paintMap();
+}
+function goStep(i) {
+  if (!S.steps.length) return;
+  i = Math.max(0, Math.min(S.steps.length - 1, i));
+  S.idx = i;
+  const id = S.steps[i], f = fns[id];
+  $("#pbar").value = i; $("#pPos").textContent = (i + 1) + "/" + S.steps.length;
+  const nx = S.steps[i + 1];
+  const call = nx ? ((f.callees || []).includes(nx) ? `вызывает → <b>${esc(fname(fns[nx]))}</b>` : `далее → <b>${esc(fname(fns[nx]))}</b>`) : "конец";
+  const mi = MM[f.module];
+  $("#cap").innerHTML = `<span class="t">${i + 1}. ${esc(fname(f))}</span>` +
+    (f.status ? ` <span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${STATUS_RU[f.status]}</span>` : "") +
+    (f.entry ? ` <span class="tag" style="color:var(--acc)">⚑ ${esc(f.entry.labels[0] || f.entry.kind)}</span>` : "") +
+    `<br><span class="s">${esc(modLabel(f.module))}${mi && mi.role ? " — " + esc(mi.role) : ""}${isGid(unitOf[f.module] || "") ? " · группа <b>" + esc(U[unitOf[f.module]].node.path) + "</b>" : ""} ·<code>${esc(f.file)}:${f.start}</code> · ${call}</span>` +
+    (f.doc ? `<br><span class="s">${esc(f.doc.split("\n")[0].slice(0, 200))}</span>` : "");
+  S.fn = id; S.mod = f.module;
+  renderDetail(); paintMap(); panTo(f.module);
+  if (S.tab === "play") { renderSide(); const r = side.querySelector(".row.sel"); if (r) r.scrollIntoView({block: "nearest"}); }
+}
+function tick() {
+  if (S.idx >= S.steps.length - 1) { pause(); return; }
+  goStep(S.idx + 1);
+  if (S.idx >= S.steps.length - 1) pause();
+}
+function play() {
+  if (!S.steps.length) return;
+  if (S.idx >= S.steps.length - 1) S.idx = -1;
+  S.playing = true; $("#pPlay").textContent = "⏸";
+  if (S.idx < 0) goStep(0);
+  clearInterval(S.timer);
+  S.timer = setInterval(tick, 1700 / +$("#pSpeed").value);
+}
+function pause() { S.playing = false; clearInterval(S.timer); $("#pPlay").textContent = "▶"; }
+$("#pPlay").onclick = () => S.playing ? pause() : play();
+$("#pNext").onclick = () => { pause(); goStep(S.idx + 1); };
+$("#pPrev").onclick = () => { pause(); goStep(S.idx - 1); };
+$("#pSpeed").onchange = () => { if (S.playing) play(); };
+$("#pMode").onchange = e => { loadMode(e.target.value); if (S.tab !== "play") { S.tab = "play"; renderSide(); } };
+$("#pbar").oninput = e => { pause(); goStep(+e.target.value); };
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type === "search") return;
+  if (e.key === " " && e.target.tagName !== "BUTTON") { e.preventDefault(); S.playing ? pause() : play(); }
+  else if (e.key === "ArrowRight") { pause(); goStep(S.idx + 1); }
+  else if (e.key === "ArrowLeft") { pause(); goStep(S.idx - 1); }
+});
+
+/* ---------- старт ---------- */
+setupPlayer();
+renderCrumbs(); renderSide(); renderDetail(); paintMap();
+requestAnimationFrame(fit);
+window.__arch = {S, selectFn, selectMod, goStep, play, pause, loadMode, expandGroup, collapseAll, get units() { return units; }};
+})();
+</script>
+</body>
+</html>
