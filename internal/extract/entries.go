@@ -59,6 +59,7 @@ func (e *entryMap) mark(fid, kind, label string) {
 // Next.js pages. order is the deterministic iteration order of functions.
 func findEntries(files []string, read func(string) (string, bool), fns map[string]*fn, order []string, byName map[string][]string, defaultExport map[string]string, langOf func(string) string) map[string]*facts.Entry {
 	e := &entryMap{m: map[string]*facts.Entry{}}
+	swiftAppMain(e, fns, order) // first: kind "main" wins over "lifecycle" on the same func
 	for _, fid := range order {
 		f := fns[fid]
 		if f.Name == "main" && f.Cls == "" {
@@ -80,6 +81,12 @@ func findEntries(files []string, read func(string) (string, bool), fns map[strin
 					break
 				}
 			}
+		}
+		switch f.lang {
+		case "swift":
+			swiftEntry(e, fid, f)
+		case "kotlin":
+			kotlinEntry(e, fid, f)
 		}
 		if f.lang == "python" && f.Cls == "Command" && f.Name == "handle" && strings.Contains(f.file, "/management/commands/") {
 			stem := strings.TrimSuffix(path.Base(f.file), path.Ext(f.file))

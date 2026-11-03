@@ -270,6 +270,16 @@ func Run(opts Options) (*facts.Facts, error) {
 			if len(cs) == 0 && f.lang == "python" { // Foo() -> Foo.__init__
 				cs = byCls[name]["__init__"]
 			}
+			if len(cs) == 0 && f.lang == "swift" && unicode.IsUpper(firstRune(name)) { // Type(...) -> Type.init
+				cs = byCls[name]["init"]
+			}
+			if len(cs) == 0 && f.lang == "kotlin" { // bare call of an extension function
+				for _, c := range cands {
+					if fns[c].Ext {
+						cs = append(cs, c)
+					}
+				}
+			}
 			if t := tiers(f, cs); len(t) > 0 {
 				return t
 			}
@@ -278,7 +288,7 @@ func Run(opts Options) (*facts.Facts, error) {
 			}
 			return nil
 		}
-		if selfNames[recv] || (f.lang == "go" && f.Recv != "" && recv == f.Recv) {
+		if selfNames[recv] || (f.lang == "swift" && recv == "Self") || (f.lang == "go" && f.Recv != "" && recv == f.Recv) {
 			if recv == "super" {
 				return baseMethods(f, name)
 			}

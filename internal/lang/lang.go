@@ -80,6 +80,10 @@ type Func struct {
 	Bases []string
 	// Recv is the receiver variable name of a Go method ("" otherwise).
 	Recv string
+	// Ext marks a Kotlin extension function (`fun Foo.bar()`); Cls is then the
+	// extended type, not a declaring class, so the orchestrator also resolves
+	// bare calls `bar()` to it.
+	Ext bool
 }
 
 // Import is one import of a file; see the package documentation for the
