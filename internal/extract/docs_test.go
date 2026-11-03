@@ -101,7 +101,9 @@ func TestProjectName(t *testing.T) {
 		for n, s := range c.files {
 			put(t, root, n, s)
 		}
-		os.MkdirAll(root, 0o755)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
 		p := projectInfo(root)
 		want := c.want
 		if want == "<dir>" {

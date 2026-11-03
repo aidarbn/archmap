@@ -329,7 +329,7 @@ func (w *walker) addFunc(n *sitter.Node) {
 func (w *walker) doc(n *sitter.Node) string {
 	p := n.PrevSibling()
 	if p == nil || (p.Kind() != "block_comment" && p.Kind() != "line_comment") ||
-		int(n.StartPosition().Row)-int(p.EndPosition().Row) > 1 {
+		int(n.StartPosition().Row)-int(p.EndPosition().Row) > 1 || !ts.OwnLine(w.t.Src, p) {
 		return ""
 	}
 	if p.Kind() == "line_comment" {

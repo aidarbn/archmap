@@ -109,6 +109,28 @@ func (t *Tree) Text(n *sitter.Node) string {
 	return string(t.Src[n.StartByte():n.EndByte()])
 }
 
+// OwnLine reports that nothing but whitespace precedes n on its first line, so a
+// comment node is a comment of its own and not the tail of another statement
+// (`#[cfg(unix)] // note`, `const x = 1; // note`).
+func OwnLine(src []byte, n *sitter.Node) bool {
+	for i := int(n.StartByte()) - 1; i >= 0 && src[i] != '\n'; i-- {
+		if src[i] != ' ' && src[i] != '\t' && src[i] != '\r' {
+			return false
+		}
+	}
+	return true
+}
+
+// LastRow is the 0-based row holding the last character of n; unlike
+// EndPosition it ignores a trailing newline some grammars put inside comment nodes.
+func LastRow(src []byte, n *sitter.Node) uint {
+	row := n.EndPosition().Row
+	if e := n.EndByte(); e > n.StartByte() && src[e-1] == '\n' && row > n.StartPosition().Row {
+		row--
+	}
+	return row
+}
+
 // FieldText returns the text of the named field child of n ("" if absent).
 func (t *Tree) FieldText(n *sitter.Node, field string) string {
 	return t.Text(n.ChildByFieldName(field))

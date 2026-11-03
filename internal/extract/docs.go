@@ -56,10 +56,10 @@ func docRank(file, module string, nfiles int) int {
 		}
 		return 1
 	case ".py", ".pyi":
-		switch {
-		case stem == "__init__":
+		switch stem {
+		case "__init__":
 			return 0
-		case stem == "main" || stem == "app" || stem == dir:
+		case "main", "app", dir:
 			return 1
 		}
 		return 2

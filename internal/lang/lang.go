@@ -84,6 +84,14 @@ type Func struct {
 	// extended type, not a declaring class, so the orchestrator also resolves
 	// bare calls `bar()` to it.
 	Ext bool
+	// Types are type names instantiated in the body by composite literal
+	// (`pkg.XArgs{...}`, `&XArgs{}`; Go only, last name segment, deduplicated).
+	// The orchestrator matches them against queue workers.
+	Types []string
+	// Queues are queue hints found in the body (JS only): "add:<queue>" for
+	// `x.add('<queue>', ...)` and "worker:<queue>[:<handler>]" for
+	// `new Worker('<queue>', handler)`.
+	Queues []string
 }
 
 // Import is one import of a file; see the package documentation for the

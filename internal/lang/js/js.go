@@ -281,6 +281,7 @@ func (p *state) addFunc(name, cls string, stmt, decl, fn *sitter.Node) {
 		cl.Add(c.Name, c.Recv)
 	}
 	f.Calls = cl.Calls()
+	f.Queues = p.queues(body)
 	p.funcs = append(p.funcs, f)
 }
 
@@ -372,7 +373,7 @@ func (p *state) doc(n *sitter.Node) string {
 	row := n.StartPosition().Row
 	var block []*sitter.Node
 	for s := n.PrevSibling(); s != nil && s.Kind() == "comment"; s = s.PrevSibling() {
-		if s.EndPosition().Row+1 < row {
+		if s.EndPosition().Row+1 < row || !ts.OwnLine(p.t.Src, s) {
 			break
 		}
 		block = append([]*sitter.Node{s}, block...)
@@ -429,3 +430,47 @@ func (p *state) imports(root *sitter.Node) {
 }
 
 var _ lang.Parser = (*Parser)(nil)
+
+// queues finds BullMQ-style queue hints: `x.add('name', ...)` gives
+// "add:name", `new Worker('name', handler)` gives "worker:name[:handler]".
+func (p *state) queues(body *sitter.Node) []string {
+	var out []string
+	str := func(n *sitter.Node) (string, bool) {
+		if n == nil || (n.Kind() != "string" && n.Kind() != "template_string") {
+			return "", false
+		}
+		s := strings.Trim(p.t.Text(n), "'\"`")
+		if s == "" || strings.ContainsAny(s, "${ ") {
+			return "", false
+		}
+		return s, true
+	}
+	ts.Walk(body, func(n *sitter.Node) bool {
+		switch n.Kind() {
+		case "call_expression":
+			fnNode, args := n.ChildByFieldName("function"), n.ChildByFieldName("arguments")
+			if fnNode == nil || args == nil || fnNode.Kind() != "member_expression" || args.NamedChildCount() == 0 {
+				return true
+			}
+			if prop := fnNode.ChildByFieldName("property"); prop != nil && p.t.Text(prop) == "add" {
+				if s, ok := str(args.NamedChild(0)); ok {
+					out = append(out, "add:"+s)
+				}
+			}
+		case "new_expression":
+			c, args := n.ChildByFieldName("constructor"), n.ChildByFieldName("arguments")
+			if c == nil || args == nil || p.t.Text(c) != "Worker" || args.NamedChildCount() == 0 {
+				return true
+			}
+			if s, ok := str(args.NamedChild(0)); ok {
+				h := ""
+				if args.NamedChildCount() > 1 && args.NamedChild(1).Kind() == "identifier" {
+					h = ":" + p.t.Text(args.NamedChild(1))
+				}
+				out = append(out, "worker:"+s+h)
+			}
+		}
+		return true
+	})
+	return out
+}

@@ -351,7 +351,7 @@ func (p *parser) doc(n *sitter.Node) string {
 	var chain []*sitter.Node
 	line := ts.StartLine(n)
 	for s := n.PrevSibling(); s != nil && (s.Kind() == "comment" || s.Kind() == "multiline_comment"); s = s.PrevSibling() {
-		if ts.EndLine(s) < line-1 {
+		if ts.EndLine(s) < line-1 || !ts.OwnLine(p.t.Src, s) {
 			break
 		}
 		chain = append([]*sitter.Node{s}, chain...)

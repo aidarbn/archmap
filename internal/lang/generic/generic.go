@@ -32,6 +32,7 @@
 package generic
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"sort"
@@ -42,6 +43,7 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
 	"github.com/aidarbn/archmap/internal/lang"
+	"github.com/aidarbn/archmap/internal/ts"
 )
 
 // Spec describes one language.
@@ -336,10 +338,12 @@ var xmlTag = regexp.MustCompile(`</?[A-Za-z][^<>]*>`)
 // doc returns the first non-empty line of the doc comment.
 func doc(src []byte, d *def) string {
 	var cm []*sitter.Node
-	if d.doc != nil {
-		cm = []*sitter.Node{d.doc}
+	if d.doc != nil && !strings.Contains(d.doc.Kind(), "comment") {
+		cm = []*sitter.Node{d.doc} // a doc string or attribute, not a comment
 	} else {
-		cm = commentAbove(d.node)
+		// Comments are taken by position, not from the tags query: it may
+		// pair a function with a comment separated from it by a blank line.
+		cm = commentAbove(src, d.node)
 	}
 	for _, c := range cm {
 		for _, line := range strings.Split(string(src[c.StartByte():c.EndByte()]), "\n") {
@@ -357,14 +361,16 @@ func doc(src []byte, d *def) string {
 
 // commentAbove returns the contiguous comment block right above n (skipping
 // attribute/annotation siblings), in source order.
-func commentAbove(n *sitter.Node) []*sitter.Node {
+func commentAbove(src []byte, n *sitter.Node) []*sitter.Node {
 	var out []*sitter.Node
 	line := n.StartPosition().Row
 	for s := n.PrevSibling(); s != nil; s = s.PrevSibling() {
 		k := s.Kind()
 		switch {
 		case strings.Contains(k, "comment"):
-			if s.EndPosition().Row+1 < line {
+			// not directly above, the tail of another line (`#[cfg] // x`), or
+			// an inner doc (`//!`, `/*!`: it describes the module, not the function)
+			if ts.LastRow(src, s)+1 < line || !ts.OwnLine(src, s) || isInnerDoc(src[s.StartByte():s.EndByte()]) {
 				return out
 			}
 			out = append([]*sitter.Node{s}, out...)
@@ -378,9 +384,13 @@ func commentAbove(n *sitter.Node) []*sitter.Node {
 	// First child on the parent's first line (e.g. ruby: the comment is a
 	// sibling of the class body): look above the parent.
 	if par := n.Parent(); len(out) == 0 && par != nil && par.StartPosition().Row == n.StartPosition().Row {
-		return commentAbove(par)
+		return commentAbove(src, par)
 	}
 	return out
+}
+
+func isInnerDoc(b []byte) bool {
+	return bytes.HasPrefix(b, []byte("//!")) || bytes.HasPrefix(b, []byte("/*!"))
 }
 
 func (p *Parser) imports(root *sitter.Node, src []byte) []lang.Import {

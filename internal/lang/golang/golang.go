@@ -111,11 +111,17 @@ func function(t *ts.Tree, n *sitter.Node) (lang.Func, bool) {
 		call lang.Call
 	}
 	var found []pos
+	seenTypes := map[string]bool{}
 	ts.Walk(body, func(c *sitter.Node) bool {
 		var name, recv string
 		var at uint
 		var ok bool
 		switch c.Kind() {
+		case "composite_literal":
+			if tn := literalType(t, c.ChildByFieldName("type")); tn != "" && !seenTypes[tn] {
+				seenTypes[tn] = true
+				fn.Types = append(fn.Types, tn)
+			}
 		case "call_expression":
 			name, recv, at, ok = callee(t, c.ChildByFieldName("function"))
 		case "type_conversion_expression":
@@ -135,6 +141,23 @@ func function(t *ts.Tree, n *sitter.Node) (lang.Func, bool) {
 	}
 	fn.Calls = cl.Calls()
 	return fn, true
+}
+
+// literalType is the last name segment of a composite literal's type
+// ("jobs.XArgs{}" -> "XArgs"); "" for slices, maps and anonymous structs.
+func literalType(t *ts.Tree, n *sitter.Node) string {
+	if n == nil {
+		return ""
+	}
+	switch n.Kind() {
+	case "type_identifier":
+		return t.Text(n)
+	case "qualified_type":
+		return t.FieldText(n, "name")
+	case "generic_type":
+		return literalType(t, n.ChildByFieldName("type"))
+	}
+	return ""
 }
 
 // receiver returns the receiver type (no "*", no type parameters) and variable.
