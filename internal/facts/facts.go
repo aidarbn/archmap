@@ -46,7 +46,7 @@ type Function struct {
 
 // Entry marks a function as an entry point.
 type Entry struct {
-	Kind   string   `json:"kind"` // http | task | main
+	Kind   string   `json:"kind"` // http | task | main | lifecycle | ui
 	Labels []string `json:"labels"`
 }
 

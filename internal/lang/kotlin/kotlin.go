@@ -26,9 +26,8 @@
 //   - Imports: dotted path without `import`; `import a.b.*` -> "a.b.*"; Alias is
 //     the `as` name. The package declaration is not part of lang.File.
 //
-// Entry points. The orchestrator currently knows only `main` for kotlin. The
-// parser already supplies what is needed; a kotlin branch in extract.findEntries
-// should mark (all as kind "main" unless stated otherwise):
+// Func.Ext is set for extension functions. Entry points (extract.findEntries) are
+// derived as follows, kinds "lifecycle"/"ui":
 //
 //   - Cls != "" and a Base ending in Activity/Fragment/Service/Application:
 //     onCreate, onCreateView, onStartCommand; a Base ending in
@@ -305,7 +304,7 @@ func (w *walker) addFunc(n *sitter.Node) {
 	}
 	f := lang.Func{
 		Name: name, Cls: cls, Start: ts.StartLine(startNode), End: ts.EndLine(n),
-		Decorators: decos, Bases: bases,
+		Decorators: decos, Bases: bases, Ext: recvType != "",
 	}
 	if l := ts.StartLine(n); l < f.Start {
 		f.TStart = l
