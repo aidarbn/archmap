@@ -63,6 +63,24 @@ func Summary(f *facts.Facts) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "repo %s @ %s (%s), база: %s\n", f.Repo, f.Branch, f.Head, base)
 	fmt.Fprintf(&b, "языки: {%s}; модулей %d, функций %d, рёбер вызовов %d\n", strings.Join(lp, ", "), len(f.Modules), len(f.Functions), edges)
+	if len(f.Unparsed) > 0 {
+		var ue []string
+		n := 0
+		for k, c := range f.Unparsed {
+			ue = append(ue, k)
+			n += c
+		}
+		sort.Slice(ue, func(i, j int) bool {
+			if f.Unparsed[ue[i]] != f.Unparsed[ue[j]] {
+				return f.Unparsed[ue[i]] > f.Unparsed[ue[j]]
+			}
+			return ue[i] < ue[j]
+		})
+		if len(ue) > 8 {
+			ue = ue[:8]
+		}
+		fmt.Fprintf(&b, "без разбора: %d файлов (%s)\n", n, strings.Join(ue, ", "))
+	}
 	fmt.Fprintf(&b, "изменения: добавлено %d, изменено %d, удалено %d\n", added, modified, len(f.Deleted))
 	b.WriteString("\nмодули (функций / импортирует):\n")
 	mods := make([]string, 0, len(byMod))

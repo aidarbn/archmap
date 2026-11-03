@@ -197,7 +197,7 @@ const shortMod = m => { const p = modLabel(m).split("/"); return p.slice(-2).joi
 const fname = f => (f.cls ? f.cls + "." : "") + f.name;
 
 /* ---------- индексы ---------- */
-let callers, byMod, changed, entries, deleted, importedBy, modChg, nLocal, nAdded, nMod;
+let hasFiles, callers, byMod, changed, entries, deleted, importedBy, modChg, nLocal, nAdded, nMod;
 const bump = (m, k) => { const o = modChg[m] = modChg[m] || {added:0, modified:0, deleted:0, local:0}; o[k]++; };
 function indexData() {
   fns = F.functions || {}; fids = Object.keys(fns); MM = M.modules || {};
@@ -209,6 +209,8 @@ function indexData() {
     (f.callees || []).forEach(c => { if (callers[c]) callers[c].push(id); });
   });
   changed = fids.filter(id => fns[id].status);
+  // modules without functions (files of languages without a parser) stay on the map
+  hasFiles = m => ((F.modules[m] || {}).files || []).length > 0;
   entries = fids.filter(id => fns[id].entry);
   deleted = F.deleted || [];
   importedBy = {};
@@ -331,7 +333,7 @@ function computeUnits() {
   const add = u => { u.chg = sumChg(u.mods); units.push(u); U[u.id] = u; u.mods.forEach(m => { unitOf[m] = u.id; }); };
   const modUnit = m => add({id: m, kind: "m", mods: [m], label: shortMod(m), n: (byMod[m] || []).length});
   if (!grouping) {
-    allMods.filter(m => (byMod[m] && byMod[m].length) || modChg[m]).forEach(modUnit);
+    allMods.filter(m => (byMod[m] && byMod[m].length) || modChg[m] || hasFiles(m)).forEach(modUnit);
     return;
   }
   const visit = n => {
@@ -630,7 +632,7 @@ function renderSide() {
         ? `<div class="row" data-g="${esc(u.id)}"><span class="n" title="${esc(u.node.path)}">▸ ${esc(u.node.path || "(корень)")}</span><span class="cnt">${u.nm} мод · ${u.n}${badge(u.chg)}</span></div>`
         : `<div class="row${u.id === S.mod ? " sel" : ""}" data-m="${esc(u.id)}"><span class="n" title="${esc(u.id)}">${esc(modLabel(u.id))}</span><span class="cnt">${u.n}${badge(u.chg)}</span></div>`);
     } else {
-      const base = grouping ? S.focus.mods : Object.keys(F.modules).filter(m => byMod[m] || modChg[m]);
+      const base = grouping ? S.focus.mods : Object.keys(F.modules).filter(m => byMod[m] || modChg[m] || hasFiles(m));
       rows = base.filter(m => okMod(m) && (!S.only || hasC(modChg[m]))).sort().map(m =>
         `<div class="row${m === S.mod ? " sel" : ""}" data-m="${esc(m)}"><span class="n" title="${esc(m)}">${esc(modLabel(m))}</span><span class="cnt">${(byMod[m] || []).length}${badge(modChg[m])}</span></div>`);
     }
@@ -982,7 +984,7 @@ function applyData(d, flashIds) {
   S.focus = grouping && focusId && TN[focusId] ? TN[focusId] : null;
   if (S.fn && !fns[S.fn]) S.fn = null;
   S.hist = S.hist.filter(id => fns[id]);
-  if (S.mod && !byMod[S.mod] && !modChg[S.mod]) S.mod = null;
+  if (S.mod && !byMod[S.mod] && !modChg[S.mod] && !hasFiles(S.mod)) S.mod = null;
   if (S.fMod && !byMod[S.fMod]) S.fMod = null;
   startFlash(flashIds || []);
   rebuild(); refreshTour();
