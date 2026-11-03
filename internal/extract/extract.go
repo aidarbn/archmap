@@ -48,6 +48,7 @@ type fn struct {
 	lang.Func
 	file, module, lang string
 	callees            []string
+	async              []string // queue handlers this function hands work to
 }
 
 // commonNames are method names of standard libraries/ORMs/DOM: a call `x.get()`
@@ -339,8 +340,10 @@ func Run(opts Options) (*facts.Facts, error) {
 		return cs
 	}
 
+	asyncIx := buildAsyncIndex(order, fns, byName, byCls)
 	for _, fid := range order {
 		f := fns[fid]
+		f.async = asyncIx.handlers(fid, f)
 		out := []string{}
 		for _, c := range f.Calls {
 			pick := resolveCall(fid, f, c.Name, c.Recv)
@@ -417,7 +420,8 @@ func Run(opts Options) (*facts.Facts, error) {
 		o := facts.Function{
 			Name: f.Name, Cls: facts.StrPtr(f.Cls), Start: f.Start, End: f.End,
 			Sig: f.Sig, Doc: f.Doc, Callees: f.callees, File: f.file, Module: f.module, Lang: f.lang,
-			Entry: entries[fid], Decorators: f.Decorators, Bases: f.Bases,
+			AsyncCallees: f.async,
+			Entry:        entries[fid], Decorators: f.Decorators, Bases: f.Bases,
 		}
 		if s, ok := status[fid]; ok {
 			u := s.Uncommitted

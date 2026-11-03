@@ -40,21 +40,24 @@ type Module struct {
 // Function is a function or method. Its map key (fid) is
 // "path/file.ext::Class.method" (or "path/file.ext::name").
 type Function struct {
-	Name        string   `json:"name"`
-	Cls         *string  `json:"cls"` // null for free functions
-	Start       int      `json:"start"`
-	End         int      `json:"end"`
-	Sig         string   `json:"sig"`
-	Doc         string   `json:"doc"`
-	Callees     []string `json:"callees"`
-	File        string   `json:"file"`
-	Module      string   `json:"module"`
-	Lang        string   `json:"lang"`
-	Entry       *Entry   `json:"entry,omitempty"`
-	Status      string   `json:"status,omitempty"`      // added | modified
-	Uncommitted *bool    `json:"uncommitted,omitempty"` // set together with Status
-	Decorators  []string `json:"decorators,omitempty"`
-	Bases       []string `json:"bases,omitempty"`
+	Name    string   `json:"name"`
+	Cls     *string  `json:"cls"` // null for free functions
+	Start   int      `json:"start"`
+	End     int      `json:"end"`
+	Sig     string   `json:"sig"`
+	Doc     string   `json:"doc"`
+	Callees []string `json:"callees"`
+	// AsyncCallees are handlers of jobs this function puts on a queue
+	// (enqueue -> worker); drawn apart from synchronous calls.
+	AsyncCallees []string `json:"async_callees,omitempty"`
+	File         string   `json:"file"`
+	Module       string   `json:"module"`
+	Lang         string   `json:"lang"`
+	Entry        *Entry   `json:"entry,omitempty"`
+	Status       string   `json:"status,omitempty"`      // added | modified
+	Uncommitted  *bool    `json:"uncommitted,omitempty"` // set together with Status
+	Decorators   []string `json:"decorators,omitempty"`
+	Bases        []string `json:"bases,omitempty"`
 }
 
 // Entry marks a function as an entry point.
