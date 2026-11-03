@@ -202,6 +202,11 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 			Doc:   doc(src, d),
 			Calls: d.calls.Calls(),
 		}
+		var tRow uint
+		f.Decorators, tRow = decorators(src, d.node)
+		if len(f.Decorators) > 0 && int(tRow)+1 < f.Start {
+			f.TStart = int(tRow) + 1
+		}
 		if end := d.node.EndPosition(); end.Column == 0 && f.End > f.Start {
 			f.End-- // node ends at the start of the next line
 		}
@@ -380,4 +385,51 @@ func (p *Parser) imports(root *sitter.Node, src []byte) []lang.Import {
 		add(path)
 	}
 	return out
+}
+
+// decorators collects annotations/attributes of a definition without the
+// leading "@" / "#[...]": annotation nodes inside a "modifiers" child (Java) and
+// directly preceding attribute/annotation/decorator siblings (Rust #[get("/x")]).
+// It also returns the first row of them.
+func decorators(src []byte, n *sitter.Node) ([]string, uint) {
+	var out []string
+	row := n.StartPosition().Row
+	add := func(c *sitter.Node) {
+		t := strings.TrimSpace(string(src[c.StartByte():c.EndByte()]))
+		t = strings.TrimSuffix(strings.TrimPrefix(t, "#["), "]")
+		t = strings.TrimPrefix(strings.TrimPrefix(t, "@"), "!")
+		if t = clip(t); t != "" {
+			out = append(out, t)
+		}
+		if r := c.StartPosition().Row; r < row {
+			row = r
+		}
+	}
+	isDeco := func(k string) bool {
+		return !strings.HasPrefix(k, "inner") && (strings.Contains(k, "annotation") || strings.Contains(k, "attribute") || strings.Contains(k, "decorator"))
+	}
+	var before []*sitter.Node
+	for s := n.PrevSibling(); s != nil; s = s.PrevSibling() {
+		k := s.Kind()
+		if isDeco(k) {
+			before = append([]*sitter.Node{s}, before...)
+		} else if !strings.Contains(k, "comment") {
+			break
+		}
+	}
+	for _, s := range before {
+		add(s)
+	}
+	for i := uint(0); i < n.ChildCount(); i++ {
+		c := n.Child(i)
+		if c.Kind() != "modifiers" {
+			continue
+		}
+		for j := uint(0); j < c.ChildCount(); j++ {
+			if a := c.Child(j); isDeco(a.Kind()) {
+				add(a)
+			}
+		}
+	}
+	return out, row
 }
