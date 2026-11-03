@@ -1,21 +1,49 @@
 # archmap
 
-Interactive, function-level architecture map of a repository: modules, the call
-graph between functions, entry points (HTTP, gRPC, tasks, `main`), what the
-current branch changes against its base, and replayable flows. The result is one
-self-contained, offline HTML file. Written in Go; syntax is parsed with
-[tree-sitter](https://tree-sitter.github.io/).
+archmap builds an interactive, function-level architecture map of a repository:
+modules, the call graph between functions, entry points (HTTP, gRPC, tasks,
+`main`), what the current branch changes against its base, and replayable
+flows. The result is one self-contained, offline HTML file (or a live page that
+follows your edits with `archmap serve`). Written in Go; 20 languages are parsed
+with [tree-sitter](https://tree-sitter.github.io/).
 
-![screenshot](docs/screenshot.png)
-<!-- TODO: add a screenshot -->
+![archmap map of ripgrep](docs/img/map-ripgrep.png)
+*`archmap map` on [ripgrep](https://github.com/BurntSushi/ripgrep): modules grouped by dependency level.*
+
+![archmap serve on archmap itself](docs/img/serve-archmap.png)
+*`archmap serve` on this repository: the live map with the function list.*
+
+(The viewer UI is currently in Russian.)
 
 ## Install
+
+**Homebrew** (macOS and Linux):
+
+```sh
+brew install aidarbn/tap/archmap
+```
+
+**Prebuilt binaries**: download the archive for your OS and CPU from
+[Releases](https://github.com/aidarbn/archmap/releases) (macOS arm64/amd64,
+Linux amd64/arm64, Windows amd64), check it against `checksums.txt`, unpack and
+put `archmap` on your `PATH`.
+
+**From source**:
 
 ```sh
 go install github.com/aidarbn/archmap/cmd/archmap@latest
 ```
 
-A C compiler is required (tree-sitter grammars are built with cgo).
+A C compiler is required for this (tree-sitter grammars are built with cgo).
+
+## Quick start
+
+```sh
+archmap map --root . --open        # one HTML file in .archmap/arch.html
+archmap serve --root . --open      # live map that follows the repo
+archmap extract --out facts.json   # only the facts (JSON)
+archmap render --facts facts.json --out arch.html
+```
 
 ## Commands
 
@@ -74,6 +102,24 @@ layers (`entry|domain|adapter|infra|ui|test|other`) and named flows, where each
 step is an existing function id (`path/file.ext::Class.method`). See
 [examples/arch.model.json](examples/arch.model.json).
 
+```json
+{
+  "title": "shop — architecture",
+  "modules": {
+    "internal/orders": {"role": "Order domain", "layer": "domain"}
+  },
+  "flows": [
+    {
+      "name": "Place an order",
+      "steps": [
+        "internal/orders/handler.go::Handler.Create",
+        "internal/orders/service.go::Service.Place"
+      ]
+    }
+  ]
+}
+```
+
 ## Languages
 
 - **Hand-written parsers** (most precise): Python, Go, JS/TS (JSX/TSX), Swift,
@@ -110,6 +156,7 @@ own package like the first five.
 - Calls are resolved by name and receiver, which is an approximation: expect
   some extra or missing edges. Common method names (`get`, `Close`, ...) are not
   linked.
+- The binary is about 60 MB because all 20 tree-sitter grammars are linked in.
 - A language without a parser (see Languages) contributes nothing to the map.
 - Change status needs git.
 
