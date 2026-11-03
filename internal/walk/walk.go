@@ -26,9 +26,10 @@ var SkipDirs = map[string]bool{
 var GeneratedSuffixes = []string{
 	"_templ.go", ".pb.go", ".pb.gw.go", "_gen.go", ".gen.go", ".generated.ts",
 	".generated.swift", ".d.ts", ".min.js", "_pb2.py", "_pb2_grpc.py", ".pb.swift",
+	".g.dart", ".freezed.dart", ".g.cs", ".Designer.cs",
 }
 
-var testRe = regexp.MustCompile(`(_test\.go|(^|/)test_[^/]*\.py|_test\.py|(^|/)tests?_[^/]*\.py|(^|/)tests\.py|\.(test|spec)\.[jt]sx?|Tests?\.(swift|kt|java)|(^|/)test_[^/]*\.rb|_(test|spec)\.rb|(^|/)test_[^/]*\.(c|cc|cpp|cxx)|_(test|spec)\.(c|cc|cpp|cxx|lua|ml)|\.bats)$|(^|/)(tests?|__tests__|e2e|androidTest|Tests|UITests)/`)
+var testRe = regexp.MustCompile(`(_test\.go|(^|/)test_[^/]*\.py|_test\.py|(^|/)tests?_[^/]*\.py|(^|/)tests\.py|\.(test|spec)\.[jt]sx?|Tests?\.(swift|kt|java|cs|scala|php|hs)|Spec\.(scala|hs)|_test\.(ex|dart)|(^|/)test_[^/]*\.rb|_(test|spec)\.rb|(^|/)test_[^/]*\.(c|cc|cpp|cxx)|_(test|spec)\.(c|cc|cpp|cxx|lua|ml)|\.bats)$|(^|/)(tests?|__tests__|e2e|androidTest|Tests|UITests)/`)
 
 // ExtSet returns the set of file extensions handled by the registered parsers:
 // the language registry is the only source of extensions.

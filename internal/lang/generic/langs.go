@@ -26,14 +26,17 @@ func q(lang, file string) string {
 // add its grammar module to go.mod, put queries/<name>/tags.scm (and optionally
 // imports.scm) next to this file, and append one Spec here.
 func Specs() []Spec {
-	return append(specsB(), []Spec{
+	specs := []Spec{
 		{Name: "java", Extensions: []string{".java"}, Grammar: func() unsafe.Pointer { return java.Language() },
 			Tags: q("java", "tags.scm"), Imports: q("java", "imports.scm")},
 		{Name: "rust", Extensions: []string{".rs"}, Grammar: func() unsafe.Pointer { return rust.Language() },
 			Tags: q("rust", "tags.scm"), Imports: q("rust", "imports.scm"), ExpandImport: expandRustUse},
 		{Name: "ruby", Extensions: []string{".rb"}, Grammar: func() unsafe.Pointer { return ruby.Language() },
 			Tags: q("ruby", "tags.scm"), Imports: q("ruby", "imports.scm")},
-	}...)
+	}
+	specs = append(specs, specsA()...)
+	specs = append(specs, specsB()...)
+	return specs
 }
 
 // Parsers returns a parser for every Spec.
