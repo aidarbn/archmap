@@ -16,6 +16,9 @@
 //     (or of the name's parent node: member/field/scoped expression) and the
 //     name, without the trailing ".", "::", "->" or "&."; "" for a bare call,
 //     "?" when the receiver is not a plain dotted/scoped name; "::" becomes ".".
+//   - @recv (optional, with @reference.call): the first node of the receiver
+//     chain, for grammars where a call is a run of sibling nodes (Dart). The
+//     receiver is then the source text from it to the name.
 //   - @doc (optional) with the definition: the doc comment; otherwise the
 //     comment block directly above the definition (attributes/annotations in
 //     between are skipped).
@@ -52,6 +55,10 @@ type Spec struct {
 	Imports string // import query source, may be empty
 	// ExpandImport optionally maps a captured @import text to import paths.
 	ExpandImport func(string) []string
+	// SiblingBody, if set, is the node kind of a body that is the next sibling
+	// of the definition node instead of its "body" field (Dart:
+	// function_signature + function_body). The definition then spans both.
+	SiblingBody string
 }
 
 // Parser implements lang.Parser for a Spec.
@@ -102,6 +109,7 @@ type container struct {
 
 type def struct {
 	node  *sitter.Node
+	end   *sitter.Node // sibling body, when the definition spans it
 	name  string
 	doc   *sitter.Node
 	body  *sitter.Node
@@ -135,7 +143,8 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 		defs  []*def
 		conts []container
 		calls []call
-		seen  = map[uint]bool{}
+		seen  = map[uint]*def{}
+		heads = map[uint]bool{} // start of every definition name
 	)
 	qc := sitter.NewQueryCursor()
 	defer qc.Close()
@@ -143,7 +152,7 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 	matches := qc.Matches(p.tags, root, src)
 	for m := matches.Next(); m != nil; m = matches.Next() {
 		var kind string
-		var node, name, doc *sitter.Node
+		var node, name, doc, recv *sitter.Node
 		for i := range m.Captures {
 			c := m.Captures[i]
 			n := names[c.Index]
@@ -151,6 +160,8 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 			switch {
 			case n == "name":
 				name = &nd
+			case n == "recv":
+				recv = &nd
 			case n == "doc":
 				if doc == nil {
 					doc = &nd
@@ -164,21 +175,38 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 		}
 		switch kind {
 		case "definition.function", "definition.method":
-			if seen[node.StartByte()] {
+			if d := seen[node.StartByte()]; d != nil {
+				if d.doc == nil {
+					d.doc = doc
+				}
 				continue
 			}
-			seen[node.StartByte()] = true
-			defs = append(defs, &def{node: node, name: text(name), doc: doc, body: node.ChildByFieldName("body")})
+			d := &def{node: node, name: text(name), doc: doc, body: node.ChildByFieldName("body")}
+			if d.body == nil && p.spec.SiblingBody != "" {
+				if nx := node.NextNamedSibling(); nx != nil && nx.Kind() == p.spec.SiblingBody {
+					d.body, d.end = nx, nx
+				}
+			}
+			seen[node.StartByte()] = d
+			heads[name.StartByte()] = true
+			defs = append(defs, d)
 		case "definition.class", "definition.interface", "definition.module", "definition.impl":
 			conts = append(conts, container{text(name), node.StartByte(), node.EndByte()})
 		case "reference.call":
-			calls = append(calls, call{name.StartByte(), text(name), recvOf(src, node, name)})
+			r := recvOf(src, node, name)
+			if recv != nil && recv.StartByte() < name.StartByte() {
+				r = normRecv(strings.TrimSpace(string(src[recv.StartByte():name.StartByte()])))
+			}
+			calls = append(calls, call{name.StartByte(), text(name), r})
 		}
 	}
 
 	// calls -> innermost function whose body contains them
 	sort.Slice(calls, func(i, j int) bool { return calls[i].pos < calls[j].pos })
 	for _, c := range calls {
+		if heads[c.pos] {
+			continue // the name of a definition (e.g. an Elixir `def f(x)` head)
+		}
 		var best *def
 		for _, d := range defs {
 			s, e := d.bodyRange()
@@ -197,18 +225,18 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 		f := lang.Func{
 			Name:  d.name,
 			Start: int(d.node.StartPosition().Row) + 1,
-			End:   int(d.node.EndPosition().Row) + 1,
+			End:   int(d.endNode().EndPosition().Row) + 1,
 			Sig:   sig(src, d),
 			Doc:   doc(src, d),
 			Calls: d.calls.Calls(),
 		}
-		if end := d.node.EndPosition(); end.Column == 0 && f.End > f.Start {
+		if end := d.endNode().EndPosition(); end.Column == 0 && f.End > f.Start {
 			f.End-- // node ends at the start of the next line
 		}
 		var cs, ce uint
 		first := true
 		for _, c := range conts {
-			if c.start <= d.node.StartByte() && d.node.EndByte() <= c.end && (first || c.end-c.start < ce-cs) {
+			if c.start <= d.node.StartByte() && d.endNode().EndByte() <= c.end && (first || c.end-c.start < ce-cs) {
 				f.Cls, cs, ce, first = c.name, c.start, c.end, false
 			}
 		}
@@ -220,16 +248,23 @@ func (p *Parser) Parse(_ string, src []byte) (lang.File, error) {
 	return out, nil
 }
 
+func (d *def) endNode() *sitter.Node {
+	if d.end != nil {
+		return d.end
+	}
+	return d.node
+}
+
 func bs(d *def) uint { s, _ := d.bodyRange(); return s }
 
 func (d *def) bodyRange() (uint, uint) {
 	if d.body != nil {
 		return d.body.StartByte(), d.body.EndByte()
 	}
-	return d.node.StartByte(), d.node.EndByte()
+	return d.node.StartByte(), d.endNode().EndByte()
 }
 
-var plainRecv = regexp.MustCompile(`^[A-Za-z_@$][\w@$]*(?:(?:\.|::|->|&\.)[A-Za-z_][\w]*)*$`)
+var plainRecv = regexp.MustCompile(`^[A-Za-z_@$][\w@$]*(?:(?:\.|::|->|&\.|\?\.)[A-Za-z_][\w]*)*$`)
 
 // recvOf computes the receiver text of a call: source between the start of the
 // name's parent (or of the call node) and the name.
@@ -241,8 +276,12 @@ func recvOf(src []byte, call, name *sitter.Node) string {
 	if start >= name.StartByte() {
 		return ""
 	}
-	r := strings.TrimSpace(string(src[start:name.StartByte()]))
-	for _, sep := range []string{"&.", "::", "->", "."} {
+	return normRecv(strings.TrimSpace(string(src[start:name.StartByte()])))
+}
+
+// normRecv turns the source text before a call name into a receiver.
+func normRecv(r string) string {
+	for _, sep := range []string{"&.", "?.", "::", "->", "."} {
 		if strings.HasSuffix(r, sep) {
 			r = strings.TrimSpace(strings.TrimSuffix(r, sep))
 			break
@@ -254,7 +293,10 @@ func recvOf(src []byte, call, name *sitter.Node) string {
 	if !plainRecv.MatchString(r) {
 		return "?"
 	}
-	r = strings.NewReplacer("::", ".", "->", ".", "&.", ".").Replace(r)
+	if strings.HasPrefix(r, "$this") { // PHP
+		r = r[1:]
+	}
+	r = strings.NewReplacer("::", ".", "->", ".", "&.", ".", "?.", ".").Replace(r)
 	if r == "Self" {
 		return "self"
 	}
@@ -281,7 +323,10 @@ func sig(src []byte, d *def) string {
 	return strings.TrimSpace(clip(string(src[s:e])))
 }
 
-var commentMark = regexp.MustCompile(`^\s*(?:/\*+!?|\*+/|\*+|//[/!]?|#+|--|;+)\s?`)
+var commentMark = regexp.MustCompile(`^\s*(?:/\*+!?|\*+/|\*+|//[/!]?|#+|--(?:\s*[|^])?|;+)\s?`)
+
+// xmlTag strips tags of XML doc comments (C# `/// <summary>text</summary>`).
+var xmlTag = regexp.MustCompile(`</?[A-Za-z][^<>]*>`)
 
 // doc returns the first non-empty line of the doc comment.
 func doc(src []byte, d *def) string {
@@ -294,6 +339,9 @@ func doc(src []byte, d *def) string {
 	for _, c := range cm {
 		for _, line := range strings.Split(string(src[c.StartByte():c.EndByte()]), "\n") {
 			line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(commentMark.ReplaceAllString(line, "")), "*/"))
+			if strings.HasPrefix(line, "<") {
+				line = strings.TrimSpace(xmlTag.ReplaceAllString(line, ""))
+			}
 			if line != "" {
 				return clip(line)
 			}
