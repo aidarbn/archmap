@@ -6,8 +6,8 @@ import (
 	"unsafe"
 
 	dart "github.com/UserNobody14/tree-sitter-dart/bindings/go"
+	elixir "github.com/aidarbn/archmap/internal/lang/generic/elixirgrammar"
 	csharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
-	elixir "github.com/tree-sitter/tree-sitter-elixir/bindings/go"
 	haskell "github.com/tree-sitter/tree-sitter-haskell/bindings/go"
 	php "github.com/tree-sitter/tree-sitter-php/bindings/go"
 	scala "github.com/tree-sitter/tree-sitter-scala/bindings/go"
