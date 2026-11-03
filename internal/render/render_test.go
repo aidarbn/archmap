@@ -67,3 +67,28 @@ func TestFilesMissingModelIsEmpty(t *testing.T) {
 		t.Fatalf("render output wrong: %v", err)
 	}
 }
+
+// The static page must not know about serve mode: placeholder intact in the
+// template, no "serve" key in the rendered data.
+func TestStaticRenderHasNoServeKey(t *testing.T) {
+	if strings.Count(Viewer(), "/*ARCH_DATA*/null") != 1 {
+		t.Fatal("template must contain the /*ARCH_DATA*/null placeholder exactly once")
+	}
+	out, err := HTML([]byte(`{"repo":"r","functions":{}}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(out)
+	i := strings.Index(html, "const DATA = ")
+	line := html[i : i+strings.Index(html[i:], "\n")]
+	if strings.Contains(line, `"serve"`) {
+		t.Errorf("static data carries a serve key: %s", line)
+	}
+	if line != `const DATA = {"facts":{"repo":"r","functions":{}},"model":{}};` {
+		t.Errorf("static data line changed: %s", line)
+	}
+	live, _ := HTMLLive([]byte(`{"repo":"r"}`), nil, Live{Seq: 3, Events: "/e", Data: "/d"})
+	if !strings.Contains(string(live), `"serve":{"seq":3,"events":"/e","data":"/d"}`) {
+		t.Error("live page lacks the serve key")
+	}
+}

@@ -26,6 +26,24 @@ func Viewer() string { return viewer }
 
 // HTML renders the page from facts.json and (optionally empty/nil) model JSON.
 func HTML(factsJSON, modelJSON []byte) ([]byte, error) {
+	return page(factsJSON, modelJSON, nil)
+}
+
+// Live describes the endpoints of `archmap serve`; when present in the data the
+// viewer subscribes to Events and re-reads Data on every update.
+type Live struct {
+	Seq    int    `json:"seq"`
+	Events string `json:"events"`
+	Data   string `json:"data"`
+}
+
+// HTMLLive renders the page for `archmap serve`: same as HTML plus a "serve"
+// key in the data. Static HTML (HTML, Files) is byte-for-byte unaffected.
+func HTMLLive(factsJSON, modelJSON []byte, l Live) ([]byte, error) {
+	return page(factsJSON, modelJSON, &l)
+}
+
+func page(factsJSON, modelJSON []byte, live *Live) ([]byte, error) {
 	var meta struct {
 		Repo string `json:"repo"`
 	}
@@ -47,7 +65,8 @@ func HTML(factsJSON, modelJSON []byte) ([]byte, error) {
 	if err := enc.Encode(struct {
 		Facts json.RawMessage `json:"facts"`
 		Model json.RawMessage `json:"model"`
-	}{factsJSON, modelJSON}); err != nil {
+		Serve *Live           `json:"serve,omitempty"`
+	}{factsJSON, modelJSON, live}); err != nil {
 		return nil, err
 	}
 	data := strings.ReplaceAll(strings.TrimRight(payload.String(), "\n"), "<", "\\"+"u003c")

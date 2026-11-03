@@ -4,21 +4,27 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"syscall"
+	"time"
 
 	"github.com/aidarbn/archmap/internal/extract"
 	"github.com/aidarbn/archmap/internal/facts"
 	"github.com/aidarbn/archmap/internal/lang/all"
 	"github.com/aidarbn/archmap/internal/render"
+	"github.com/aidarbn/archmap/internal/serve"
 )
 
 // version is set with -ldflags "-X main.version=…"; falls back to build info.
@@ -30,7 +36,7 @@ Usage:
   archmap extract [--root DIR] [--base REF] [--tests] --out facts.json
   archmap render  --facts facts.json [--model arch.model.json] --out arch.html
   archmap map     [--root DIR] [--base REF] [--tests] [--model FILE] [--out FILE] [--open]
-  archmap serve   (not implemented)
+  archmap serve   [--root DIR] [--base REF] [--tests] [--model FILE] [--addr 127.0.0.1:0] [--open]
   archmap version
 `
 
@@ -50,8 +56,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "map":
 		err = cmdMap(args[1:], stdout, stderr)
 	case "serve":
-		fmt.Fprintln(stderr, "archmap serve: not implemented")
-		return 2
+		err = cmdServe(args[1:], stdout, stderr)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, "archmap", buildVersion())
 		return 0
@@ -224,4 +229,42 @@ func openBrowser(p string) error {
 		cmd = exec.Command("xdg-open", p)
 	}
 	return cmd.Start()
+}
+
+func cmdServe(args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("serve", stderr)
+	root := fs.String("root", ".", "repository root")
+	base := fs.String("base", "", "git ref to diff against (default: merge-base with the default branch)")
+	tests := fs.Bool("tests", false, "include test files")
+	model := fs.String("model", "", "arch.model.json (default: <root>/arch.model.json if present)")
+	addr := fs.String("addr", "127.0.0.1:0", "listen address (loopback only)")
+	open := fs.Bool("open", false, "open the map in the default browser")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	ln, err := serve.Listen(*addr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	srv, err := serve.New(serve.Options{Root: *root, Base: *base, Model: *model, WithTests: *tests, Parsers: all.Parsers()})
+	if err != nil {
+		return err
+	}
+	url := "http://" + ln.Addr().String() + "/"
+	fmt.Fprintln(stdout, "archmap serve:", url)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go srv.Watch(ctx)
+	hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	go func() { <-ctx.Done(); _ = hs.Close() }()
+	if *open {
+		if err := openBrowser(url); err != nil {
+			fmt.Fprintln(stderr, "archmap: open:", err)
+		}
+	}
+	if err := hs.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
