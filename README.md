@@ -15,7 +15,38 @@ with [tree-sitter](https://tree-sitter.github.io/).
 
 The viewer UI is bilingual (English and Russian): it follows the browser
 language, can be forced with `?lang=en` / `?lang=ru`, and has an EN/RU switch
-in the header. Descriptions come from code comments and code structure, with no external files.
+in the header.
+
+## How it explains code
+
+Everything shown comes from the repository itself: no model, no hand-written
+description files, no network.
+
+- **Descriptions** of the project, modules and functions are taken from what the
+  authors already wrote: the README and package manifests (`package.json`,
+  `Cargo.toml`, `pyproject.toml`), package/module comments and
+  docstrings, and the comment block directly above a function (a detached or
+  trailing comment is not a doc; `//!` describes a module only).
+- **Layers** (entry, UI, domain, adapter, infra, test) come from the structure:
+  folder names (`handlers`, `services`, `repository`, `clients`...), what a
+  module contains (entry points, `main`, screens) and, for Cargo workspaces,
+  the folders inside `src` (a crate's own name says nothing). Clients of
+  external services are told apart from storage.
+- **Scenarios** start at entry points (HTTP/gRPC routes, tasks, `main`, pages)
+  and follow the call graph, preferring steps that cross modules and layers and
+  skipping error mappers, loggers and converters. The "Main" ones are ranked by
+  how much of the system an entry point reaches (modules, external services and
+  queues within six calls); a plain entry -> service -> repository path is
+  demoted, and `main` wiring does not crowd out business flows.
+- **Hand-offs through queues** link the code that puts a job on a queue to the
+  code that runs it, so a scenario continues in the worker. They are drawn
+  dotted and labelled "queue" in the viewer and stored as `async_callees` in
+  `facts.json`. Recognised: Go River (`Insert`/`InsertTx`/`InsertMany` with an
+  `XArgs{}` value, or a `Schedule*` wrapper around it, to the `Work` method taking
+  `*river.Job[XArgs]`), Ruby Sidekiq/ActiveJob (`X.perform_async` ->
+  `X#perform`), Python Celery (`task.delay()`/`apply_async()` -> the decorated
+  task) and BullMQ (`queue.add('name')` -> `new Worker('name', handler)`).
+  Calls made through other mechanisms are not linked.
 
 ## Install
 
