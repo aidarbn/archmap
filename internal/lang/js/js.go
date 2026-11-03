@@ -313,17 +313,17 @@ func (p *state) calls(body *sitter.Node) []lang.Call {
 		}
 		switch fnNode.Kind() {
 		case "identifier":
-			found = append(found, posCall{uint(fnNode.StartByte()), lang.Call{Name: p.t.Text(fnNode)}})
+			found = append(found, posCall{fnNode.StartByte(), lang.Call{Name: p.t.Text(fnNode)}})
 		case "member_expression":
 			prop := fnNode.ChildByFieldName("property")
 			if prop == nil || (prop.Kind() != "property_identifier" && prop.Kind() != "private_property_identifier") {
 				break
 			}
-			found = append(found, posCall{uint(prop.StartByte()), lang.Call{Name: strings.TrimPrefix(p.t.Text(prop), "#"), Recv: p.recv(fnNode.ChildByFieldName("object"))}})
+			found = append(found, posCall{prop.StartByte(), lang.Call{Name: strings.TrimPrefix(p.t.Text(prop), "#"), Recv: p.recv(fnNode.ChildByFieldName("object"))}})
 		case "non_null_expression":
 			if fnNode.NamedChildCount() > 0 && fnNode.NamedChild(0).Kind() == "identifier" {
 				c := fnNode.NamedChild(0)
-				found = append(found, posCall{uint(c.StartByte()), lang.Call{Name: p.t.Text(c)}})
+				found = append(found, posCall{c.StartByte(), lang.Call{Name: p.t.Text(c)}})
 			}
 		}
 		return true

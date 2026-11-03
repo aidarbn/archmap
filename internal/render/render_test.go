@@ -20,7 +20,7 @@ func TestEscapesScriptBreakouts(t *testing.T) {
 	if i < 0 {
 		t.Fatal("DATA assignment not found")
 	}
-	line := html[i : i+strings.Index(html[i:], "\n")]
+	line := strings.TrimSuffix(html[i:i+strings.Index(html[i:], "\n")], "\r")
 	if strings.Contains(line, "<") {
 		t.Errorf("raw '<' left in payload: %.200s", line)
 	}
@@ -80,7 +80,7 @@ func TestStaticRenderHasNoServeKey(t *testing.T) {
 	}
 	html := string(out)
 	i := strings.Index(html, "const DATA = ")
-	line := html[i : i+strings.Index(html[i:], "\n")]
+	line := strings.TrimSuffix(html[i:i+strings.Index(html[i:], "\n")], "\r")
 	if strings.Contains(line, `"serve"`) {
 		t.Errorf("static data carries a serve key: %s", line)
 	}
