@@ -242,7 +242,7 @@ func recvOf(src []byte, call, name *sitter.Node) string {
 		return ""
 	}
 	r := strings.TrimSpace(string(src[start:name.StartByte()]))
-	for _, sep := range []string{"&.", "::", "->", "."} {
+	for _, sep := range []string{"&.", "::", "->", ".", ":"} {
 		if strings.HasSuffix(r, sep) {
 			r = strings.TrimSpace(strings.TrimSuffix(r, sep))
 			break
@@ -281,7 +281,7 @@ func sig(src []byte, d *def) string {
 	return strings.TrimSpace(clip(string(src[s:e])))
 }
 
-var commentMark = regexp.MustCompile(`^\s*(?:/\*+!?|\*+/|\*+|//[/!]?|#+|--|;+)\s?`)
+var commentMark = regexp.MustCompile(`^\s*(?:/\*+!?|\*+/|\*+|//[/!]?|#+|--(?:\[=*\[)?|;+|\(\*+)\s?`)
 
 // doc returns the first non-empty line of the doc comment.
 func doc(src []byte, d *def) string {
@@ -293,7 +293,7 @@ func doc(src []byte, d *def) string {
 	}
 	for _, c := range cm {
 		for _, line := range strings.Split(string(src[c.StartByte():c.EndByte()]), "\n") {
-			line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(commentMark.ReplaceAllString(line, "")), "*/"))
+			line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(commentMark.ReplaceAllString(line, "")), "*/"), "*)"))
 			if line != "" {
 				return clip(line)
 			}

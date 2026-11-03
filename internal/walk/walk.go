@@ -19,7 +19,7 @@ var SkipDirs = map[string]bool{
 	"node_modules": true, "vendor": true, ".git": true, "dist": true, "build": true, ".next": true,
 	"__pycache__": true, ".venv": true, "venv": true, "migrations": true, "Pods": true, ".gradle": true,
 	"coverage": true, "DerivedData": true, "generated": true, "__generated__": true,
-	"target": true, "site-packages": true, "storybook-static": true,
+	"_build": true, "zig-out": true, "zig-cache": true, "target": true, "site-packages": true, "storybook-static": true,
 }
 
 // GeneratedSuffixes are file name suffixes of generated code.
@@ -28,7 +28,7 @@ var GeneratedSuffixes = []string{
 	".generated.swift", ".d.ts", ".min.js", "_pb2.py", "_pb2_grpc.py", ".pb.swift",
 }
 
-var testRe = regexp.MustCompile(`(_test\.go|(^|/)test_[^/]*\.py|_test\.py|(^|/)tests?_[^/]*\.py|(^|/)tests\.py|\.(test|spec)\.[jt]sx?|Tests?\.(swift|kt|java)|(^|/)test_[^/]*\.rb|_(test|spec)\.rb)$|(^|/)(tests?|__tests__|e2e|androidTest|Tests|UITests)/`)
+var testRe = regexp.MustCompile(`(_test\.go|(^|/)test_[^/]*\.py|_test\.py|(^|/)tests?_[^/]*\.py|(^|/)tests\.py|\.(test|spec)\.[jt]sx?|Tests?\.(swift|kt|java)|(^|/)test_[^/]*\.rb|_(test|spec)\.rb|(^|/)test_[^/]*\.(c|cc|cpp|cxx)|_(test|spec)\.(c|cc|cpp|cxx|lua|ml)|\.bats)$|(^|/)(tests?|__tests__|e2e|androidTest|Tests|UITests)/`)
 
 // ExtSet returns the set of file extensions handled by the registered parsers:
 // the language registry is the only source of extensions.
