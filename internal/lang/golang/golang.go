@@ -177,7 +177,7 @@ func callee(t *ts.Tree, fn *sitter.Node) (name, recv string, at uint, ok bool) {
 		if f == nil {
 			return
 		}
-		return t.Text(f), operand(t, fn.ChildByFieldName("operand")), uint(f.StartByte()), true
+		return t.Text(f), operand(t, fn.ChildByFieldName("operand")), f.StartByte(), true
 	}
 	return
 }
@@ -191,10 +191,10 @@ func genericCallee(t *ts.Tree, typ *sitter.Node) (name, recv string, at uint, ok
 	switch {
 	case n == nil:
 	case n.Kind() == "type_identifier":
-		return t.Text(n), "", uint(n.StartByte()), true
+		return t.Text(n), "", n.StartByte(), true
 	case n.Kind() == "qualified_type":
 		nm := n.ChildByFieldName("name")
-		return t.FieldText(n, "name"), t.FieldText(n, "package"), uint(nm.StartByte()), true
+		return t.FieldText(n, "name"), t.FieldText(n, "package"), nm.StartByte(), true
 	}
 	return
 }
