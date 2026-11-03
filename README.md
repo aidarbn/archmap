@@ -13,7 +13,9 @@ with [tree-sitter](https://tree-sitter.github.io/).
 ![archmap serve on archmap itself](docs/img/serve-archmap.png)
 *`archmap serve` on this repository: the live map with the function list.*
 
-(The viewer UI is currently in Russian.)
+The viewer UI is bilingual (English and Russian): it follows the browser
+language, can be forced with `?lang=en` / `?lang=ru`, and has an EN/RU switch
+in the header. Text from `arch.model.json` is shown as written.
 
 ## Install
 

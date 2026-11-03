@@ -44,7 +44,7 @@ func TestDefaultTitleAndEmptyModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(out), "<title>demo — архитектура</title>") {
+	if !strings.Contains(string(out), "<title>demo</title>") {
 		t.Error("default title missing")
 	}
 	if !regexp.MustCompile(`const DATA = \{"facts":\{"repo":"demo","functions":\{\}\},"model":\{\}\};`).Match(out) {

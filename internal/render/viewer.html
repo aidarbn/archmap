@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -33,6 +33,10 @@ header .sum b{color:var(--fg)}
 .chip{display:inline-block;padding:0 6px;border-radius:9px;font-size:11px;border:1px solid var(--bd);margin-left:3px}
 .chip.a{color:var(--add);border-color:var(--add)}.chip.m{color:var(--mod);border-color:var(--mod)}.chip.d{color:var(--del);border-color:var(--del)}.chip.l{color:var(--loc);border-color:var(--loc)}
 #q{width:260px}
+#langsw{display:inline-flex}
+#langsw button{border-radius:0;padding:2px 8px;font-size:12px}
+#langsw button:first-child{border-radius:6px 0 0 6px}
+#langsw button:last-child{border-radius:0 6px 6px 0;border-left:0}
 #main{flex:1;display:flex;min-height:0}
 #side{width:340px;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--bd);min-height:0}
 #tabs{display:flex;border-bottom:1px solid var(--bd)}
@@ -133,18 +137,19 @@ header .sum b{color:var(--fg)}
 <header>
   <h1 id="title"><!--TITLE--></h1>
   <span class="sum" id="sum"></span>
-  <span class="live" id="live" hidden title=""><i></i><b>живое</b><span id="liveInfo"></span></span>
+  <span class="live" id="live" hidden title=""><i></i><b></b><span id="liveInfo"></span></span>
   <span style="flex:1"></span>
-  <label><input type="checkbox" id="onlyChanged"> только изменённые</label>
-  <input type="search" id="q" placeholder="Поиск: функция или файл…" autocomplete="off">
+  <label><input type="checkbox" id="onlyChanged"> <span data-i18n="onlyChanged"></span></label>
+  <input type="search" id="q" data-i18n-ph="search" autocomplete="off">
+  <span id="langsw" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="ru">RU</button></span>
 </header>
 <div id="main">
   <aside id="side">
     <div id="tabs">
-      <button data-tab="mods" class="on">Модули</button>
-      <button data-tab="funcs">Функции</button>
-      <button data-tab="chg">Изменения</button>
-      <button data-tab="play">Видео</button>
+      <button data-tab="mods" class="on" data-i18n="tabMods"></button>
+      <button data-tab="funcs" data-i18n="tabFuncs"></button>
+      <button data-tab="chg" data-i18n="tabChg"></button>
+      <button data-tab="play" data-i18n="tabPlay"></button>
     </div>
     <div id="crumbs" hidden></div>
     <div id="sidebody"></div>
@@ -156,19 +161,19 @@ header .sum b{color:var(--fg)}
       </defs>
       <g id="cam"><g id="lanes"></g><g id="edges"></g><g id="nodes"></g><g id="over"></g></g>
     </svg>
-    <div id="legend">колесо — зум, перетаскивание — пан; размер блока — число функций; стопка — группа модулей (клик раскрывает), толщина связи — число импортов; рамка: <span style="color:var(--add)">добавлено</span> / <span style="color:var(--mod)">изменено</span> / <span style="color:var(--del)">удалено</span></div>
-    <div id="zoom"><button id="zin" title="Приблизить">+</button><button id="zout" title="Отдалить">−</button><button id="zfit" title="Вписать">⤢</button></div>
+    <div id="legend"><span data-i18n="legend"></span> <span style="color:var(--add)" data-i18n="lgAdded"></span> / <span style="color:var(--mod)" data-i18n="lgMod"></span> / <span style="color:var(--del)" data-i18n="lgDel"></span></div>
+    <div id="zoom"><button id="zin" data-i18n-title="zoomIn">+</button><button id="zout" data-i18n-title="zoomOut">−</button><button id="zfit" data-i18n-title="zoomFit">⤢</button></div>
   </section>
-  <aside id="detail"><div id="empty">Выберите модуль на карте или функцию в списке.</div></aside>
+  <aside id="detail"><div id="empty"></div></aside>
 </div>
 <div id="player">
   <div class="ctl">
-    <button id="pPrev" title="Шаг назад">⏮</button>
-    <button id="pPlay" title="Проиграть / пауза">▶</button>
-    <button id="pNext" title="Шаг вперёд">⏭</button>
+    <button id="pPrev" data-i18n-title="stepBack">⏮</button>
+    <button id="pPlay" data-i18n-title="playPause">▶</button>
+    <button id="pNext" data-i18n-title="stepFwd">⏭</button>
   </div>
-  <select id="pMode" title="Что проигрывать"></select>
-  <label>скорость <select id="pSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+  <select id="pMode" data-i18n-title="whatToPlay"></select>
+  <label><span data-i18n="speed"></span> <select id="pSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
   <input type="range" id="pbar" min="0" max="0" value="0">
   <span id="pPos" class="mono"></span>
   <div id="cap"></div>
@@ -182,7 +187,107 @@ const DATA = /*ARCH_DATA*/null;
 const $ = s => document.querySelector(s);
 const NS = "http://www.w3.org/2000/svg";
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-if (!DATA || !DATA.facts) { $("#sidebody").innerHTML = '<div id="empty">Нет данных: файл нужно собирать командой <code>arch.py render</code>.</div>'; return; }
+/* ---------- i18n: интерфейс en/ru; тексты из модели (arch.model.json) не переводятся ---------- */
+// plural forms: en [one, other]; ru [one, few, many]
+const I18N = {
+  en: {
+    onlyChanged: "changed only", search: "Search: function or file…",
+    tabMods: "Modules", tabFuncs: "Functions", tabChg: "Changes", tabPlay: "Tour",
+    legend: "wheel — zoom, drag — pan; block size — number of functions; stack — module group (click to expand), edge width — number of imports; outline:",
+    lgAdded: "added", lgMod: "modified", lgDel: "deleted",
+    zoomIn: "Zoom in", zoomOut: "Zoom out", zoomFit: "Fit",
+    stepBack: "Previous step", playPause: "Play / pause", stepFwd: "Next step", whatToPlay: "What to play", speed: "speed",
+    pickHint: "Select a module on the map or a function in the list.",
+    noData: "No data: build this file with <code>archmap map</code>.",
+    titleSuffix: " — architecture", root: "(root)",
+    layer_entry: "Entry points", layer_ui: "Interface", layer_domain: "Domain", layer_adapter: "Adapters", layer_infra: "Infrastructure", layer_test: "Tests", layer_other: "Other",
+    st_added: "added", st_modified: "modified", st_deleted: "deleted", uncommitted: "uncommitted",
+    branch: "branch", modules: "modules", functions: "functions", entryPts: "entry points", changedLbl: "changed:", notCommitted: "not committed",
+    level: n => "level " + n, links: n => "links: " + n,
+    modShort: "mod.", fnShort: "fn.", modsN: n => n + (n === 1 ? " module" : " modules"), fnsN: n => n + (n === 1 ? " function" : " functions"),
+    clickExpand: "click to expand",
+    showMore: n => "show more (" + n + ")", nothing: "Nothing found.", noChanges: "No changes against the base.",
+    entryOnly: "⚑ entry points", anyKind: "any", moduleLbl: "module", found: "found:",
+    chgFns: n => "Changed functions (" + n + ")", delFns: n => "Deleted functions (" + n + ")", noSteps: "No steps to play.",
+    modsShort: "mod", onMap: (a, b, c) => "on the map: " + a + " blocks of " + b + " modules (" + c + " groups)",
+    all: "all", collapse: "collapse", collapseAll: "collapse all",
+    none: "— none —", moreN: n => "…" + n + " more", expandStep: "Expand one more step",
+    back: "← back", inFlows: "in flows:", callersH: n => "Callers (" + n + ")", calleesH: n => "Callees (" + n + ")",
+    fnsFiles: (f, fl) => "functions: " + f + ", files: " + fl, changesLbl: "changes:", showModFns: "Show module functions",
+    importsH: n => "Imports (" + n + ")", importedByH: n => "Imported by (" + n + ")",
+    grpCounts: (m, f, fl) => "modules: " + m + ", functions: " + f + ", files: " + fl, showGrpFns: "Show group functions", collapseBtn: "Collapse",
+    tourChanges: "Changed functions: path from entry points", tourChangesDesc: "Walk through the branch changes in call order, starting from entry points.",
+    tourOverview: "Overview: calls from entry points", tourOverviewDesc: "No flows in the model and no changes — showing the first entry points and their calls.",
+    flowPfx: "Flow: ", optChanges: "Changed functions (walk from entries)", optOverview: "Overview from entry points",
+    capSteps: (n) => n + (n === 1 ? " step." : " steps."), pressPlay: "Press ▶.", noPlayData: "Nothing to play.",
+    calls: "calls →", next: "next →", end: "end", group: "group",
+    live: "live", rebuilding: "rebuilding…", error: "error", noConn: "disconnected",
+    noConnTip: "archmap serve is unreachable, reconnecting…", ms: "ms", changedN: "changed:",
+  },
+  ru: {
+    onlyChanged: "только изменённые", search: "Поиск: функция или файл…",
+    tabMods: "Модули", tabFuncs: "Функции", tabChg: "Изменения", tabPlay: "Видео",
+    legend: "колесо — зум, перетаскивание — пан; размер блока — число функций; стопка — группа модулей (клик раскрывает), толщина связи — число импортов; рамка:",
+    lgAdded: "добавлено", lgMod: "изменено", lgDel: "удалено",
+    zoomIn: "Приблизить", zoomOut: "Отдалить", zoomFit: "Вписать",
+    stepBack: "Шаг назад", playPause: "Проиграть / пауза", stepFwd: "Шаг вперёд", whatToPlay: "Что проигрывать", speed: "скорость",
+    pickHint: "Выберите модуль на карте или функцию в списке.",
+    noData: "Нет данных: файл нужно собирать командой <code>archmap map</code>.",
+    titleSuffix: " — архитектура", root: "(корень)",
+    layer_entry: "Входы", layer_ui: "Интерфейс", layer_domain: "Домен", layer_adapter: "Адаптеры", layer_infra: "Инфраструктура", layer_test: "Тесты", layer_other: "Прочее",
+    st_added: "добавлена", st_modified: "изменена", st_deleted: "удалена", uncommitted: "не в коммите",
+    branch: "ветка", modules: "модулей", functions: "функций", entryPts: "точек входа", changedLbl: "изменено:", notCommitted: "не в коммите",
+    level: n => "уровень " + n, links: n => "связей: " + n,
+    modShort: "мод.", fnShort: "ф.", modsN: (n, p) => n + " " + p(["модуль", "модуля", "модулей"]), fnsN: (n, p) => n + " " + p(["функция", "функции", "функций"]),
+    clickExpand: "клик — раскрыть",
+    showMore: n => "показать ещё (" + n + ")", nothing: "Ничего не найдено.", noChanges: "Изменений относительно базы нет.",
+    entryOnly: "⚑ точки входа", anyKind: "любые", moduleLbl: "модуль", found: "найдено:",
+    chgFns: n => "Изменённые функции (" + n + ")", delFns: n => "Удалённые функции (" + n + ")", noSteps: "Нет шагов для проигрывания.",
+    modsShort: "мод", onMap: (a, b, c) => "на карте " + a + " блоков из " + b + " модулей (" + c + " групп)",
+    all: "все", collapse: "свернуть", collapseAll: "свернуть всё",
+    none: "— нет —", moreN: n => "…ещё " + n, expandStep: "Раскрыть ещё на шаг",
+    back: "← назад", inFlows: "в потоках:", callersH: n => "Кто вызывает (" + n + ")", calleesH: n => "Кого вызывает (" + n + ")",
+    fnsFiles: (f, fl) => "функций: " + f + ", файлов: " + fl, changesLbl: "изменения:", showModFns: "Показать функции модуля",
+    importsH: n => "Импортирует (" + n + ")", importedByH: n => "Импортируют его (" + n + ")",
+    grpCounts: (m, f, fl) => "модулей: " + m + ", функций: " + f + ", файлов: " + fl, showGrpFns: "Показать функции группы", collapseBtn: "Свернуть",
+    tourChanges: "Изменённые функции: путь от точек входа", tourChangesDesc: "Обход изменений ветки в порядке вызовов, начиная с точек входа.",
+    tourOverview: "Обзор: вызовы от точек входа", tourOverviewDesc: "Нет потоков в модели и изменений — показаны первые точки входа и их вызовы.",
+    flowPfx: "Поток: ", optChanges: "Изменённые функции (обход от входов)", optOverview: "Обзор от точек входа",
+    capSteps: n => n + " шаг.", pressPlay: "Нажмите ▶.", noPlayData: "Нет данных для проигрывания.",
+    calls: "вызывает →", next: "далее →", end: "конец", group: "группа",
+    live: "живое", rebuilding: "пересборка…", error: "ошибка", noConn: "нет связи",
+    noConnTip: "сервер archmap serve недоступен, переподключаюсь…", ms: "мс", changedN: "изменено:",
+  },
+};
+const LANGS = ["en", "ru"];
+function detectLang() {
+  let l = null;
+  try { l = new URLSearchParams(location.search).get("lang"); } catch (e) {}
+  if (!LANGS.includes(l)) { try { l = localStorage.getItem("archmap.lang"); } catch (e) { l = null; } }
+  if (!LANGS.includes(l)) l = /^ru/i.test(navigator.language || "") ? "ru" : "en";
+  return l;
+}
+let LANG = detectLang();
+const plural = n => forms => {
+  if (LANG !== "ru") return n === 1 ? forms[0] : forms[forms.length - 1];
+  const a = Math.abs(n) % 100, b = a % 10;
+  return forms[a > 10 && a < 20 ? 2 : b === 1 ? 0 : b >= 2 && b <= 4 ? 1 : 2];
+};
+// t(key, ...args): строка или функция из словаря текущего языка (запасной — en)
+function t(key, ...a) {
+  let v = I18N[LANG][key]; if (v === undefined) v = I18N.en[key];
+  if (typeof v !== "function") return v;
+  return a.length === 1 && typeof a[0] === "number" && v.length === 2 ? v(a[0], plural(a[0])) : v(...a);
+}
+function applyStaticI18n() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i18n]").forEach(e => { e.textContent = t(e.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-ph]").forEach(e => { e.placeholder = t(e.dataset.i18nPh); });
+  document.querySelectorAll("[data-i18n-title]").forEach(e => { e.title = t(e.dataset.i18nTitle); });
+  document.querySelectorAll("#langsw button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
+}
+applyStaticI18n();
+if (!DATA || !DATA.facts) { $("#sidebody").innerHTML = '<div id="empty">' + t("noData") + '</div>'; return; }
 
 let F = DATA.facts, M = DATA.model || {};
 const LIVE = DATA.serve || null;
@@ -190,9 +295,8 @@ let fns = F.functions || {};
 let fids = Object.keys(fns);
 let MM = M.modules || {};
 const LAYERS = ["entry","ui","domain","adapter","infra","test","other"];
-const LAYER_RU = {entry:"Входы", ui:"Интерфейс", domain:"Домен", adapter:"Адаптеры", infra:"Инфраструктура", test:"Тесты", other:"Прочее"};
-const STATUS_RU = {added:"добавлена", modified:"изменена", deleted:"удалена"};
-const modLabel = m => m === "." || m === "" ? "(корень)" : m;
+const stText = s => t("st_" + s);
+const modLabel = m => m === "." || m === "" ? t("root") : m;
 const shortMod = m => { const p = modLabel(m).split("/"); return p.slice(-2).join("/"); };
 const fname = f => (f.cls ? f.cls + "." : "") + f.name;
 
@@ -234,12 +338,12 @@ const flash = {set: new Set(), mods: new Set(), timer: null}; // что мига
 
 /* ---------- шапка ---------- */
 function drawHeader() {
-  $("#title").textContent = M.title || (F.repo + " — архитектура");
+  $("#title").textContent = M.title || (F.repo + t("titleSuffix"));
   document.title = $("#title").textContent;
   $("#sum").innerHTML =
-    `<b>${esc(F.repo)}</b> · ветка <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
-    `модулей <b>${Object.keys(F.modules).length}</b>, функций <b>${fids.length}</b>, точек входа <b>${entries.length}</b> · изменено: ` +
-    `<span class="chip a">+${nAdded}</span><span class="chip m">~${nMod}</span><span class="chip d">−${deleted.length}</span><span class="chip l">не в коммите ${nLocal}</span>` +
+    `<b>${esc(F.repo)}</b> · ${t("branch")} <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
+    `${t("modules")} <b>${Object.keys(F.modules).length}</b>, ${t("functions")} <b>${fids.length}</b>, ${t("entryPts")} <b>${entries.length}</b> · ${t("changedLbl")} ` +
+    `<span class="chip a">+${nAdded}</span><span class="chip m">~${nMod}</span><span class="chip d">−${deleted.length}</span><span class="chip l">${t("notCommitted")} ${nLocal}</span>` +
     (M.summary ? `<br><span>${esc(M.summary)}</span>` : "");
 }
 drawHeader();
@@ -419,7 +523,7 @@ function layout() {
       });
       y += PITCH;
     }
-    lanes.push({y: y0 - 4, h: y - y0 + 4, label: useLayers ? LAYER_RU[LAYERS[k]] : "уровень " + (k + 1)});
+    lanes.push({y: y0 - 4, h: y - y0 + 4, label: useLayers ? t("layer_" + LAYERS[k]) : t("level", k + 1)});
     y += GGAP;
   });
   lanes.forEach(l => l.w = maxX + 40);
@@ -428,7 +532,7 @@ const gNodes = $("#nodes"), gEdges = $("#edges"), gLanes = $("#lanes"), gOver = 
 const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
 let nodeEl = {}, edgeEl = [];
 const shortTxt = (s, n) => s.length > n ? "…" + s.slice(-(n - 1)) : s;
-const unitTitle = u => u.kind === "g" ? (u.node.path || "(корень)") : modLabel(u.id);
+const unitTitle = u => u.kind === "g" ? (u.node.path || t("root")) : modLabel(u.id);
 
 function buildMap() {
   gLanes.textContent = ""; gEdges.textContent = ""; gNodes.textContent = ""; nodeEl = {}; edgeEl = [];
@@ -444,7 +548,7 @@ function buildMap() {
                       : `M${x1},${p.y}C${x1},${p.y - dy} ${x2},${y2 + q.h + dy} ${x2},${y2 + q.h}`;
     const e = el("path", {class: "edge", d}, gEdges);
     if (w > 1) e.style.setProperty("--w", (1 + Math.min(5, Math.log2(w) * 1.1)).toFixed(2));
-    const tt = el("title", {}, e); tt.textContent = unitTitle(U[a]) + " → " + unitTitle(U[b]) + (w > 1 ? "\nсвязей: " + w : "");
+    const tt = el("title", {}, e); tt.textContent = unitTitle(U[a]) + " → " + unitTitle(U[b]) + (w > 1 ? "\n" + t("links", w) : "");
     edgeEl.push(e);
   });
   nodeMods.forEach(m => {
@@ -453,11 +557,11 @@ function buildMap() {
     const lay = unitLayer(u) || "other";
     if (isG) el("rect", {class: "stack", x: 4, y: 4, width: p.w, height: p.h, fill: `var(--l-${lay})`}, g);
     el("rect", {width: p.w, height: p.h, fill: `var(--l-${lay})`}, g);
-    const t = el("text", {x: 7, y: 15}, g); t.textContent = isG ? shortTxt(shortMod(u.node.path), 21) + "/…" : shortTxt(u.label, 24);
+    const lbl = el("text", {x: 7, y: 15}, g); lbl.textContent = isG ? shortTxt(shortMod(u.node.path), 21) + "/…" : shortTxt(u.label, 24);
     const info = unitInfo(u);
     const c = el("text", {class: "cnt", x: 7, y: p.h - 6}, g);
     const ch = u.chg;
-    c.textContent = (isG ? u.nm + " мод. · " : "") + u.n + " ф." + (info && info.role ? " · " + info.role.slice(0, isG ? 14 : 22) : "");
+    c.textContent = (isG ? u.nm + " " + t("modShort") + " · " : "") + u.n + " " + t("fnShort") +(info && info.role ? " · " + info.role.slice(0, isG ? 14 : 22) : "");
     if (ch && (ch.added || ch.modified || ch.deleted)) {
       const parts = [];
       if (ch.added) parts.push("+" + ch.added);
@@ -468,7 +572,7 @@ function buildMap() {
     }
     if (ch && ch.local) el("circle", {cx: p.w - 7, cy: p.h - 7, r: 3.5, fill: "var(--loc)"}, g);
     const tt = el("title", {}, g);
-    tt.textContent = unitTitle(u) + "\n" + (isG ? u.nm + " модулей, " : "") + u.n + " функций" + (isG ? "\nклик — раскрыть" : "") + (info ? "\n" + (info.role || "") + (info.desc ? " — " + info.desc : "") : "");
+    tt.textContent = unitTitle(u) + "\n" + (isG ? t("modsN", u.nm) + ", " : "") + t("fnsN", u.n) + (isG ? "\n" + t("clickExpand") : "") + (info ? "\n" + (info.role || "") + (info.desc ? " — " + info.desc : "") : "");
     nodeEl[m] = g;
   });
 }
@@ -602,7 +706,7 @@ function paintMap() {
 const side = $("#sidebody");
 function fnRow(id) {
   const f = fns[id];
-  const st = f.status ? `<span class="st ${f.status}" title="${STATUS_RU[f.status]}${f.uncommitted ? ", не в коммите" : ""}">${f.status === "added" ? "+" : "~"}</span>` : '<span class="st"></span>';
+  const st = f.status ? `<span class="st ${f.status}" title="${stText(f.status)}${f.uncommitted ? ", " + t("uncommitted") : ""}">${f.status === "added" ? "+" : "~"}</span>` : '<span class="st"></span>';
   const en = f.entry ? `<span class="ent" title="${esc(f.entry.kind + ": " + f.entry.labels.join(", "))}">⚑</span>` : "";
   return `<div class="row${id === S.fn ? " sel" : ""}${flash.set.has(id) ? " flash" : ""}" data-f="${esc(id)}">${st}${en}<span class="n" title="${esc(id)}">${esc(fname(f))}</span><span class="s">${esc(f.file.split("/").pop())}:${f.start}</span></div>`;
 }
@@ -629,42 +733,42 @@ function renderSide() {
     let rows;
     if (grouping && !S.focus) { // без фокуса — то, что сейчас на карте: группы и модули
       rows = units.filter(u => u.mods.some(okMod) && (!S.only || uChg(u))).sort((a, b) => a.id < b.id ? -1 : 1).map(u => u.kind === "g"
-        ? `<div class="row" data-g="${esc(u.id)}"><span class="n" title="${esc(u.node.path)}">▸ ${esc(u.node.path || "(корень)")}</span><span class="cnt">${u.nm} мод · ${u.n}${badge(u.chg)}</span></div>`
+        ? `<div class="row" data-g="${esc(u.id)}"><span class="n" title="${esc(u.node.path)}">▸ ${esc(u.node.path || t("root"))}</span><span class="cnt">${u.nm} ${t("modsShort")} · ${u.n}${badge(u.chg)}</span></div>`
         : `<div class="row${u.id === S.mod ? " sel" : ""}" data-m="${esc(u.id)}"><span class="n" title="${esc(u.id)}">${esc(modLabel(u.id))}</span><span class="cnt">${u.n}${badge(u.chg)}</span></div>`);
     } else {
       const base = grouping ? S.focus.mods : Object.keys(F.modules).filter(m => byMod[m] || modChg[m] || hasFiles(m));
       rows = base.filter(m => okMod(m) && (!S.only || hasC(modChg[m]))).sort().map(m =>
         `<div class="row${m === S.mod ? " sel" : ""}" data-m="${esc(m)}"><span class="n" title="${esc(m)}">${esc(modLabel(m))}</span><span class="cnt">${(byMod[m] || []).length}${badge(modChg[m])}</span></div>`);
     }
-    side.innerHTML = rows.slice(0, S.limit).join("") + (rows.length > S.limit ? `<div class="more" data-more>показать ещё (${rows.length - S.limit})</div>` : "") || '<div id="empty">Ничего не найдено.</div>';
+    side.innerHTML = rows.slice(0, S.limit).join("") + (rows.length > S.limit ? `<div class="more" data-more>${t("showMore", rows.length - S.limit)}</div>` : "") || `<div id="empty">${t("nothing")}</div>`;
   } else if (S.tab === "funcs") {
     const kinds = [...new Set(entries.map(id => fns[id].entry.kind))];
     const res = filteredFns();
     side.innerHTML = `<div class="filters">
-      <label><input type="checkbox" id="fEnt" ${S.entOnly ? "checked" : ""}> ⚑ точки входа</label>
-      <select id="fKind" ${S.entOnly ? "" : "disabled"}><option value="">любые</option>${kinds.map(k => `<option ${S.entKind === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
-      ${S.fMod ? `<span>модуль: <b>${esc(modLabel(S.fMod))}</b> <a style="cursor:pointer" data-clearmod>✕</a></span>` : ""}
-      <span>найдено: ${res.length}</span></div>` +
-      res.slice(0, S.limit).map(fnRow).join("") + (res.length > S.limit ? `<div class="more" data-more>показать ещё (${res.length - S.limit})</div>` : "") +
-      (res.length ? "" : '<div id="empty">Ничего не найдено.</div>');
+      <label><input type="checkbox" id="fEnt" ${S.entOnly ? "checked" : ""}> ${t("entryOnly")}</label>
+      <select id="fKind" ${S.entOnly ? "" : "disabled"}><option value="">${t("anyKind")}</option>${kinds.map(k => `<option ${S.entKind === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
+      ${S.fMod ? `<span>${t("moduleLbl")}: <b>${esc(modLabel(S.fMod))}</b> <a style="cursor:pointer" data-clearmod>✕</a></span>` : ""}
+      <span>${t("found")} ${res.length}</span></div>` +
+      res.slice(0, S.limit).map(fnRow).join("") + (res.length > S.limit ? `<div class="more" data-more>${t("showMore", res.length - S.limit)}</div>` : "") +
+      (res.length ? "" : `<div id="empty">${t("nothing")}</div>`);
   } else if (S.tab === "chg") {
-    if (!changed.length && !deleted.length) { side.innerHTML = '<div id="empty">Изменений относительно базы нет.</div>'; }
+    if (!changed.length && !deleted.length) { side.innerHTML = `<div id="empty">${t("noChanges")}</div>`; }
     else {
       const q = S.q.toLowerCase();
       const list = changed.filter(id => !q || fname(fns[id]).toLowerCase().includes(q) || fns[id].file.toLowerCase().includes(q));
-      side.innerHTML = `<div class="sec">Изменённые функции (${list.length})</div>` + list.slice(0, S.limit).map(id => {
+      side.innerHTML = `<div class="sec">${t("chgFns", list.length)}</div>` + list.slice(0, S.limit).map(id => {
         const f = fns[id];
         const co = (f.callees || []).slice(0, 4).map(c => esc(fns[c].name)).join(", ");
         return fnRow(id) + (co ? `<div class="s" style="padding:0 10px 3px 34px;color:var(--mut)">→ ${co}${f.callees.length > 4 ? " …+" + (f.callees.length - 4) : ""}</div>` : "");
-      }).join("") + (list.length > S.limit ? `<div class="more" data-more>показать ещё (${list.length - S.limit})</div>` : "") +
-        (deleted.length ? `<div class="sec">Удалённые функции (${deleted.length})</div>` + deleted.slice(0, 200).map(d =>
+      }).join("") + (list.length > S.limit ? `<div class="more" data-more>${t("showMore", list.length - S.limit)}</div>` : "") +
+        (deleted.length ? `<div class="sec">${t("delFns", deleted.length)}</div>` + deleted.slice(0, 200).map(d =>
           `<div class="row" data-m="${esc(d.module)}"><span class="st deleted">−</span><span class="n" title="${esc(d.sig || "")}">${esc((d.cls ? d.cls + "." : "") + d.name)}</span><span class="s">${esc(d.file.split("/").pop())}</span></div>`).join("") : "");
     }
   } else if (S.tab === "play") {
     side.innerHTML = S.steps.length ? S.steps.map((id, i) => {
       const f = fns[id];
       return `<div class="row${i === S.idx ? " sel" : ""}" data-step="${i}"><span class="s">${i + 1}</span><span class="n" title="${esc(id)}">${esc(fname(f))}</span><span class="s">${esc(shortMod(f.module))}</span></div>`;
-    }).join("") : '<div id="empty">Нет шагов для проигрывания.</div>';
+    }).join("") : `<div id="empty">${t("noSteps")}</div>`;
   }
 }
 side.addEventListener("click", e => {
@@ -705,10 +809,10 @@ function renderCrumbs() {
   c.hidden = false;
   const chain = [];
   for (let n = S.focus; n && n.parent; n = n.parent) chain.unshift(n);
-  c.innerHTML = `<div class="kv">на карте ${units.length} блоков из ${allMods.length} модулей (${units.filter(u => u.kind === "g").length} групп)</div>` +
-    `<a data-crumb="">все</a>` + chain.map(n => ` › <a data-crumb="${esc(n.id)}" title="${esc(n.path)}">${esc(n.label)}</a>`).join("") +
-    (S.focus && userOpen.has(S.focus.id) ? ` <button data-collapse>свернуть</button>` : "") +
-    (userOpen.size ? ` <button data-collapseall>свернуть всё</button>` : "");
+  c.innerHTML = `<div class="kv">${t("onMap", units.length, allMods.length, units.filter(u => u.kind === "g").length)}</div>` +
+    `<a data-crumb="">${t("all")}</a>` + chain.map(n => ` › <a data-crumb="${esc(n.id)}" title="${esc(n.path)}">${esc(n.label)}</a>`).join("") +
+    (S.focus && userOpen.has(S.focus.id) ? ` <button data-collapse>${t("collapse")}</button>` : "") +
+    (userOpen.size ? ` <button data-collapseall>${t("collapseAll")}</button>` : "");
 }
 function afterRebuild(boxOf) {
   fit();
@@ -766,13 +870,13 @@ $("#crumbs").addEventListener("click", e => {
 const det = $("#detail");
 function nbList(id, dir) {
   const arr = dir === "in" ? callers[id] : (fns[id].callees || []);
-  if (!arr.length) return '<div class="kv">— нет —</div>';
-  return `<ul class="nb" data-dir="${dir}">` + arr.slice(0, 60).map(c => nbItem(c)).join("") + (arr.length > 60 ? `<li class="kv">…ещё ${arr.length - 60}</li>` : "") + "</ul>";
+  if (!arr.length) return `<div class="kv">${t("none")}</div>`;
+  return `<ul class="nb" data-dir="${dir}">` + arr.slice(0, 60).map(c => nbItem(c)).join("") + (arr.length > 60 ? `<li class="kv">${t("moreN", arr.length - 60)}</li>` : "") + "</ul>";
 }
 function nbItem(c) {
   const f = fns[c];
   const st = f.status ? `<span class="st ${f.status}">${f.status === "added" ? "+" : "~"}</span>` : "";
-  return `<li data-id="${esc(c)}"><div class="it"><span class="x" title="Раскрыть ещё на шаг">▸</span>${st}<a data-f="${esc(c)}" title="${esc(c)}">${esc(fname(f))}</a><span class="kv">${esc(shortMod(f.module))}</span></div></li>`;
+  return `<li data-id="${esc(c)}"><div class="it"><span class="x" title="${t("expandStep")}">▸</span>${st}<a data-f="${esc(c)}" title="${esc(c)}">${esc(fname(f))}</a><span class="kv">${esc(shortMod(f.module))}</span></div></li>`;
 }
 det.addEventListener("click", e => {
   const x = e.target.closest(".x");
@@ -782,7 +886,7 @@ det.addEventListener("click", e => {
     if (nested) { nested.remove(); x.textContent = "▸"; return; }
     const id = li.dataset.id, arr = dir === "in" ? callers[id] : (fns[id].callees || []);
     const ul = document.createElement("ul"); ul.dataset.dir = dir;
-    ul.innerHTML = arr.length ? arr.slice(0, 40).map(nbItem).join("") : '<li class="kv">— нет —</li>';
+    ul.innerHTML = arr.length ? arr.slice(0, 40).map(nbItem).join("") : `<li class="kv">${t("none")}</li>`;
     li.appendChild(ul); x.textContent = "▾"; return;
   }
   const a = e.target.closest("[data-f]"); if (a) { selectFn(a.dataset.f, true); return; }
@@ -800,36 +904,36 @@ function renderDetail() {
     const f = fns[S.fn];
     const flows = (M.flows || []).filter(fl => (fl.steps || []).includes(S.fn));
     det.innerHTML =
-      (S.hist.length > 1 ? '<button data-back>← назад</button>' : "") +
+      (S.hist.length > 1 ? `<button data-back>${t("back")}</button>` : "") +
       `<h2>${esc(fname(f))}</h2>` +
-      (f.status ? `<span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${STATUS_RU[f.status]}${f.uncommitted ? " · не в коммите" : ""}</span>` : "") +
+      (f.status ? `<span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${stText(f.status)}${f.uncommitted ? " · " + t("uncommitted") : ""}</span>` : "") +
       (f.entry ? `<span class="tag" style="color:var(--acc)">⚑ ${esc(f.entry.kind)}: ${esc(f.entry.labels.join(", "))}</span>` : "") +
       `<pre class="mono">${esc(f.sig)}</pre>` +
       `<div class="kv mono">${esc(f.file)}:${f.start}–${f.end}</div>` +
-      `<div class="kv">модуль: <a data-m="${esc(f.module)}">${esc(modLabel(f.module))}</a></div>` + modInfo(f.module) +
+      `<div class="kv">${t("moduleLbl")}: <a data-m="${esc(f.module)}">${esc(modLabel(f.module))}</a></div>` + modInfo(f.module) +
       (f.doc ? `<div class="doc">${esc(f.doc)}</div>` : "") +
-      (flows.length ? `<div class="kv">в потоках: ${flows.map(x => esc(x.name)).join(", ")}</div>` : "") +
-      `<h3>Кто вызывает (${callers[S.fn].length})</h3>` + nbList(S.fn, "in") +
-      `<h3>Кого вызывает (${(f.callees || []).length})</h3>` + nbList(S.fn, "out");
+      (flows.length ? `<div class="kv">${t("inFlows")} ${flows.map(x => esc(x.name)).join(", ")}</div>` : "") +
+      `<h3>${t("callersH", callers[S.fn].length)}</h3>` + nbList(S.fn, "in") +
+      `<h3>${t("calleesH", (f.callees || []).length)}</h3>` + nbList(S.fn, "out");
   } else if (S.mod) {
     const m = S.mod, c = modChg[m] || {};
     const imps = (F.modules[m] && F.modules[m].imports) || [], by = importedBy[m] || [];
     const link = x => `<li><a data-m="${esc(x)}">${esc(modLabel(x))}</a> <span class="kv">${(byMod[x] || []).length}</span></li>`;
     det.innerHTML = `<h2>${esc(modLabel(m))}</h2>` + modInfo(m) +
-      `<div class="kv">функций: ${(byMod[m] || []).length}, файлов: ${((F.modules[m] || {}).files || []).length}` +
-      (c.added || c.modified || c.deleted ? ` · изменения: +${c.added} ~${c.modified} −${c.deleted}` : "") + "</div>" +
-      `<p><button data-showfns="${esc(m)}">Показать функции модуля</button></p>` +
-      `<h3>Импортирует (${imps.length})</h3><ul class="nb">${imps.map(link).join("") || '<li class="kv">— нет —</li>'}</ul>` +
-      `<h3>Импортируют его (${by.length})</h3><ul class="nb">${by.map(link).join("") || '<li class="kv">— нет —</li>'}</ul>`;
+      `<div class="kv">${t("fnsFiles", (byMod[m] || []).length, ((F.modules[m] || {}).files || []).length)}` +
+      (c.added || c.modified || c.deleted ? ` · ${t("changesLbl")} +${c.added} ~${c.modified} −${c.deleted}` : "") + "</div>" +
+      `<p><button data-showfns="${esc(m)}">${t("showModFns")}</button></p>` +
+      `<h3>${t("importsH", imps.length)}</h3><ul class="nb">${imps.map(link).join("") || `<li class="kv">${t("none")}</li>`}</ul>` +
+      `<h3>${t("importedByH", by.length)}</h3><ul class="nb">${by.map(link).join("") || `<li class="kv">${t("none")}</li>`}</ul>`;
   } else if (S.focus) {
     const n = S.focus, c = sumChg(n.mods), info = modelFor(n.path);
-    det.innerHTML = `<h2>${esc(n.path || "(корень)")}</h2>` +
+    det.innerHTML = `<h2>${esc(n.path || t("root"))}</h2>` +
       (info ? `<div class="kv"><span class="tag">${esc(info.layer || "other")}</span><b>${esc(info.role || "")}</b>${info.desc ? "<br>" + esc(info.desc) : ""}</div>` : "") +
-      `<div class="kv">модулей: ${n.mods.length}, функций: ${n.n}, файлов: ${n.mods.reduce((s, m) => s + ((F.modules[m] || {}).files || []).length, 0)}` +
-      (c.added || c.modified || c.deleted ? ` · изменения: +${c.added} ~${c.modified} −${c.deleted}` : "") + "</div>" +
-      `<p><button data-showfns="">Показать функции группы</button>` + (userOpen.has(n.id) ? ` <button data-collapse>Свернуть</button>` : "") + "</p>";
+      `<div class="kv">${t("grpCounts", n.mods.length, n.n, n.mods.reduce((s, m) => s + ((F.modules[m] || {}).files || []).length, 0))}` +
+      (c.added || c.modified || c.deleted ? ` · ${t("changesLbl")} +${c.added} ~${c.modified} −${c.deleted}` : "") + "</div>" +
+      `<p><button data-showfns="">${t("showGrpFns")}</button>` + (userOpen.has(n.id) ? ` <button data-collapse>${t("collapseBtn")}</button>` : "") + "</p>";
   } else {
-    det.innerHTML = '<div id="empty">Выберите модуль на карте или функцию в списке.</div>';
+    det.innerHTML = `<div id="empty">${t("pickHint")}</div>`;
   }
 }
 function selectMod(m, list) {
@@ -876,20 +980,20 @@ function buildTour(kind) {
       const path = []; for (let c = id; c != null; c = par[c]) path.push(c);
       path.reverse().forEach(p => { push(p); seen.add(p); });
     }
-    return {steps, name: "Изменённые функции: путь от точек входа", desc: "Обход изменений ветки в порядке вызовов, начиная с точек входа."};
+    return {steps, name: t("tourChanges"), desc: t("tourChangesDesc")};
   }
   // обзор от точек входа: глубина до 4, не более 60 шагов
   const seen = new Set();
   const walk = (id, d) => { if (steps.length >= 60 || seen.has(id) || d > 4) return; seen.add(id); push(id); (fns[id].callees || []).slice(0, 3).forEach(c => walk(c, d + 1)); };
   entries.slice(0, 6).forEach(e => walk(e, 0));
-  return {steps, name: "Обзор: вызовы от точек входа", desc: "Нет потоков в модели и изменений — показаны первые точки входа и их вызовы."};
+  return {steps, name: t("tourOverview"), desc: t("tourOverviewDesc")};
 }
 let tour = null;
 function tourOptions() {
   const opts = [];
-  (M.flows || []).forEach((fl, i) => { if ((fl.steps || []).some(id => fns[id])) opts.push([`flow:${i}`, "Поток: " + fl.name]); });
-  if (changed.length) opts.push(["changes", "Изменённые функции (обход от входов)"]);
-  if (entries.length) opts.push(["overview", "Обзор от точек входа"]);
+  (M.flows || []).forEach((fl, i) => { if ((fl.steps || []).some(id => fns[id])) opts.push([`flow:${i}`, t("flowPfx") + fl.name]); });
+  if (changed.length) opts.push(["changes", t("optChanges")]);
+  if (entries.length) opts.push(["overview", t("optOverview")]);
   return opts;
 }
 const modeOptionsHTML = opts => opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("");
@@ -919,7 +1023,7 @@ function loadMode(kind) {
   S.steps = tour.steps;
   $("#pbar").max = Math.max(0, S.steps.length - 1); $("#pbar").value = 0;
   $("#pPos").textContent = "0/" + S.steps.length;
-  $("#cap").innerHTML = S.steps.length ? `<span class="t">${esc(tour.name)}</span> <span class="s">— ${S.steps.length} шаг. ${esc(tour.desc)} Нажмите ▶.</span>` : '<span class="s">Нет данных для проигрывания.</span>';
+  $("#cap").innerHTML = S.steps.length ? `<span class="t">${esc(tour.name)}</span> <span class="s">— ${t("capSteps", S.steps.length)} ${esc(tour.desc)} ${t("pressPlay")}</span>` : `<span class="s">${t("noPlayData")}</span>`;
   gOver.textContent = "";
   if (S.tab === "play") renderSide();
   paintMap();
@@ -931,12 +1035,12 @@ function goStep(i) {
   const id = S.steps[i], f = fns[id];
   $("#pbar").value = i; $("#pPos").textContent = (i + 1) + "/" + S.steps.length;
   const nx = S.steps[i + 1];
-  const call = nx ? ((f.callees || []).includes(nx) ? `вызывает → <b>${esc(fname(fns[nx]))}</b>` : `далее → <b>${esc(fname(fns[nx]))}</b>`) : "конец";
+  const call = nx ? ((f.callees || []).includes(nx) ? `${t("calls")} <b>${esc(fname(fns[nx]))}</b>` : `${t("next")} <b>${esc(fname(fns[nx]))}</b>`) : t("end");
   const mi = MM[f.module];
   $("#cap").innerHTML = `<span class="t">${i + 1}. ${esc(fname(f))}</span>` +
-    (f.status ? ` <span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${STATUS_RU[f.status]}</span>` : "") +
+    (f.status ? ` <span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${stText(f.status)}</span>` : "") +
     (f.entry ? ` <span class="tag" style="color:var(--acc)">⚑ ${esc(f.entry.labels[0] || f.entry.kind)}</span>` : "") +
-    `<br><span class="s">${esc(modLabel(f.module))}${mi && mi.role ? " — " + esc(mi.role) : ""}${isGid(unitOf[f.module] || "") ? " · группа <b>" + esc(U[unitOf[f.module]].node.path) + "</b>" : ""} ·<code>${esc(f.file)}:${f.start}</code> · ${call}</span>` +
+    `<br><span class="s">${esc(modLabel(f.module))}${mi && mi.role ? " — " + esc(mi.role) : ""}${isGid(unitOf[f.module] || "") ? " · " + t("group") + " <b>" + esc(U[unitOf[f.module]].node.path) + "</b>" : ""} ·<code>${esc(f.file)}:${f.start}</code> · ${call}</span>` +
     (f.doc ? `<br><span class="s">${esc(f.doc.split("\n")[0].slice(0, 200))}</span>` : "");
   S.fn = id; S.mod = f.module;
   renderDetail(); paintMap(); panTo(f.module);
@@ -1003,9 +1107,19 @@ function startFlash(ids) {
     document.querySelectorAll(".flash").forEach(e => e.classList.remove("flash"));
   }, 2800);
 }
+let relangLive = () => {};
 function setupLive() {
   const box = $("#live"), label = box.querySelector("b"), info = $("#liveInfo");
-  const status = (st, text, tip) => { box.hidden = false; box.className = "live" + (st === "ready" ? "" : " " + st); label.textContent = text; box.title = tip || ""; };
+  let cur = null;
+  // text/tip — ключ словаря (или готовая строка ошибки); хранится, чтобы перерисовать при смене языка
+  const status = (st, key, tip, tipKey) => { cur = [st, key, tip, tipKey]; paint(); };
+  const paint = () => {
+    if (!cur) return;
+    const [st, key, tip, tipKey] = cur;
+    box.hidden = false; box.className = "live" + (st === "ready" ? "" : " " + st);
+    label.textContent = t(key); box.title = tipKey ? t(tipKey) : (tip || "");
+  };
+  relangLive = paint;
   let seq = LIVE.seq || 0, want = seq, busy = false;
   const last = {ms: 0};
   const pend = new Set();
@@ -1021,25 +1135,40 @@ function setupLive() {
         seq = d.seq; if (seq > want) want = seq;
         const ids = [...pend]; pend.clear();
         applyData(d, ids);
-        info.textContent = " · " + new Date().toLocaleTimeString() + (last.ms ? " · " + last.ms + " мс" : "") + (ids.length ? " · изменено: " + ids.length : "");
+        info.textContent = " · " + new Date().toLocaleTimeString() + (last.ms ? " · " + last.ms + " " + t("ms") : "") + (ids.length ? " · " + t("changedN") + " " + ids.length : "");
         tip = ids.slice(0, 12).map(id => fname(fns[id] || {name: id})).join("\n");
       }
-      status("ready", "живое", tip);
-    } catch (e) { status("error", "ошибка", String(e)); }
+      status("ready", "live", tip);
+    } catch (e) { status("error", "error", String(e)); }
     finally { busy = false; }
   };
-  status("ready", "живое");
+  status("ready", "live");
   const es = new EventSource(LIVE.events);
   es.onmessage = ev => {
     const u = JSON.parse(ev.data);
-    if (u.state === "building") { status("building", "пересборка…"); return; }
-    if (u.state === "error") { status("error", "ошибка", u.error || ""); info.textContent = " · " + (u.error || "").slice(0, 80); return; }
+    if (u.state === "building") { status("building", "rebuilding"); return; }
+    if (u.state === "error") { status("error", "error", u.error || ""); info.textContent = " · " + (u.error || "").slice(0, 80); return; }
     (u.flash || []).forEach(id => pend.add(id));
     last.ms = u.ms || 0;
-    if (u.seq !== seq) { want = u.seq; pull(); } else status("ready", "живое");
+    if (u.seq !== seq) { want = u.seq; pull(); } else status("ready", "live");
   };
-  es.onerror = () => status("error", "нет связи", "сервер archmap serve недоступен, переподключаюсь…");
+  es.onerror = () => status("error", "noConn", "", "noConnTip");
 }
+
+/* ---------- смена языка ---------- */
+function setLang(l) {
+  if (!LANGS.includes(l) || l === LANG) return;
+  LANG = l;
+  try { localStorage.setItem("archmap.lang", l); } catch (e) {}
+  applyStaticI18n(); drawHeader();
+  rebuild(); renderCrumbs(); renderDetail(); renderSide(); paintMap();
+  const wasIdx = S.idx;
+  refreshTour();
+  if (wasIdx >= 0 && S.idx >= 0) goStep(S.idx);
+  else if (S.mode) { const i = S.idx; loadMode(S.mode); S.idx = i; }
+  relangLive();
+}
+$("#langsw").addEventListener("click", e => { const b = e.target.closest("[data-lang]"); if (b) setLang(b.dataset.lang); });
 
 /* ---------- старт ---------- */
 setupPlayer();

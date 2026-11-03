@@ -72,7 +72,8 @@ func page(factsJSON, modelJSON []byte, live *Live) ([]byte, error) {
 	data := strings.ReplaceAll(strings.TrimRight(payload.String(), "\n"), "<", "\\"+"u003c")
 	title := model.Title
 	if title == "" {
-		title = meta.Repo + " — архитектура"
+		// language-neutral: the viewer appends the localized suffix after load
+		title = meta.Repo
 	}
 	html := strings.ReplaceAll(viewer, "/*ARCH_DATA*/null", data)
 	html = strings.ReplaceAll(html, "<!--TITLE-->", strings.ReplaceAll(title, "<", "&lt;"))
