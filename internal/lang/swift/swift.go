@@ -296,7 +296,7 @@ func (p *parser) call(c *sitter.Node) (posCall, bool) {
 	}
 	switch callee.Kind() {
 	case "simple_identifier":
-		return posCall{lang.Call{Name: p.t.Text(callee)}, uint(callee.StartByte())}, true
+		return posCall{lang.Call{Name: p.t.Text(callee)}, callee.StartByte()}, true
 	case "navigation_expression":
 		suf := callee.ChildByFieldName("suffix")
 		if suf == nil {
@@ -310,7 +310,7 @@ func (p *parser) call(c *sitter.Node) (posCall, bool) {
 		if !ok {
 			recv = "?"
 		}
-		return posCall{lang.Call{Name: p.t.Text(id), Recv: recv}, uint(id.StartByte())}, true
+		return posCall{lang.Call{Name: p.t.Text(id), Recv: recv}, id.StartByte()}, true
 	}
 	return posCall{}, false
 }

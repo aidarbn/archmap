@@ -171,7 +171,7 @@ func callee(t *ts.Tree, fn *sitter.Node) (name, recv string, at uint, ok bool) {
 	}
 	switch fn.Kind() {
 	case "identifier":
-		return t.Text(fn), "", uint(fn.StartByte()), true
+		return t.Text(fn), "", fn.StartByte(), true
 	case "selector_expression":
 		f := fn.ChildByFieldName("field")
 		if f == nil {
