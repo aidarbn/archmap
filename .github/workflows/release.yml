@@ -1,0 +1,75 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - {os: ubuntu-latest, goos: linux, goarch: amd64}
+          - {os: ubuntu-24.04-arm, goos: linux, goarch: arm64}
+          - {os: macos-latest, goos: darwin, goarch: arm64}
+          - {os: macos-15-intel, goos: darwin, goarch: amd64}
+          - {os: windows-latest, goos: windows, goarch: amd64}
+    runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          ext=""
+          [ "${{ matrix.goos }}" = windows ] && ext=".exe"
+          name="archmap_${TAG}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p "dist/$name"
+          go build -trimpath -ldflags "-s -w -X main.version=${TAG}" -o "dist/$name/archmap$ext" ./cmd/archmap
+          cp README.md LICENSE "dist/$name/"
+          cd dist
+          if [ "${{ matrix.goos }}" = windows ]; then
+            7z a -tzip "$name.zip" "$name" > /dev/null
+          else
+            tar -czf "$name.tar.gz" "$name"
+          fi
+          rm -rf "$name"
+          ls -l
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum archmap_* > checksums.txt
+          cat checksums.txt
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
+          generate_release_notes: true
