@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aidarbn/archmap/internal/gitstat"
+	"github.com/aidarbn/archmap/internal/lang"
 )
 
 // SkipDirs are directory names never descended into.
@@ -18,7 +19,7 @@ var SkipDirs = map[string]bool{
 	"node_modules": true, "vendor": true, ".git": true, "dist": true, "build": true, ".next": true,
 	"__pycache__": true, ".venv": true, "venv": true, "migrations": true, "Pods": true, ".gradle": true,
 	"coverage": true, "DerivedData": true, "generated": true, "__generated__": true,
-	"site-packages": true, "storybook-static": true,
+	"target": true, "site-packages": true, "storybook-static": true,
 }
 
 // GeneratedSuffixes are file name suffixes of generated code.
@@ -27,7 +28,19 @@ var GeneratedSuffixes = []string{
 	".generated.swift", ".d.ts", ".min.js", "_pb2.py", "_pb2_grpc.py", ".pb.swift",
 }
 
-var testRe = regexp.MustCompile(`(_test\.go|(^|/)test_[^/]*\.py|_test\.py|(^|/)tests?_[^/]*\.py|(^|/)tests\.py|\.(test|spec)\.[jt]sx?|Tests?\.(swift|kt))$|(^|/)(tests?|__tests__|e2e|androidTest|Tests|UITests)/`)
+var testRe = regexp.MustCompile(`(_test\.go|(^|/)test_[^/]*\.py|_test\.py|(^|/)tests?_[^/]*\.py|(^|/)tests\.py|\.(test|spec)\.[jt]sx?|Tests?\.(swift|kt|java)|(^|/)test_[^/]*\.rb|_(test|spec)\.rb)$|(^|/)(tests?|__tests__|e2e|androidTest|Tests|UITests)/`)
+
+// ExtSet returns the set of file extensions handled by the registered parsers:
+// the language registry is the only source of extensions.
+func ExtSet(parsers []lang.Parser) map[string]bool {
+	m := map[string]bool{}
+	for _, p := range parsers {
+		for _, e := range p.Extensions() {
+			m[e] = true
+		}
+	}
+	return m
+}
 
 // IsTest reports whether p looks like a test file.
 func IsTest(p string) bool { return testRe.MatchString(p) }
