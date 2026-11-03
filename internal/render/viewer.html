@@ -131,11 +131,25 @@ header .sum b{color:var(--fg)}
 .row.flash,#detail.flash{animation:flashr 2.6s ease-out 1}
 @keyframes flashr{0%{background:color-mix(in srgb,var(--hl) 55%,transparent)}100%{background:transparent}}
 @media (prefers-reduced-motion:reduce){.live.building i,.node.flash rect:not(.stack),.row.flash,#detail.flash{animation:none}.node.flash rect:not(.stack){stroke:var(--hl);stroke-width:3}.row.flash{background:color-mix(in srgb,var(--hl) 25%,transparent)}}
+#pcombo{position:relative}
+#pcur{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+#pcur:after{content:" ▾";color:var(--mut)}
+#ppop{position:absolute;bottom:calc(100% + 4px);left:0;width:420px;max-width:80vw;background:var(--panel);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.35);z-index:50;display:flex;flex-direction:column}
+#ppop[hidden]{display:none}
+#pq{margin:6px;width:calc(100% - 12px)}
+#plist{max-height:50vh;overflow:auto;padding-bottom:4px}
+#plist .gh{padding:5px 10px 2px;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+#plist .opt{padding:3px 10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#plist .opt.act{background:color-mix(in srgb,var(--hl) 28%,transparent)}
+#plist .opt.cur{font-weight:600}
+#plist .more,#plist .none{padding:4px 10px;color:var(--mut)}
+#pdesc{color:var(--mut);max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
 <header>
   <h1 id="title"><!--TITLE--></h1>
+  <span id="pdesc"></span>
   <span class="sum" id="sum"></span>
   <span class="live" id="live" hidden title=""><i></i><b></b><span id="liveInfo"></span></span>
   <span style="flex:1"></span>
@@ -172,7 +186,8 @@ header .sum b{color:var(--fg)}
     <button id="pPlay" data-i18n-title="playPause">▶</button>
     <button id="pNext" data-i18n-title="stepFwd">⏭</button>
   </div>
-  <select id="pMode" data-i18n-title="whatToPlay"></select>
+  <div id="pcombo"><button id="pcur" aria-haspopup="listbox" aria-expanded="false"></button>
+    <div id="ppop" hidden><input type="search" id="pq" data-i18n-ph="flowSearch" autocomplete="off" role="combobox" aria-controls="plist"><div id="plist" role="listbox"></div></div></div>
   <label><span data-i18n="speed"></span> <select id="pSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
   <input type="range" id="pbar" min="0" max="0" value="0">
   <span id="pPos" class="mono"></span>
@@ -218,6 +233,7 @@ const I18N = {
     grpCounts: (m, f, fl) => "modules: " + m + ", functions: " + f + ", files: " + fl, showGrpFns: "Show group functions", collapseBtn: "Collapse",
     tourChanges: "Changed functions: path from entry points", tourChangesDesc: "Walk through the branch changes in call order, starting from entry points.",
     tourOverview: "Overview: calls from entry points", tourOverviewDesc: "No flows in the model and no changes — showing the first entry points and their calls.",
+    flowSearch: "Search scenarios…", grpTop: "Main", grpGeneral: "General", grpFlows: "Scenarios", playFromFn: "Scenario from this function", flowMore: n => "…" + n + " more — refine the search", flowNone: "No scenarios found", fnFlowTitle: "Scenario from ",
     flowPfx: "Flow: ", optChanges: "Changed functions (walk from entries)", optOverview: "Overview from entry points",
     capSteps: (n) => n + (n === 1 ? " step." : " steps."), pressPlay: "Press ▶.", noPlayData: "Nothing to play.",
     calls: "calls →", next: "next →", end: "end", group: "group",
@@ -252,6 +268,7 @@ const I18N = {
     grpCounts: (m, f, fl) => "модулей: " + m + ", функций: " + f + ", файлов: " + fl, showGrpFns: "Показать функции группы", collapseBtn: "Свернуть",
     tourChanges: "Изменённые функции: путь от точек входа", tourChangesDesc: "Обход изменений ветки в порядке вызовов, начиная с точек входа.",
     tourOverview: "Обзор: вызовы от точек входа", tourOverviewDesc: "Нет потоков в модели и изменений — показаны первые точки входа и их вызовы.",
+    flowSearch: "Поиск сценария…", grpTop: "Главные", grpGeneral: "Общее", grpFlows: "Сценарии", playFromFn: "Сценарий от этой функции", flowMore: n => "…ещё " + n + " — уточните поиск", flowNone: "Сценарии не найдены", fnFlowTitle: "Сценарий от ",
     flowPfx: "Поток: ", optChanges: "Изменённые функции (обход от входов)", optOverview: "Обзор от точек входа",
     capSteps: n => n + " шаг.", pressPlay: "Нажмите ▶.", noPlayData: "Нет данных для проигрывания.",
     calls: "вызывает →", next: "далее →", end: "конец", group: "группа",
@@ -338,7 +355,9 @@ const flash = {set: new Set(), mods: new Set(), timer: null}; // что мига
 
 /* ---------- шапка ---------- */
 function drawHeader() {
-  $("#title").textContent = M.title || (F.repo + t("titleSuffix"));
+  const PJ = F.project || {};
+  $("#title").textContent = M.title || ((PJ.name || F.repo) + t("titleSuffix"));
+  $("#pdesc").textContent = PJ.description || ""; $("#pdesc").title = PJ.description || "";
   document.title = $("#title").textContent;
   $("#sum").innerHTML =
     `<b>${esc(F.repo)}</b> · ${t("branch")} <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
@@ -572,7 +591,7 @@ function buildMap() {
     }
     if (ch && ch.local) el("circle", {cx: p.w - 7, cy: p.h - 7, r: 3.5, fill: "var(--loc)"}, g);
     const tt = el("title", {}, g);
-    tt.textContent = unitTitle(u) + "\n" + (isG ? t("modsN", u.nm) + ", " : "") + t("fnsN", u.n) + (isG ? "\n" + t("clickExpand") : "") + (info ? "\n" + (info.role || "") + (info.desc ? " — " + info.desc : "") : "");
+    tt.textContent = unitTitle(u) + "\n" + (isG ? t("modsN", u.nm) + ", " : "") + t("fnsN", u.n) + (isG ? "\n" + t("clickExpand") : "") + (info ? "\n" + (info.role || "") + (info.desc ? " — " + info.desc : "") : "") + (!(info && info.desc) && !isG && (F.modules[m] || {}).doc ? "\n" + F.modules[m].doc : "");
     nodeEl[m] = g;
   });
 }
@@ -892,12 +911,15 @@ det.addEventListener("click", e => {
   const a = e.target.closest("[data-f]"); if (a) { selectFn(a.dataset.f, true); return; }
   const m = e.target.closest("[data-m]"); if (m) { selectMod(m.dataset.m, true); return; }
   if (e.target.closest("[data-back]")) back();
+  const pf = e.target.closest("[data-playfn]"); if (pf) playFrom(pf.dataset.playfn);
   if (e.target.closest("[data-showfns]")) { S.fMod = e.target.closest("[data-showfns]").dataset.showfns || null; S.tab = "funcs"; S.limit = 200; renderSide(); }
   if (e.target.closest("[data-collapse]") && S.focus) collapseGroup(S.focus);
 });
+const modDesc = m => { const i = MM[m]; return (i && i.desc) || ((F.modules[m] || {}).doc) || ""; };
 const modInfo = m => {
-  const i = MM[m];
-  return i ? `<div class="kv"><span class="tag">${esc(i.layer || "other")}</span><b>${esc(i.role || "")}</b>${i.desc ? "<br>" + esc(i.desc) : ""}</div>` : "";
+  const i = MM[m], d = modDesc(m);
+  return i ? `<div class="kv"><span class="tag">${esc(i.layer || "other")}</span><b>${esc(i.role || "")}</b>${d ? "<br>" + esc(d) : ""}</div>`
+    : d ? `<div class="kv">${esc(d)}</div>` : "";
 };
 function renderDetail() {
   if (S.fn) {
@@ -908,6 +930,7 @@ function renderDetail() {
       `<h2>${esc(fname(f))}</h2>` +
       (f.status ? `<span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${stText(f.status)}${f.uncommitted ? " · " + t("uncommitted") : ""}</span>` : "") +
       (f.entry ? `<span class="tag" style="color:var(--acc)">⚑ ${esc(f.entry.kind)}: ${esc(f.entry.labels.join(", "))}</span>` : "") +
+      (f.entry || (f.callees || []).length ? ` <button data-playfn="${esc(S.fn)}" title="${esc(t("playFromFn"))}">▶ ${esc(t("playFromFn"))}</button>` : "") +
       `<pre class="mono">${esc(f.sig)}</pre>` +
       `<div class="kv mono">${esc(f.file)}:${f.start}–${f.end}</div>` +
       `<div class="kv">${t("moduleLbl")}: <a data-m="${esc(f.module)}">${esc(modLabel(f.module))}</a></div>` + modInfo(f.module) +
@@ -962,6 +985,10 @@ function buildTour(kind) {
     const fl = M.flows[+kind.slice(5)];
     return {steps: (fl.steps || []).filter(id => fns[id]), name: fl.name, desc: fl.desc || ""};
   }
+  if (kind.startsWith("fn:")) {
+    const id = kind.slice(3);
+    return {steps: fns[id] ? autoPath(id) : [], name: t("fnFlowTitle") + (fns[id] ? fname(fns[id]) : ""), desc: ""};
+  }
   // BFS от точек входа по вызовам
   const par = {}, dist = {};
   const q = [];
@@ -989,26 +1016,127 @@ function buildTour(kind) {
   return {steps, name: t("tourOverview"), desc: t("tourOverviewDesc")};
 }
 let tour = null;
+// сценарий «на лету» без модели: идём по callees, предпочитаем другой модуль и более глубокий слой,
+// пропускаем посещённые, длина <= 8
+const LAYER_DEPTH = {entry: 0, ui: 1, domain: 2, other: 2, adapter: 3, infra: 4, test: 4};
+function autoPath(start, max = 8) {
+  const depth = id => { const i = MM[fns[id].module]; return LAYER_DEPTH[i && i.layer] ?? 2; };
+  const steps = [start], seen = new Set(steps);
+  for (let cur = start; steps.length < max;) {
+    let best = null, bs = -1e9;
+    (fns[cur].callees || []).forEach(c => {
+      if (!fns[c] || seen.has(c)) return;
+      const sc = (fns[c].module !== fns[cur].module ? 10 : 0) + (depth(c) - depth(cur)) * 2 - (fns[c].file.includes("_test") ? 20 : 0);
+      if (sc > bs) { bs = sc; best = c; }
+    });
+    if (!best) break;
+    steps.push(best); seen.add(best); cur = best;
+  }
+  return steps;
+}
+function playFrom(id) {
+  const i = (M.flows || []).findIndex(fl => (fl.steps || [])[0] === id);
+  loadMode(i >= 0 ? `flow:${i}` : "fn:" + id);
+  if (S.tab !== "play") { S.tab = "play"; renderSide(); }
+  play();
+}
+// опции: [значение, подпись, kind ("\0g" = общие), top, имя]
 function tourOptions() {
   const opts = [];
-  (M.flows || []).forEach((fl, i) => { if ((fl.steps || []).some(id => fns[id])) opts.push([`flow:${i}`, t("flowPfx") + fl.name]); });
-  if (changed.length) opts.push(["changes", t("optChanges")]);
-  if (entries.length) opts.push(["overview", t("optOverview")]);
+  (M.flows || []).forEach((fl, i) => { if ((fl.steps || []).some(id => fns[id])) opts.push([`flow:${i}`, t("flowPfx") + fl.name, fl.kind || "", !!fl.top, fl.name]); });
+  if (changed.length) opts.push(["changes", t("optChanges"), "\0g", false]);
+  if (entries.length) opts.push(["overview", t("optOverview"), "\0g", false]);
   return opts;
 }
-const modeOptionsHTML = opts => opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("");
+function pickGroups(opts, q) {
+  q = q.trim().toLowerCase();
+  const ok = o => !q || (o[4] || o[1]).toLowerCase().includes(q) || (o[2] && o[2][0] !== "\0" && o[2].toLowerCase().includes(q));
+  const flows = opts.filter(o => o[2] !== "\0g"), gen = opts.filter(o => o[2] === "\0g");
+  const hasKinds = flows.some(o => o[2] || o[3]);
+  const gs = [];
+  const add = (label, arr) => { arr = arr.filter(ok); if (arr.length) gs.push({label, items: arr}); };
+  if (hasKinds) {
+    add(t("grpTop"), flows.filter(o => o[3]));
+    add(t("grpGeneral"), gen);
+    const by = {};
+    flows.forEach(o => { (by[o[2] || "other"] = by[o[2] || "other"] || []).push(o); });
+    Object.keys(by).sort((a, b) => by[b].length - by[a].length || a.localeCompare(b)).forEach(k => {
+      const arr = by[k].filter(ok);
+      if (arr.length) gs.push({label: k + " (" + by[k].length + ")", items: arr});
+    });
+  } else {
+    add(t("grpGeneral"), gen);
+    add(t("grpFlows") + " (" + flows.length + ")", flows);
+  }
+  return gs;
+}
+const PICK_MAX = 120;
+const PK = {open: false, act: 0, flat: []};
+function curLabel() {
+  if (!S.mode) return t("noPlayData");
+  if (S.mode.startsWith("fn:")) return "▶ " + buildTour(S.mode).name;
+  const o = tourOptions().find(o => o[0] === S.mode);
+  return o ? o[1] : S.mode;
+}
+function drawCur() { $("#pcur").textContent = curLabel(); $("#pcur").title = t("whatToPlay"); }
+function drawPick() {
+  const gs = pickGroups(tourOptions(), $("#pq").value);
+  PK.flat = []; let h = "", shown = 0, total = 0;
+  gs.forEach(g => total += g.items.length);
+  for (const g of gs) {
+    if (shown >= PICK_MAX) break;
+    h += `<div class="gh">${esc(g.label)}</div>`;
+    for (const o of g.items) {
+      if (shown >= PICK_MAX) break;
+      h += `<div class="opt${o[0] === S.mode ? " cur" : ""}" role="option" data-i="${PK.flat.length}" title="${esc(o[1])}">${esc(o[4] || o[1])}</div>`;
+      PK.flat.push(o[0]); shown++;
+    }
+  }
+  if (!PK.flat.length) h = `<div class="none">${t("flowNone")}</div>`;
+  else if (total > shown) h += `<div class="more">${t("flowMore", total - shown)}</div>`;
+  $("#plist").innerHTML = h;
+  PK.act = Math.max(0, Math.min(PK.act, PK.flat.length - 1));
+  markAct(false);
+}
+function markAct(scroll) {
+  const l = $("#plist"), p = l.querySelector(".opt.act"); if (p) p.classList.remove("act");
+  const n = l.querySelector(`.opt[data-i="${PK.act}"]`);
+  if (n) { n.classList.add("act"); if (scroll) n.scrollIntoView({block: "nearest"}); }
+}
+function openPick() {
+  PK.open = true; $("#ppop").hidden = false; $("#pcur").setAttribute("aria-expanded", "true");
+  $("#pq").value = ""; PK.act = 0; drawPick();
+  const c = $("#plist").querySelector(".opt.cur"); if (c) { PK.act = +c.dataset.i; markAct(true); }
+  $("#pq").focus();
+}
+function closePick(focus) {
+  PK.open = false; $("#ppop").hidden = true; $("#pcur").setAttribute("aria-expanded", "false");
+  if (focus) $("#pcur").focus();
+}
+function choose(v) { closePick(true); if (v == null) return; loadMode(v); if (S.tab !== "play") { S.tab = "play"; renderSide(); } }
+let pqT = null;
+$("#pcur").onclick = () => PK.open ? closePick() : openPick();
+$("#pq").oninput = () => { clearTimeout(pqT); pqT = setTimeout(() => { PK.act = 0; drawPick(); }, 60); };
+$("#pq").addEventListener("keydown", e => {
+  e.stopPropagation();
+  if (e.key === "ArrowDown") { e.preventDefault(); PK.act = Math.min(PK.flat.length - 1, PK.act + 1); markAct(true); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); PK.act = Math.max(0, PK.act - 1); markAct(true); }
+  else if (e.key === "Enter") { e.preventDefault(); clearTimeout(pqT); drawPick(); choose(PK.flat[PK.act]); }
+  else if (e.key === "Escape") { e.preventDefault(); closePick(true); }
+});
+$("#plist").addEventListener("mousedown", e => { const o = e.target.closest(".opt"); if (o) { e.preventDefault(); choose(PK.flat[+o.dataset.i]); } });
+document.addEventListener("mousedown", e => { if (PK.open && !e.target.closest("#pcombo")) closePick(); });
 function setupPlayer() {
   const opts = tourOptions();
-  $("#pMode").innerHTML = modeOptionsHTML(opts);
   loadMode(opts.length ? opts[0][0] : null);
 }
 // после обновления данных: тот же режим и тот же шаг (по id функции), проигрывание не прерывается
 function refreshTour() {
   const prev = S.mode, curId = S.idx >= 0 ? S.steps[S.idx] : null;
   const opts = tourOptions();
-  $("#pMode").innerHTML = modeOptionsHTML(opts);
-  if (!opts.some(o => o[0] === prev)) { setupPlayer(); return; }
-  $("#pMode").value = prev;
+  const keepFn = prev && prev.startsWith("fn:") && fns[prev.slice(3)];
+  if (!keepFn && !opts.some(o => o[0] === prev)) { setupPlayer(); return; }
+  drawCur(); if (PK.open) drawPick();
   S.steps = buildTour(prev).steps;
   const i = curId ? S.steps.indexOf(curId) : -1;
   if (curId && i < 0) { loadMode(prev); return; }
@@ -1018,7 +1146,7 @@ function refreshTour() {
 }
 function loadMode(kind) {
   pause();
-  S.mode = kind; S.idx = -1;
+  S.mode = kind; S.idx = -1; drawCur();
   tour = kind ? buildTour(kind) : {steps: [], name: "", desc: ""};
   S.steps = tour.steps;
   $("#pbar").max = Math.max(0, S.steps.length - 1); $("#pbar").value = 0;
@@ -1064,7 +1192,6 @@ $("#pPlay").onclick = () => S.playing ? pause() : play();
 $("#pNext").onclick = () => { pause(); goStep(S.idx + 1); };
 $("#pPrev").onclick = () => { pause(); goStep(S.idx - 1); };
 $("#pSpeed").onchange = () => { if (S.playing) play(); };
-$("#pMode").onchange = e => { loadMode(e.target.value); if (S.tab !== "play") { S.tab = "play"; renderSide(); } };
 $("#pbar").oninput = e => { pause(); goStep(+e.target.value); };
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" && e.target.type === "search") return;
