@@ -65,9 +65,7 @@ func newResolver(files, modules []string, gomods []goMod) *resolver {
 			continue
 		}
 		key := strings.TrimSuffix(p, ".py")
-		if strings.HasSuffix(key, "/__init__") {
-			key = strings.TrimSuffix(key, "/__init__")
-		}
+		key = strings.TrimSuffix(key, "/__init__")
 		r.pyfiles[key] = facts.ModuleOf(p)
 		if strings.HasPrefix(key, "src/") {
 			if _, ok := r.pyfiles[key[4:]]; !ok {
