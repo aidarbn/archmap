@@ -17,7 +17,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -31,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aidarbn/archmap/internal/autosem"
 	"github.com/aidarbn/archmap/internal/extract"
 	"github.com/aidarbn/archmap/internal/facts"
 	"github.com/aidarbn/archmap/internal/gitstat"
@@ -43,7 +43,6 @@ import (
 type Options struct {
 	Root      string
 	Base      string
-	Model     string // arch.model.json; "" = <root>/arch.model.json if present
 	WithTests bool
 	Parsers   []lang.Parser
 	Poll      time.Duration // mtime poll interval (default 400ms)
@@ -326,17 +325,6 @@ func diff(old, cur snapshot) map[string]bool {
 	return ch
 }
 
-func (s *Server) modelPath() string {
-	if s.opts.Model != "" {
-		return s.opts.Model
-	}
-	p := filepath.Join(s.opts.Root, "arch.model.json")
-	if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
-		return p
-	}
-	return ""
-}
-
 func (s *Server) exts() map[string]bool {
 	m := map[string]bool{}
 	for _, p := range s.opts.Parsers {
@@ -390,9 +378,6 @@ func (s *Server) takeSnapshot() snapshot {
 			}
 		}
 	}
-	if mp := s.modelPath(); mp != "" {
-		add("model", mp)
-	}
 	return snap
 }
 
@@ -420,14 +405,9 @@ func (s *Server) build(snap snapshot, changed map[string]bool) error {
 	if err != nil {
 		return err
 	}
-	var mj []byte
-	if mp := s.modelPath(); mp != "" {
-		if mj, err = os.ReadFile(mp); err != nil {
-			return err
-		}
-		if !json.Valid(mj) {
-			return errors.New("model: invalid JSON in " + mp)
-		}
+	mj, err := autosem.JSON(f)
+	if err != nil {
+		return err
 	}
 
 	// Which functions to flash: new ones, ones whose body text changed (hash of

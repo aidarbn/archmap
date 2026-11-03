@@ -15,7 +15,7 @@ with [tree-sitter](https://tree-sitter.github.io/).
 
 The viewer UI is bilingual (English and Russian): it follows the browser
 language, can be forced with `?lang=en` / `?lang=ru`, and has an EN/RU switch
-in the header. Text from `arch.model.json` is shown as written.
+in the header. Descriptions come from code comments and code structure, with no external files.
 
 ## Install
 
@@ -51,9 +51,9 @@ archmap render --facts facts.json --out arch.html
 
 ```sh
 archmap extract [--root DIR] [--base REF] [--tests] --out facts.json
-archmap render  --facts facts.json [--model arch.model.json] --out arch.html
-archmap map     [--root DIR] [--base REF] [--tests] [--model FILE] [--out FILE] [--open]
-archmap serve   [--root DIR] [--base REF] [--tests] [--model FILE] [--addr 127.0.0.1:0] [--open]
+archmap render  --facts facts.json --out arch.html
+archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open]
+archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
 archmap version
 ```
 
@@ -62,22 +62,22 @@ archmap version
   A short summary goes to stdout.
 - `--base REF` is the ref to compare against; the default is the merge-base with
   the default branch. Uncommitted changes are included and marked.
-- `render` merges facts and the optional model into one HTML file.
-- `map` does both; the default output is `<root>/.archmap/arch.html`, and
-  `<root>/arch.model.json` is picked up when present.
+- `render` turns facts into one HTML file; the semantic layer (module roles, layers, scenarios) is derived from the facts by heuristics.
+- `map` does both; the default output is `<root>/.archmap/arch.html`;
+  scenarios start at entry points and follow the call graph.
 - `serve` is described below.
 
 ## serve: live map while you code
 
 ```sh
-archmap serve [--root DIR] [--base REF] [--tests] [--model FILE] [--addr 127.0.0.1:0] [--open]
+archmap serve [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
 ```
 
 Prints a `http://127.0.0.1:PORT/` URL (`--open` opens it). The page is the same
 viewer as `map`, but it follows the repo:
 
 - The server polls file mtimes and sizes (every 400 ms) for source files, the
-  model file and `.git` HEAD/index/branch ref, waits until the tree has been
+  `.git` HEAD/index/branch ref, waits until the tree has been
   quiet for 300 ms, then re-extracts and pushes an update over SSE (`/events`);
   the page reloads `/data.json`. Polling was chosen over fsnotify: no
   dependency and no inotify/kqueue watch limits on big trees.
@@ -97,30 +97,6 @@ Limits: the watcher ignores `.gitignore` (an ignored source file that changes
 causes a harmless rebuild); a change in a file's callers only shows as a flash
 on the edited function, not on its callers.
 
-## arch.model.json
-
-The optional semantic layer on top of the facts: titles, module roles and
-layers (`entry|domain|adapter|infra|ui|test|other`) and named flows, where each
-step is an existing function id (`path/file.ext::Class.method`). See
-[examples/arch.model.json](examples/arch.model.json).
-
-```json
-{
-  "title": "shop — architecture",
-  "modules": {
-    "internal/orders": {"role": "Order domain", "layer": "domain"}
-  },
-  "flows": [
-    {
-      "name": "Place an order",
-      "steps": [
-        "internal/orders/handler.go::Handler.Create",
-        "internal/orders/service.go::Service.Place"
-      ]
-    }
-  ]
-}
-```
 
 ## Languages
 
