@@ -100,6 +100,9 @@ type File struct {
 	// DefaultExport is the name of the `export default` function/component
 	// (JS/TS), "" if none. Used for Next.js page detection.
 	DefaultExport string
+	// Doc is the file-level description (package comment, module docstring,
+	// header comment), cleaned and shortened; "" if none. Filled from FileDoc.
+	Doc string
 }
 
 // Parser parses source files of one language.

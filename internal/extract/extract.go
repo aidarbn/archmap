@@ -105,6 +105,9 @@ func Run(opts Options) (*facts.Facts, error) {
 		if err != nil {
 			return lang.File{}
 		}
+		if f.Doc == "" {
+			f.Doc = lang.FileDoc(p, src)
+		}
 		if opts.Cache != nil {
 			opts.Cache.m[p] = cached{sum, f}
 		}
@@ -129,6 +132,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		imps []lang.Import
 	}{}
 	defaultExport := map[string]string{}
+	fileDoc := map[string]string{}
 	langs := map[string]int{}
 	srcs := map[string]string{}
 	fileLang := map[string]string{}
@@ -151,6 +155,7 @@ func Run(opts Options) (*facts.Facts, error) {
 			imps []lang.Import
 		}{name, f.Imports}
 		defaultExport[p] = f.DefaultExport
+		fileDoc[p] = f.Doc
 		if name == "go" {
 			srcs[p] = string(b)
 		}
@@ -387,8 +392,10 @@ func Run(opts Options) (*facts.Facts, error) {
 		})
 	}
 
+	project := projectInfo(root)
 	out := &facts.Facts{
-		Repo:      filepath.Base(root),
+		Repo:      project.Name,
+		Project:   project,
 		Langs:     langs,
 		Unparsed:  unparsed,
 		Modules:   map[string]facts.Module{},
@@ -429,7 +436,8 @@ func Run(opts Options) (*facts.Facts, error) {
 		filesByMod[facts.ModuleOf(p)][p] = true
 	}
 	for _, m := range modules {
-		out.Modules[m] = facts.Module{Imports: sortedKeys(modImports[m]), Files: sortedKeys(filesByMod[m])}
+		mf := sortedKeys(filesByMod[m])
+		out.Modules[m] = facts.Module{Imports: sortedKeys(modImports[m]), Files: mf, Doc: moduleDoc(root, m, mf, fileDoc)}
 	}
 	return out, nil
 }

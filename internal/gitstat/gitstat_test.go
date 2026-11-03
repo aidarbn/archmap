@@ -162,6 +162,36 @@ func TestMergeBaseIgnoresBaseBranchProgress(t *testing.T) {
 	}
 }
 
+// The base is the merge-base with the remote's default branch, not with the
+// branch the current upstream points at.
+func TestDefaultBaseIsRemoteDefaultNotUpstream(t *testing.T) {
+	dir := setup(t)
+	git(t, dir, "branch", "-m", "develop")
+	git(t, dir, "update-ref", "refs/remotes/origin/develop", "HEAD")
+	git(t, dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+	git(t, dir, "checkout", "-qb", "feat")
+	write(t, dir, "x.go", strings.Replace(baseSrc, "a1", "a1 feat", 1))
+	git(t, dir, "commit", "-qam", "feat")
+	// the upstream of feat is another remote branch with extra work
+	git(t, dir, "update-ref", "refs/remotes/origin/feat", "HEAD")
+	git(t, dir, "config", "branch.feat.remote", "origin")
+	git(t, dir, "config", "branch.feat.merge", "refs/heads/feat")
+
+	sha, name := DefaultBase(dir)
+	want, _ := Git(dir, "rev-parse", "origin/develop")
+	if name != "origin/develop" || sha != strings.TrimSpace(want) {
+		t.Fatalf("DefaultBase = %q, %q; want origin/develop %s", sha, name, want)
+	}
+}
+
+func TestDefaultBaseFallsBackToOriginMain(t *testing.T) {
+	dir := setup(t)
+	git(t, dir, "update-ref", "refs/remotes/origin/main", "HEAD")
+	if _, name := DefaultBase(dir); name != "origin/main" {
+		t.Fatalf("name = %q, want origin/main", name)
+	}
+}
+
 func TestHunks(t *testing.T) {
 	diff := "+++ b/f.go\n@@ -1,0 +2,3 @@\n@@ -9,2 +9 @@\n@@ -20,2 +18,0 @@\n+++ /dev/null\n@@ -1 +1 @@\n"
 	got := Hunks(diff)["f.go"]
