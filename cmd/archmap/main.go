@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aidarbn/archmap/internal/autosem"
 	"github.com/aidarbn/archmap/internal/extract"
 	"github.com/aidarbn/archmap/internal/facts"
 	"github.com/aidarbn/archmap/internal/lang/all"
@@ -34,9 +35,9 @@ const usage = `archmap - interactive function-level architecture map
 
 Usage:
   archmap extract [--root DIR] [--base REF] [--tests] --out facts.json
-  archmap render  --facts facts.json [--model arch.model.json] --out arch.html
-  archmap map     [--root DIR] [--base REF] [--tests] [--model FILE] [--out FILE] [--open]
-  archmap serve   [--root DIR] [--base REF] [--tests] [--model FILE] [--addr 127.0.0.1:0] [--open]
+  archmap render  --facts facts.json --out arch.html
+  archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open]
+  archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
   archmap version
 `
 
@@ -147,7 +148,6 @@ func cmdExtract(args []string, stdout, stderr io.Writer) error {
 func cmdRender(args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("render", stderr)
 	factsPath := fs.String("facts", "", "facts.json (required)")
-	model := fs.String("model", "", "arch.model.json (optional)")
 	out := fs.String("out", "", "output HTML (required)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -155,7 +155,7 @@ func cmdRender(args []string, stdout, stderr io.Writer) error {
 	if *factsPath == "" || *out == "" {
 		return errors.New("--facts and --out are required")
 	}
-	if err := render.Files(*factsPath, *model, *out); err != nil {
+	if err := render.Files(*factsPath, *out); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, *out)
@@ -167,7 +167,6 @@ func cmdMap(args []string, stdout, stderr io.Writer) error {
 	root := fs.String("root", ".", "repository root")
 	base := fs.String("base", "", "git ref to diff against (default: merge-base with the default branch)")
 	tests := fs.Bool("tests", false, "include test files")
-	model := fs.String("model", "", "arch.model.json (default: <root>/arch.model.json if present)")
 	out := fs.String("out", "", "output HTML (default: <root>/.archmap/arch.html)")
 	open := fs.Bool("open", false, "open the result in the default browser")
 	if err := fs.Parse(args); err != nil {
@@ -180,20 +179,13 @@ func cmdMap(args []string, stdout, stderr io.Writer) error {
 	if *out == "" {
 		*out = filepath.Join(*root, ".archmap", "arch.html")
 	}
-	if *model == "" {
-		if p := filepath.Join(*root, "arch.model.json"); fileExists(p) {
-			*model = p
-		}
-	}
 	fb, err := marshal(f, "")
 	if err != nil {
 		return err
 	}
-	var mb []byte
-	if *model != "" {
-		if mb, err = os.ReadFile(*model); err != nil {
-			return err
-		}
+	mb, err := autosem.JSON(f)
+	if err != nil {
+		return err
 	}
 	html, err := render.HTML(fb, mb)
 	if err != nil {
@@ -211,11 +203,6 @@ func cmdMap(args []string, stdout, stderr io.Writer) error {
 		return openBrowser(*out)
 	}
 	return nil
-}
-
-func fileExists(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.Mode().IsRegular()
 }
 
 func openBrowser(p string) error {
@@ -236,7 +223,6 @@ func cmdServe(args []string, stdout, stderr io.Writer) error {
 	root := fs.String("root", ".", "repository root")
 	base := fs.String("base", "", "git ref to diff against (default: merge-base with the default branch)")
 	tests := fs.Bool("tests", false, "include test files")
-	model := fs.String("model", "", "arch.model.json (default: <root>/arch.model.json if present)")
 	addr := fs.String("addr", "127.0.0.1:0", "listen address (loopback only)")
 	open := fs.Bool("open", false, "open the map in the default browser")
 	if err := fs.Parse(args); err != nil {
@@ -247,7 +233,7 @@ func cmdServe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	defer ln.Close()
-	srv, err := serve.New(serve.Options{Root: *root, Base: *base, Model: *model, WithTests: *tests, Parsers: all.Parsers()})
+	srv, err := serve.New(serve.Options{Root: *root, Base: *base, WithTests: *tests, Parsers: all.Parsers()})
 	if err != nil {
 		return err
 	}

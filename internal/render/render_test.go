@@ -52,18 +52,18 @@ func TestDefaultTitleAndEmptyModel(t *testing.T) {
 	}
 }
 
-func TestFilesMissingModelIsEmpty(t *testing.T) {
+func TestFilesBuildsAutoModel(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "facts.json")
-	if err := os.WriteFile(f, []byte(`{"repo":"demo"}`), 0o644); err != nil {
+	if err := os.WriteFile(f, []byte(`{"repo":"demo","project":{"name":"Demo","description":"d"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "sub", "a.html")
-	if err := Files(f, filepath.Join(dir, "nope.json"), out); err != nil {
+	if err := Files(f, out); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(out)
-	if err != nil || !strings.Contains(string(b), `"model":{}`) {
+	if err != nil || !strings.Contains(string(b), `"title":"Demo","summary":"d"`) {
 		t.Fatalf("render output wrong: %v", err)
 	}
 }

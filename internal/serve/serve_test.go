@@ -112,7 +112,7 @@ func TestHandlers(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil {
 		t.Fatalf("data.json: %v: %s", err, w.Body.String())
 	}
-	if d.Seq != 1 || len(d.Facts.Functions) != 3 || string(d.Model) != "{}" {
+	if d.Seq != 1 || len(d.Facts.Functions) != 3 || !strings.Contains(string(d.Model), `"modules":{"app":`) {
 		t.Errorf("data = %+v", d)
 	}
 
@@ -244,32 +244,5 @@ func TestSSEUpdateAfterEdit(t *testing.T) {
 	defer cancel2()
 	if u := next(t, ch2, Ready); u.Seq != 2 || len(u.Flash) != 0 {
 		t.Errorf("reconnect event = %+v", u)
-	}
-}
-
-func TestBadModelReportsError(t *testing.T) {
-	root := newRepo(t)
-	s := newServer(t, root)
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
-	go s.Watch(ctx)
-	ch, cancel := events(t, ts.URL)
-	defer cancel()
-	next(t, ch, Ready)
-
-	write(t, root, "arch.model.json", "{not json")
-	u := next(t, ch, Failed)
-	if !strings.Contains(u.Error, "model") {
-		t.Errorf("error = %q", u.Error)
-	}
-	// the last good data keeps being served; fixing the file recovers
-	if get(t, s.Handler(), "GET", "/", "").Code != 200 {
-		t.Error("index must keep working after a failed rebuild")
-	}
-	write(t, root, "arch.model.json", `{"title":"T"}`)
-	if u := next(t, ch, Ready); u.Seq != 2 {
-		t.Errorf("recovery seq = %d", u.Seq)
 	}
 }

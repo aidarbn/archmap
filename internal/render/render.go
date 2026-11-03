@@ -16,6 +16,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/aidarbn/archmap/internal/autosem"
+	"github.com/aidarbn/archmap/internal/facts"
 )
 
 //go:embed viewer.html
@@ -24,7 +27,7 @@ var viewer string
 // Viewer returns the embedded viewer.html template.
 func Viewer() string { return viewer }
 
-// HTML renders the page from facts.json and (optionally empty/nil) model JSON.
+// HTML renders the page from facts.json and (optionally empty/nil) model JSON from autosem.
 func HTML(factsJSON, modelJSON []byte) ([]byte, error) {
 	return page(factsJSON, modelJSON, nil)
 }
@@ -80,17 +83,20 @@ func page(factsJSON, modelJSON []byte, live *Live) ([]byte, error) {
 	return []byte(html), nil
 }
 
-// Files renders factsPath (+ modelPath if it exists) into out, creating parent directories.
-func Files(factsPath, modelPath, out string) error {
+// Files renders factsPath into out, creating parent directories. The semantic
+// layer is derived from the facts by autosem.
+func Files(factsPath, out string) error {
 	fb, err := os.ReadFile(factsPath)
 	if err != nil {
 		return err
 	}
-	var mb []byte
-	if modelPath != "" {
-		if b, err := os.ReadFile(modelPath); err == nil {
-			mb = b
-		}
+	var f facts.Facts
+	if err := json.Unmarshal(fb, &f); err != nil {
+		return fmt.Errorf("facts: %w", err)
+	}
+	mb, err := autosem.JSON(&f)
+	if err != nil {
+		return err
 	}
 	html, err := HTML(fb, mb)
 	if err != nil {
