@@ -82,6 +82,7 @@ func findEntries(files []string, read func(string) (string, bool), fns map[strin
 				}
 			}
 		}
+		genericEntry(e, fid, f, read)
 		switch f.lang {
 		case "swift":
 			swiftEntry(e, fid, f)
@@ -147,6 +148,9 @@ func findEntries(files []string, read func(string) (string, bool), fns map[strin
 				}
 			}
 			continue
+		}
+		if langOf(p) == "rust" {
+			axumRoutes(e, src, byName, fns)
 		}
 		for _, rx := range routeREs {
 			for _, m := range rx.FindAllStringSubmatch(src, -1) {

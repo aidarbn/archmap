@@ -134,3 +134,27 @@ func readHead(p string, n int) (string, error) {
 	k, _ := f.Read(buf)
 	return string(buf[:k]), nil
 }
+
+// CodeExts are extensions of source files of languages that may have no grammar
+// in the registry. Files with such an extension that no parser handles still
+// appear on the map as functionless files of their module.
+var CodeExts = []string{
+	".m", ".mm", ".ex", ".exs", ".clj", ".cljs", ".cljc", ".erl", ".hrl", ".fs", ".fsx", ".fsi",
+	".pl", ".pm", ".groovy", ".vb", ".pas", ".pp", ".f", ".f90", ".f95", ".jl", ".nim", ".cr", ".v",
+	".sv", ".vhd", ".vhdl", ".ml", ".mli", ".lisp", ".el", ".scm", ".rkt", ".cbl", ".cob", ".adb",
+	".ads", ".sol", ".r", ".hs", ".lhs", ".scala", ".sc", ".dart", ".zig", ".lua",
+	".php", ".cs", ".cpp", ".cc", ".cxx", ".hpp", ".c",
+}
+
+// UnparsedExts returns the CodeExts that are not handled by a registered parser
+// (registered = ExtSet of the parsers), so languages added to the registry later
+// drop out of the list by themselves.
+func UnparsedExts(registered map[string]bool) map[string]bool {
+	m := map[string]bool{}
+	for _, e := range CodeExts {
+		if !registered[e] {
+			m[e] = true
+		}
+	}
+	return m
+}

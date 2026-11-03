@@ -8,11 +8,14 @@ import "path"
 
 // Facts is the root of facts.json.
 type Facts struct {
-	Repo      string              `json:"repo"`
-	Head      string              `json:"head"`
-	Branch    string              `json:"branch"`
-	Base      *string             `json:"base"` // null when no base could be determined
-	Langs     map[string]int      `json:"langs"`
+	Repo   string         `json:"repo"`
+	Head   string         `json:"head"`
+	Branch string         `json:"branch"`
+	Base   *string        `json:"base"` // null when no base could be determined
+	Langs  map[string]int `json:"langs"`
+	// Unparsed counts files of code languages without a grammar by extension;
+	// they are listed in Modules[].Files without functions.
+	Unparsed  map[string]int      `json:"unparsed,omitempty"`
 	Modules   map[string]Module   `json:"modules"`
 	Functions map[string]Function `json:"functions"`
 	Deleted   []Deleted           `json:"deleted"`

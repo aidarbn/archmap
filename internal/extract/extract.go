@@ -111,7 +111,16 @@ func Run(opts Options) (*facts.Facts, error) {
 		return f
 	}
 
-	files := walk.List(root, exts, opts.WithTests)
+	listExts := map[string]bool{}
+	for e := range exts {
+		listExts[e] = true
+	}
+	noGrammar := walk.UnparsedExts(exts) // code files without a parser: kept as functionless files
+	for e := range noGrammar {
+		listExts[e] = true
+	}
+	files := walk.List(root, listExts, opts.WithTests)
+	unparsed := map[string]int{}
 	fns := map[string]*fn{}
 	var order []string
 	perFile := map[string][]gitstat.Fn{}
@@ -128,7 +137,12 @@ func Run(opts Options) (*facts.Facts, error) {
 		if err != nil {
 			continue
 		}
-		name := byExt[path.Ext(p)].Name()
+		ps := byExt[path.Ext(p)]
+		if ps == nil {
+			unparsed[path.Ext(p)]++
+			continue
+		}
+		name := ps.Name()
 		f := parse(p, b)
 		langs[name]++
 		fileLang[p] = name
@@ -161,7 +175,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		modSet[facts.ModuleOf(p)] = true
 	}
 	modules := sortedKeys(modSet)
-	res := newResolver(files, modules, goModules(root))
+	res := newResolver(files, modules, goModules(root), cargoCrates(root, files))
 	modImports := map[string]map[string]bool{}
 	addImport := func(from, to string) {
 		if modImports[from] == nil {
@@ -376,6 +390,7 @@ func Run(opts Options) (*facts.Facts, error) {
 	out := &facts.Facts{
 		Repo:      filepath.Base(root),
 		Langs:     langs,
+		Unparsed:  unparsed,
 		Modules:   map[string]facts.Module{},
 		Functions: map[string]facts.Function{},
 		Deleted:   deleted,
@@ -406,6 +421,12 @@ func Run(opts Options) (*facts.Facts, error) {
 			filesByMod[f.module] = map[string]bool{}
 		}
 		filesByMod[f.module][f.file] = true
+	}
+	for _, p := range files { // functionless and unparsed files too
+		if filesByMod[facts.ModuleOf(p)] == nil {
+			filesByMod[facts.ModuleOf(p)] = map[string]bool{}
+		}
+		filesByMod[facts.ModuleOf(p)][p] = true
 	}
 	for _, m := range modules {
 		out.Modules[m] = facts.Module{Imports: sortedKeys(modImports[m]), Files: sortedKeys(filesByMod[m])}

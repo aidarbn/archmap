@@ -53,10 +53,38 @@ type resolver struct {
 	gomods  []goMod
 	pyfiles map[string]string
 	suffix  map[string]string
+	// all analysed files: path -> module, path without extension -> module,
+	// "source root" keys (path after a lib/, src/, include/, app/ segment) and
+	// suffix keys (>= 2 trailing segments) of the extension-less paths.
+	files      map[string]string
+	fileKeys   map[string]string
+	rootKeys   map[string]string
+	fileSuffix map[string]string
+	exts       map[string]bool
+	low        map[string]string
+	crates     map[string]string // Rust crate name -> crate source dir
 }
 
-func newResolver(files, modules []string, gomods []goMod) *resolver {
-	r := &resolver{modules: map[string]bool{}, gomods: gomods, pyfiles: map[string]string{}, suffix: map[string]string{}}
+func newResolver(files, modules []string, gomods []goMod, crates map[string]string) *resolver {
+	r := &resolver{modules: map[string]bool{}, gomods: gomods, pyfiles: map[string]string{}, suffix: map[string]string{},
+		files: map[string]string{}, fileKeys: map[string]string{}, rootKeys: map[string]string{},
+		fileSuffix: map[string]string{}, exts: map[string]bool{}, crates: crates}
+	for _, p := range files {
+		mod := facts.ModuleOf(p)
+		r.files[p] = mod
+		r.exts[path.Ext(p)] = true
+		key := strings.TrimSuffix(p, path.Ext(p))
+		setFirst(r.fileKeys, key, mod)
+		parts := strings.Split(key, "/")
+		for k := range parts {
+			if k > 0 && len(parts)-k >= 2 {
+				setFirst(r.fileSuffix, strings.Join(parts[k:], "/"), mod)
+			}
+			if k < len(parts)-1 && sourceRoots[parts[k]] {
+				setFirst(r.rootKeys, strings.Join(parts[k+1:], "/"), mod)
+			}
+		}
+	}
 	for _, m := range modules {
 		r.modules[m] = true
 	}
@@ -178,9 +206,11 @@ func (r *resolver) js(imp, file string) string {
 	return ""
 }
 
-func (r *resolver) jvm(imp string) string {
-	parts := strings.Split(imp, ".")
-	for cut := 0; cut <= 1; cut++ {
+// jvm resolves a dotted package/class path by package suffix; up to maxCut
+// trailing segments (class, member) are dropped, a trailing ".*" is ignored.
+func (r *resolver) jvm(imp string, maxCut int) string {
+	parts := strings.Split(strings.TrimSuffix(imp, ".*"), ".")
+	for cut := 0; cut <= maxCut; cut++ {
 		if len(parts)-cut <= 0 {
 			continue
 		}
@@ -204,7 +234,17 @@ func (r *resolver) resolve(imp, file, language string) string {
 	case "js":
 		return r.js(imp, file)
 	case "kotlin":
-		return r.jvm(imp)
+		return r.jvm(imp, 1)
+	case "java":
+		return r.jvm(imp, 2) // a.b.C, a.b.C.member (static import), a.b.*
+	case "rust":
+		return r.rust(imp, file)
+	case "swift":
+		return ""
 	}
-	return ""
+	// Every other language on the generic tags parser (internal/lang/generic) is
+	// resolved by the generic path rule (resolver_generic.go), keyed by Spec.Name
+	// only where a language needs a tweak (importStyle). A newly added language
+	// needs no code here.
+	return r.pathLike(imp, file, language)
 }
