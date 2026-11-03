@@ -18,6 +18,9 @@
 //     ("pkg", "s.repo"), "?" for any other operand (call result, index, ...);
 //     conversions such as []byte(x) and calls of func literals are not named
 //     calls and are skipped;
+//   - struct fields and interface methods of named types (lang.File.Types) and
+//     the typed parameters of functions (lang.Func.Params): the orchestrator
+//     resolves `s.field.M()` and `param.M()` by type;
 //   - imports with their optional alias.
 package golang
 
@@ -68,6 +71,14 @@ func (*Parser) Parse(_ string, src []byte) (lang.File, error) {
 				}
 				return true
 			})
+		case "type_declaration":
+			for _, s := range ts.NamedChildren(n) {
+				if s.Kind() == "type_spec" {
+					if d, ok := typeDecl(t, s); ok {
+						f.Types = append(f.Types, d)
+					}
+				}
+			}
 		case "function_declaration", "method_declaration":
 			if fn, ok := function(t, n); ok {
 				f.Funcs = append(f.Funcs, fn)
@@ -102,6 +113,7 @@ func function(t *ts.Tree, n *sitter.Node) (lang.Func, bool) {
 		Sig:   clip(collapse(string(t.Src[n.StartByte():body.StartByte()]))),
 		Doc:   clip(doc(t, n)),
 	}
+	fn.Params = params(t, n.ChildByFieldName("parameters"))
 	if r := n.ChildByFieldName("receiver"); r != nil {
 		fn.Cls, fn.Recv = receiver(t, r)
 	}
@@ -267,3 +279,99 @@ func clip(s string) string {
 }
 
 var _ lang.Parser = (*Parser)(nil)
+
+// namedType reduces a type node to a plain named type: (pointer to) T, pkg.T,
+// T[...]. ok is false for slices, maps, funcs, channels and other shapes.
+func namedType(t *ts.Tree, n *sitter.Node) (typ, pkg string, ok bool) {
+	for n != nil {
+		switch n.Kind() {
+		case "pointer_type", "parenthesized_type":
+			n = n.NamedChild(0)
+			continue
+		case "generic_type":
+			n = n.ChildByFieldName("type")
+			continue
+		case "type_identifier":
+			return t.Text(n), "", true
+		case "qualified_type":
+			return t.FieldText(n, "name"), t.FieldText(n, "package"), true
+		}
+		return "", "", false
+	}
+	return "", "", false
+}
+
+// typeDecl reads a `type X struct{...}` / `type X interface{...}` spec.
+func typeDecl(t *ts.Tree, n *sitter.Node) (lang.TypeDecl, bool) {
+	name := t.FieldText(n, "name")
+	typ := n.ChildByFieldName("type")
+	if name == "" || typ == nil {
+		return lang.TypeDecl{}, false
+	}
+	d := lang.TypeDecl{Name: name, Kind: "other"}
+	switch typ.Kind() {
+	case "struct_type":
+		d.Kind = "struct"
+		ts.Walk(typ, func(c *sitter.Node) bool {
+			if c.Kind() != "field_declaration" {
+				return true
+			}
+			ft, pkg, ok := namedType(t, c.ChildByFieldName("type"))
+			var names []string
+			for _, x := range ts.NamedChildren(c) {
+				if x.Kind() == "field_identifier" {
+					names = append(names, t.Text(x))
+				}
+			}
+			if ok {
+				if len(names) == 0 {
+					d.Fields = append(d.Fields, lang.Field{Type: ft, Pkg: pkg})
+				}
+				for _, nm := range names {
+					d.Fields = append(d.Fields, lang.Field{Name: nm, Type: ft, Pkg: pkg})
+				}
+			}
+			return false // nested anonymous structs are not followed
+		})
+	case "interface_type":
+		d.Kind = "interface"
+		for _, e := range ts.NamedChildren(typ) {
+			switch e.Kind() {
+			case "method_elem":
+				if m := t.FieldText(e, "name"); m != "" {
+					d.Methods = append(d.Methods, m)
+				}
+			case "type_elem":
+				if e.NamedChildCount() == 1 {
+					if et, pkg, ok := namedType(t, e.NamedChild(0)); ok {
+						d.Embeds = append(d.Embeds, lang.Field{Type: et, Pkg: pkg})
+					}
+				}
+			}
+		}
+	}
+	return d, true
+}
+
+// params lists the named, plainly typed parameters of a function.
+func params(t *ts.Tree, list *sitter.Node) []lang.Field {
+	if list == nil {
+		return nil
+	}
+	var out []lang.Field
+	for _, p := range ts.NamedChildren(list) {
+		if p.Kind() != "parameter_declaration" {
+			continue
+		}
+		pt, pkg, ok := namedType(t, p.ChildByFieldName("type"))
+		if !ok {
+			continue
+		}
+		for _, x := range ts.NamedChildren(p) {
+			if x.Kind() == "identifier" {
+				out = append(out, lang.Field{Name: t.Text(x), Type: pt, Pkg: pkg})
+			}
+		}
+	}
+	return out
+}

@@ -13,8 +13,15 @@ import (
 // Walk tuning. Weights are data so tests and tuning stay in one place.
 const (
 	MaxSteps = 9 // longest path, entry point included
-	MinTop   = 3 // flows shorter than this are never "top"
-	MaxTop   = 8
+	// MaxStepsAsync is the longest path of a scenario that must reach a queue
+	// hand-off (see asyncPath): the way to the queue takes steps of its own.
+	MaxStepsAsync = 12
+	// AsyncDepth is how far from the entry point a queue hand-off is looked for.
+	AsyncDepth = 6
+	// AsyncContinue is how many steps of the handler are always shown.
+	AsyncContinue = 2
+	MinTop        = 3 // flows shorter than this are never "top"
+	MaxTop        = 8
 )
 
 // Weights score a candidate callee relative to the current function.
@@ -32,7 +39,7 @@ var Weights = struct {
 	Trivial       int // callee is a short leaf (a few lines)
 	SizePer20     int // per 20 lines of body (max 2)
 	Async         int // callee is the handler of a job the current function puts on a queue
-}{DeeperLayer: 4, DeeperAdapter: 2, DeeperLeaf: 1, StayEntry: -2, ToInfra: 0, Shallower: -1, NonLeaf: 2, Fanout: 1, OtherModule: 1, Helper: -8, Trivial: -1, SizePer20: 1, Async: 6}
+}{DeeperLayer: 4, DeeperAdapter: 2, DeeperLeaf: 1, StayEntry: -2, ToInfra: 0, Shallower: -1, NonLeaf: 2, Fanout: 1, OtherModule: 1, Helper: -8, Trivial: -1, SizePer20: 1, Async: 14}
 
 // helperNames are name patterns of functions that rarely carry the story.
 var helperNames = []*regexp.Regexp{
@@ -207,6 +214,75 @@ type cand struct {
 	mod         string
 }
 
+// repoLeaf reports a function of a storage adapter that calls nothing else: a
+// plain read or write, the first to go when the scenario has no room.
+func (g *graph) repoLeaf(fid string) bool {
+	fn := g.f.Functions[fid]
+	return g.layer[fn.Module] == Adapter && externalService(fn.Module) == "" && len(g.callees[fid]) == 0 && len(g.async[fid]) == 0
+}
+
+// asyncPath finds the way from an entry point to the nearest queue hand-off in
+// its call closure (AsyncDepth levels): the entry, the functions down to the one
+// that puts the job on the queue, and the job's handler. nil if there is none.
+// Among equally short ways the better-scored steps win; helpers, tests, infra
+// code and the insides of external clients are not walked, as in reach.
+func (g *graph) asyncPath(entry string) []string {
+	dist := map[string]int{entry: 0}
+	parent := map[string]string{}
+	viaQueue := map[string]bool{} // the step was reached over a queue hand-off
+	level := []string{entry}
+	for d := 0; d < AsyncDepth && len(level) > 0; d++ {
+		var next []string
+		for _, cur := range level {
+			if g.isExternal(cur) && cur != entry {
+				continue
+			}
+			visit := func(c string, queue bool) {
+				fn := g.f.Functions[c]
+				if l := g.layer[fn.Module]; l == Test || l == Infra || isHelper(fn) {
+					return
+				}
+				switch dc, seen := dist[c]; {
+				case !seen:
+					dist[c] = d + 1
+					parent[c], viaQueue[c] = cur, queue
+					next = append(next, c)
+				case dc == d+1 && !viaQueue[c] && g.score(cur, c) > g.score(parent[c], c):
+					parent[c], viaQueue[c] = cur, queue
+				}
+			}
+			for _, c := range g.callees[cur] {
+				visit(c, false)
+			}
+			for _, c := range g.async[cur] {
+				visit(c, true)
+			}
+		}
+		for _, c := range next { // the shortest way to a hand-off
+			if viaQueue[c] {
+				return g.chainTo(parent, entry, c)
+			}
+		}
+		level = next
+	}
+	return nil
+}
+
+func (g *graph) chainTo(parent map[string]string, entry, to string) []string {
+	var rev []string
+	for x := to; ; x = parent[x] {
+		rev = append(rev, x)
+		if x == entry {
+			break
+		}
+	}
+	out := make([]string, len(rev))
+	for i, x := range rev {
+		out[len(rev)-1-i] = x
+	}
+	return out
+}
+
 // walk builds the scenario of an entry point: best-first over the call graph.
 // Every candidate callee of every chosen function competes by score (see
 // Weights) minus DepthPenalty per level; the best is taken, its own callees
@@ -220,6 +296,11 @@ func (g *graph) walk(entry string) []string {
 	order := map[string]int{entry: 0}
 	var frontier []cand
 	ord := 0
+	chain := g.asyncPath(entry) // entry ... queuing function, handler; nil without a hand-off
+	maxSteps := MaxSteps
+	if chain != nil {
+		maxSteps = MaxStepsAsync
+	}
 	leafSeen := map[string]int{} // adapter calls already chosen per module: diminishing returns
 	eff := func(c cand) int {
 		if c.leaf {
@@ -240,13 +321,63 @@ func (g *graph) walk(entry string) []string {
 			if s < 0 {
 				continue
 			}
+			if chain != nil && g.repoLeaf(c) {
+				continue // a scenario that must reach a queue has no room for plain reads
+			}
 			ord++
 			frontier = append(frontier, cand{parent: parent, fid: c, score: s, prio: s*10 - depth*DepthPenalty*10, depth: depth, ord: ord, leaf: g.layer[g.f.Functions[c].Module] == Adapter, mod: g.f.Functions[c].Module})
 		}
 	}
 	expand(entry, 1)
 	n := 1
-	for n < MaxSteps && len(frontier) > 0 {
+	take := func(bi int) {
+		c := frontier[bi]
+		frontier = append(frontier[:bi], frontier[bi+1:]...)
+		chosen[c.fid] = true
+		n++
+		if c.leaf {
+			leafSeen[c.mod]++
+		}
+		order[c.fid] = n
+		kids[c.parent] = append(kids[c.parent], c.fid)
+		expand(c.fid, c.depth+1)
+	}
+	if chain != nil {
+		// the way to the queue is part of the scenario whatever it scores ...
+		for i := 1; i < len(chain); i++ {
+			bi := -1
+			for j, c := range frontier {
+				if c.fid == chain[i] && c.parent == chain[i-1] {
+					bi = j
+					break
+				}
+			}
+			if bi < 0 { // below the score threshold: add the step by hand
+				frontier = append(frontier, cand{parent: chain[i-1], fid: chain[i], depth: i})
+				bi = len(frontier) - 1
+			}
+			depth := frontier[bi].depth
+			if i == len(chain)-1 {
+				frontier[bi].depth = depth - 1 // the handler is a new story: its steps compete from near the top
+			}
+			take(bi)
+		}
+		// ... and so is the start of the handler's story
+		handler := chain[len(chain)-1]
+		for k := 0; k < AsyncContinue && n < maxSteps; k++ {
+			bi := -1
+			for j, c := range frontier {
+				if c.parent == handler && !chosen[c.fid] && (bi < 0 || eff(c) > eff(frontier[bi])) {
+					bi = j
+				}
+			}
+			if bi < 0 {
+				break
+			}
+			take(bi)
+		}
+	}
+	for n < maxSteps && len(frontier) > 0 {
 		bi := -1
 		for i, c := range frontier {
 			if chosen[c.fid] {
@@ -259,16 +390,7 @@ func (g *graph) walk(entry string) []string {
 		if bi < 0 {
 			break
 		}
-		c := frontier[bi]
-		frontier = append(frontier[:bi], frontier[bi+1:]...)
-		chosen[c.fid] = true
-		n++
-		if c.leaf {
-			leafSeen[c.mod]++
-		}
-		order[c.fid] = n
-		kids[c.parent] = append(kids[c.parent], c.fid)
-		expand(c.fid, c.depth+1)
+		take(bi)
 	}
 	// depth-first order, callees in call order of the caller's body
 	var steps []string

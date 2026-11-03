@@ -22,7 +22,9 @@
 //   - function ids ("path::Class.name", duplicates get "@<start line>");
 //   - call resolution, using the rules of the original arch.py: self/this/cls
 //     -> methods of the own class (then of Bases); `super` -> methods of the base
-//     classes; Go receiver variable (Func.Recv) -> methods of the receiver type;
+//     classes; Go receiver variable (Func.Recv) -> methods of the receiver type; Go
+//     `s.field.M()` / `param.M()` -> M of the declared type (an interface: of its
+//     implementations);
 //     Go `pkg.Func` -> function of the module imported as pkg; `Class.static()` ->
 //     methods of that class; names in the "common method" list (get, Close, ...)
 //     and calls on unknown expressions (Recv "?") are not linked; everything else
@@ -92,6 +94,9 @@ type Func struct {
 	// `x.add('<queue>', ...)` and "worker:<queue>[:<handler>]" for
 	// `new Worker('<queue>', handler)`.
 	Queues []string
+	// Params are the typed parameters of a Go function or method (receiver
+	// excluded); the orchestrator resolves `param.M()` by the parameter's type.
+	Params []Field
 }
 
 // Import is one import of a file; see the package documentation for the
@@ -108,6 +113,8 @@ type File struct {
 	// DefaultExport is the name of the `export default` function/component
 	// (JS/TS), "" if none. Used for Next.js page detection.
 	DefaultExport string
+	// Types are the named types declared in the file (Go only).
+	Types []TypeDecl
 	// Doc is the file-level description (package comment, module docstring,
 	// header comment), cleaned and shortened; "" if none. Filled from FileDoc.
 	Doc string
@@ -173,3 +180,25 @@ func (c *CallList) Add(name, recv string) {
 
 // Calls returns the accumulated calls.
 func (c *CallList) Calls() []Call { return c.list }
+
+// Field is a typed name: a struct field or a function parameter (Go).
+// Name is "" for an embedded struct field. Type is the last name segment of the
+// type, Pkg the qualifier as written ("kaspi" in `*kaspi.Service`, "" otherwise).
+// Types that are not a plain (pointer to a) named type — slices, maps, funcs,
+// channels — are not reported.
+type Field struct {
+	Name, Type, Pkg string
+}
+
+// TypeDecl is a named Go type declared in a file.
+type TypeDecl struct {
+	Name string
+	// Kind is "struct", "interface" or "other".
+	Kind string
+	// Fields are the struct's fields (embedded ones with Name "").
+	Fields []Field
+	// Methods are the method names an interface declares; Embeds the embedded
+	// interfaces (by Field, as for a struct).
+	Methods []string
+	Embeds  []Field
+}

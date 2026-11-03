@@ -46,7 +46,14 @@ description files, no network.
   `*river.Job[XArgs]`), Ruby Sidekiq/ActiveJob (`X.perform_async` ->
   `X#perform`), Python Celery (`task.delay()`/`apply_async()` -> the decorated
   task) and BullMQ (`queue.add('name')` -> `new Worker('name', handler)`).
-  Calls made through other mechanisms are not linked.
+  Calls made through other mechanisms are not linked. A scenario whose entry
+  point has a hand-off within six calls always walks to it (the shortest
+  meaningful chain, up to 12 steps instead of 9) and goes on in the worker.
+- **Go calls follow types**: `s.repo.Save()` goes to the `Save` of the type of
+  the field `repo` (also through a chain `s.a.b.M()` and for typed parameters),
+  not to every `Save` in the project. Through an interface a call goes to the
+  types that have all its methods (up to three; more is ambiguous and not linked,
+  mocks are skipped); a type from outside the repository is not linked.
 
 ## Install
 

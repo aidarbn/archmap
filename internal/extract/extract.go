@@ -136,6 +136,7 @@ func Run(opts Options) (*facts.Facts, error) {
 	fileDoc := map[string]string{}
 	langs := map[string]int{}
 	srcs := map[string]string{}
+	goDecls := map[typeKey]goType{}
 	fileLang := map[string]string{}
 	for _, p := range files {
 		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
@@ -159,6 +160,12 @@ func Run(opts Options) (*facts.Facts, error) {
 		fileDoc[p] = f.Doc
 		if name == "go" {
 			srcs[p] = string(b)
+			for _, d := range f.Types {
+				k := typeKey{facts.ModuleOf(p), d.Name}
+				if _, dup := goDecls[k]; !dup {
+					goDecls[k] = goType{d, p}
+				}
+			}
 		}
 		for _, pf := range f.Funcs {
 			fid := p + "::"
@@ -214,6 +221,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		}
 	}
 
+	gt := newGoTypes(order, fns, goDecls, aliases)
 	tiers := func(f *fn, cs []string) []string {
 		var a, b, c []string
 		for _, id := range cs {
@@ -313,6 +321,11 @@ func Run(opts Options) (*facts.Facts, error) {
 				return baseMethods(f, name)
 			}
 			return without(ownClass(f, name), fid)
+		}
+		if f.lang == "go" {
+			if pick, ok := gt.resolve(f, recv, name, byCls, fns); ok {
+				return without(pick, fid)
+			}
 		}
 		if f.lang == "go" && !strings.Contains(recv, ".") {
 			if m, ok := aliases[f.file][recv]; ok {

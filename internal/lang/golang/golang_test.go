@@ -136,3 +136,50 @@ func TestSigClipped(t *testing.T) {
 		t.Errorf("funcs = %+v", f.Funcs)
 	}
 }
+
+func TestTypesAndParams(t *testing.T) {
+	f := parse(t, `package svc
+
+type (
+	Service struct {
+		certs  *kaspi.CertificateService
+		repo   Repo
+		a, b   Box[int]
+		items  []Item
+		sync.Mutex
+		hook   func()
+	}
+	Repo interface {
+		Save(ctx context.Context) error
+		Load() int
+		io.Closer
+	}
+	ID string
+)
+
+func (s *Service) Do(ctx context.Context, r Repo, p *pkg.Plan, xs []Item, n, m int) {}
+`)
+	want := map[string]lang.TypeDecl{
+		"Service": {Name: "Service", Kind: "struct", Fields: []lang.Field{
+			{Name: "certs", Type: "CertificateService", Pkg: "kaspi"},
+			{Name: "repo", Type: "Repo"},
+			{Name: "a", Type: "Box"}, {Name: "b", Type: "Box"},
+			{Type: "Mutex", Pkg: "sync"},
+		}},
+		"Repo": {Name: "Repo", Kind: "interface", Methods: []string{"Save", "Load"}, Embeds: []lang.Field{{Type: "Closer", Pkg: "io"}}},
+		"ID":   {Name: "ID", Kind: "other"},
+	}
+	if len(f.Types) != len(want) {
+		t.Fatalf("types = %+v", f.Types)
+	}
+	for _, d := range f.Types {
+		if !reflect.DeepEqual(d, want[d.Name]) {
+			t.Errorf("%s = %+v, want %+v", d.Name, d, want[d.Name])
+		}
+	}
+	got := byName(f, "Do").Params
+	wp := []lang.Field{{Name: "ctx", Type: "Context", Pkg: "context"}, {Name: "r", Type: "Repo"}, {Name: "p", Type: "Plan", Pkg: "pkg"}, {Name: "n", Type: "int"}, {Name: "m", Type: "int"}}
+	if !reflect.DeepEqual(got, wp) {
+		t.Errorf("params = %+v", got)
+	}
+}
