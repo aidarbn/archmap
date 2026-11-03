@@ -19,12 +19,22 @@ type Facts struct {
 	Modules   map[string]Module   `json:"modules"`
 	Functions map[string]Function `json:"functions"`
 	Deleted   []Deleted           `json:"deleted"`
+	Project   *Project            `json:"project,omitempty"`
+}
+
+// Project describes the analysed repository as a whole.
+type Project struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // Module is a directory that contains at least one source file.
 type Module struct {
 	Imports []string `json:"imports"`
 	Files   []string `json:"files"`
+	// Doc is the first 1-2 sentences of the module description taken from the
+	// code (package comment, docstring, README); at most 300 characters.
+	Doc string `json:"doc,omitempty"`
 }
 
 // Function is a function or method. Its map key (fid) is
