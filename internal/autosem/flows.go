@@ -31,7 +31,8 @@ var Weights = struct {
 	Helper        int // callee looks like an error/mapper/log/getter helper
 	Trivial       int // callee is a short leaf (a few lines)
 	SizePer20     int // per 20 lines of body (max 2)
-}{DeeperLayer: 4, DeeperAdapter: 2, DeeperLeaf: 1, StayEntry: -2, ToInfra: 0, Shallower: -1, NonLeaf: 2, Fanout: 1, OtherModule: 1, Helper: -8, Trivial: -1, SizePer20: 1}
+	Async         int // callee is the handler of a job the current function puts on a queue
+}{DeeperLayer: 4, DeeperAdapter: 2, DeeperLeaf: 1, StayEntry: -2, ToInfra: 0, Shallower: -1, NonLeaf: 2, Fanout: 1, OtherModule: 1, Helper: -8, Trivial: -1, SizePer20: 1, Async: 6}
 
 // helperNames are name patterns of functions that rarely carry the story.
 var helperNames = []*regexp.Regexp{
@@ -99,12 +100,20 @@ type graph struct {
 	f       *facts.Facts
 	layer   map[string]string // module -> layer
 	callees map[string][]string
+	async   map[string][]string // function -> handlers of the jobs it queues
 }
 
 func newGraph(f *facts.Facts, layer map[string]string) *graph {
-	g := &graph{f: f, layer: layer, callees: make(map[string][]string, len(f.Functions))}
+	g := &graph{f: f, layer: layer, callees: make(map[string][]string, len(f.Functions)), async: map[string][]string{}}
 	for fid, fn := range f.Functions {
 		seen := map[string]bool{fid: true}
+		for _, c := range fn.AsyncCallees {
+			if _, ok := f.Functions[c]; ok && !seen[c] {
+				seen[c] = true
+				g.async[fid] = append(g.async[fid], c)
+			}
+		}
+		seen = map[string]bool{fid: true}
 		for _, c := range fn.Callees {
 			if _, ok := f.Functions[c]; ok && !seen[c] {
 				seen[c] = true
@@ -120,9 +129,12 @@ func (g *graph) score(cur, c string) int {
 	cf, ff := g.f.Functions[cur], g.f.Functions[c]
 	s := 0
 	cl, fl := g.layer[cf.Module], g.layer[ff.Module]
+	async := g.isAsync(cur, c)
 	switch {
 	case fl == Test:
 		return -100
+	case async:
+		s += Weights.Async // the story continues in the worker, whatever its layer
 	case fl == Infra && cl != Infra:
 		s += Weights.ToInfra
 	case rank(fl) >= 0 && rank(cl) >= 0 && rank(fl) > rank(cl):
@@ -160,6 +172,15 @@ func (g *graph) score(cur, c string) int {
 		s += Weights.Helper
 	}
 	return s
+}
+
+func (g *graph) isAsync(cur, c string) bool {
+	for _, x := range g.async[cur] {
+		if x == c {
+			return true
+		}
+	}
+	return false
 }
 
 // isExternal reports an adapter that talks to an external service: the walk
@@ -210,7 +231,8 @@ func (g *graph) walk(entry string) []string {
 		if g.isExternal(parent) {
 			return
 		}
-		for _, c := range g.callees[parent] {
+		next := append(append([]string{}, g.callees[parent]...), g.async[parent]...)
+		for _, c := range next {
 			if chosen[c] {
 				continue
 			}
@@ -266,6 +288,11 @@ func (g *graph) callIndex(parent, c string) int {
 	for i, x := range g.callees[parent] {
 		if x == c {
 			return i
+		}
+	}
+	for i, x := range g.async[parent] { // queued jobs run after the synchronous calls
+		if x == c {
+			return len(g.callees[parent]) + i
 		}
 	}
 	return -1
@@ -326,7 +353,7 @@ func buildFlows(g *graph) []Flow {
 		c := &cand{
 			flow:  Flow{Name: flowName(fn), Desc: desc, Kind: fn.Entry.Kind, Steps: steps},
 			mods:  len(mods),
-			score: len(steps) + 2*len(mods) + 2*len(layers),
+			score: g.flowScore(fn.Entry.Kind, g.reach(fid), len(steps), len(layers)),
 		}
 		cands = append(cands, c)
 	}
@@ -345,6 +372,16 @@ func buildFlows(g *graph) []Flow {
 			kinds = append(kinds, c.flow.Kind)
 		}
 		byKind[c.flow.Kind] = append(byKind[c.flow.Kind], c)
+	}
+	// main() wires everything together and reaches most of the code: it keeps
+	// no guaranteed seat when the project has real business entry points.
+	if len(byKind["http"])+len(byKind["task"])+len(byKind["ui"]) > 0 {
+		for i, k := range kinds {
+			if k == "main" {
+				kinds = append(kinds[:i], kinds[i+1:]...)
+				break
+			}
+		}
 	}
 	sort.Slice(kinds, func(i, j int) bool { return byKind[kinds[i]][0].score > byKind[kinds[j]][0].score })
 	var top []*cand

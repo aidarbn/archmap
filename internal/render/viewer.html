@@ -114,6 +114,10 @@ header .sum b{color:var(--fg)}
 .glane{fill:var(--panel2);opacity:.45}
 .flow{fill:none;stroke:var(--hl);stroke-width:3;stroke-dasharray:8 5;animation:dash .8s linear infinite;marker-end:url(#arr)}
 .flow.old{opacity:.35;animation:none;stroke-width:2}
+.flow.async{stroke:var(--acc);stroke-dasharray:2 7;stroke-linecap:round}
+.qlabel{fill:var(--acc);font-size:11px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+.qlabel.old{opacity:.5}
+.qtag{color:var(--acc)}
 @keyframes dash{to{stroke-dashoffset:-13}}
 .pulse{fill:none;stroke:var(--hl);stroke-width:3;animation:pulse 1.2s ease-out infinite}
 @keyframes pulse{from{opacity:.9;stroke-width:3}to{opacity:0;stroke-width:14}}
@@ -202,7 +206,7 @@ const DATA = /*ARCH_DATA*/null;
 const $ = s => document.querySelector(s);
 const NS = "http://www.w3.org/2000/svg";
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-/* ---------- i18n: интерфейс en/ru; тексты из модели (arch.model.json) не переводятся ---------- */
+/* ---------- i18n: интерфейс en/ru; тексты, взятые из кода (описания, имена сценариев), не переводятся ---------- */
 // plural forms: en [one, other]; ru [one, few, many]
 const I18N = {
   en: {
@@ -236,6 +240,7 @@ const I18N = {
     flowSearch: "Search scenarios…", grpTop: "Main", grpGeneral: "General", grpFlows: "Scenarios", playFromFn: "Scenario from this function", flowMore: n => "…" + n + " more — refine the search", flowNone: "No scenarios found", fnFlowTitle: "Scenario from ",
     flowPfx: "Flow: ", optChanges: "Changed functions (walk from entries)", optOverview: "Overview from entry points",
     capSteps: (n) => n + (n === 1 ? " step." : " steps."), pressPlay: "Press ▶.", noPlayData: "Nothing to play.",
+    queue: "queue", viaQueueNext: "via queue →", viaQueueTip: "hand-off through a job queue: the job is put on a queue and run later by a worker",
     calls: "calls →", next: "next →", end: "end", group: "group",
     live: "live", rebuilding: "rebuilding…", error: "error", noConn: "disconnected",
     noConnTip: "archmap serve is unreachable, reconnecting…", ms: "ms", changedN: "changed:",
@@ -271,6 +276,7 @@ const I18N = {
     flowSearch: "Поиск сценария…", grpTop: "Главные", grpGeneral: "Общее", grpFlows: "Сценарии", playFromFn: "Сценарий от этой функции", flowMore: n => "…ещё " + n + " — уточните поиск", flowNone: "Сценарии не найдены", fnFlowTitle: "Сценарий от ",
     flowPfx: "Поток: ", optChanges: "Изменённые функции (обход от входов)", optOverview: "Обзор от точек входа",
     capSteps: n => n + " шаг.", pressPlay: "Нажмите ▶.", noPlayData: "Нет данных для проигрывания.",
+    queue: "очередь", viaQueueNext: "через очередь →", viaQueueTip: "переход через очередь: задача ставится в очередь и позже выполняется воркером",
     calls: "вызывает →", next: "далее →", end: "конец", group: "группа",
     live: "живое", rebuilding: "пересборка…", error: "ошибка", noConn: "нет связи",
     noConnTip: "сервер archmap serve недоступен, переподключаюсь…", ms: "мс", changedN: "изменено:",
@@ -328,6 +334,7 @@ function indexData() {
     const f = fns[id];
     (byMod[f.module] = byMod[f.module] || []).push(id);
     (f.callees || []).forEach(c => { if (callers[c]) callers[c].push(id); });
+    (f.async_callees || []).forEach(c => { if (callers[c] && !callers[c].includes(id)) callers[c].push(id); });
   });
   changed = fids.filter(id => fns[id].status);
   // modules without functions (files of languages without a parser) stay on the map
@@ -357,13 +364,14 @@ const flash = {set: new Set(), mods: new Set(), timer: null}; // что мига
 function drawHeader() {
   const PJ = F.project || {};
   $("#title").textContent = M.title || ((PJ.name || F.repo) + t("titleSuffix"));
-  $("#pdesc").textContent = PJ.description || ""; $("#pdesc").title = PJ.description || "";
+  const desc = PJ.description || M.summary || "";
+  $("#pdesc").textContent = desc; $("#pdesc").title = desc;
   document.title = $("#title").textContent;
   $("#sum").innerHTML =
     `<b>${esc(F.repo)}</b> · ${t("branch")} <b>${esc(F.branch)}</b>${F.base ? " vs <b>" + esc(F.base) + "</b>" : ""} · <code>${esc(F.head)}</code> · ` +
     `${t("modules")} <b>${Object.keys(F.modules).length}</b>, ${t("functions")} <b>${fids.length}</b>, ${t("entryPts")} <b>${entries.length}</b> · ${t("changedLbl")} ` +
     `<span class="chip a">+${nAdded}</span><span class="chip m">~${nMod}</span><span class="chip d">−${deleted.length}</span><span class="chip l">${t("notCommitted")} ${nLocal}</span>` +
-    (M.summary ? `<br><span>${esc(M.summary)}</span>` : "");
+    (M.summary && M.summary !== desc ? `<br><span>${esc(M.summary)}</span>` : ""); // the description is shown once, beside the title
 }
 drawHeader();
 
@@ -714,7 +722,9 @@ function paintMap() {
       if (a === b) continue;
       const x1 = a.x + a.w / 2, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.min(60, Math.hypot(x2 - x1, y2 - y1) / 4);
-      el("path", {class: "flow" + (i === S.idx ? "" : " old"), d: `M${x1},${y1}Q${mx},${my} ${x2},${y2}`}, gOver);
+      const q = viaQueue(S.steps[i - 1], S.steps[i]);
+      el("path", {class: "flow" + (q ? " async" : "") + (i === S.idx ? "" : " old"), d: `M${x1},${y1}Q${mx},${my} ${x2},${y2}`}, gOver);
+      if (q) el("text", {class: "qlabel" + (i === S.idx ? "" : " old"), x: (x1 + 2 * mx + x2) / 4, y: (y1 + 2 * my + y2) / 4 - 4, "text-anchor": "middle"}, gOver).textContent = t("queue");
     }
     const p = from(S.idx);
     if (p) el("rect", {class: "pulse", x: p.x - 3, y: p.y - 3, width: p.w + 6, height: p.h + 6, rx: 9}, gOver);
@@ -887,15 +897,24 @@ $("#crumbs").addEventListener("click", e => {
 
 /* ---------- карточки ---------- */
 const det = $("#detail");
+// a hand-off through a job queue (enqueue -> worker), not a direct call
+const viaQueue = (from, to) => !!fns[from] && (fns[from].async_callees || []).includes(to) && !(fns[from].callees || []).includes(to);
+const nbArr = (id, dir) => {
+  if (dir === "in") return callers[id];
+  const f = fns[id];
+  return (f.callees || []).concat((f.async_callees || []).filter(c => fns[c] && !(f.callees || []).includes(c)));
+};
 function nbList(id, dir) {
-  const arr = dir === "in" ? callers[id] : (fns[id].callees || []);
+  const arr = nbArr(id, dir);
   if (!arr.length) return `<div class="kv">${t("none")}</div>`;
-  return `<ul class="nb" data-dir="${dir}">` + arr.slice(0, 60).map(c => nbItem(c)).join("") + (arr.length > 60 ? `<li class="kv">${t("moreN", arr.length - 60)}</li>` : "") + "</ul>";
+  const q = c => dir === "in" ? viaQueue(c, id) : viaQueue(id, c);
+  return `<ul class="nb" data-dir="${dir}">` + arr.slice(0, 60).map(c => nbItem(c, q(c))).join("") + (arr.length > 60 ? `<li class="kv">${t("moreN", arr.length - 60)}</li>` : "") + "</ul>";
 }
-function nbItem(c) {
+function nbItem(c, queued) {
   const f = fns[c];
   const st = f.status ? `<span class="st ${f.status}">${f.status === "added" ? "+" : "~"}</span>` : "";
-  return `<li data-id="${esc(c)}"><div class="it"><span class="x" title="${t("expandStep")}">▸</span>${st}<a data-f="${esc(c)}" title="${esc(c)}">${esc(fname(f))}</a><span class="kv">${esc(shortMod(f.module))}</span></div></li>`;
+  const q = queued ? `<span class="tag qtag" title="${t("viaQueueTip")}">${t("queue")}</span>` : "";
+  return `<li data-id="${esc(c)}"><div class="it"><span class="x" title="${t("expandStep")}">▸</span>${st}${q}<a data-f="${esc(c)}" title="${esc(c)}">${esc(fname(f))}</a><span class="kv">${esc(shortMod(f.module))}</span></div></li>`;
 }
 det.addEventListener("click", e => {
   const x = e.target.closest(".x");
@@ -903,9 +922,9 @@ det.addEventListener("click", e => {
     const li = x.closest("li"), dir = li.closest("ul.nb").dataset.dir || "out";
     const nested = li.querySelector(":scope > ul");
     if (nested) { nested.remove(); x.textContent = "▸"; return; }
-    const id = li.dataset.id, arr = dir === "in" ? callers[id] : (fns[id].callees || []);
+    const id = li.dataset.id, arr = nbArr(id, dir);
     const ul = document.createElement("ul"); ul.dataset.dir = dir;
-    ul.innerHTML = arr.length ? arr.slice(0, 40).map(nbItem).join("") : `<li class="kv">${t("none")}</li>`;
+    ul.innerHTML = arr.length ? arr.slice(0, 40).map(c => nbItem(c, dir === "in" ? viaQueue(c, id) : viaQueue(id, c))).join("") : `<li class="kv">${t("none")}</li>`;
     li.appendChild(ul); x.textContent = "▾"; return;
   }
   const a = e.target.closest("[data-f]"); if (a) { selectFn(a.dataset.f, true); return; }
@@ -1163,7 +1182,7 @@ function goStep(i) {
   const id = S.steps[i], f = fns[id];
   $("#pbar").value = i; $("#pPos").textContent = (i + 1) + "/" + S.steps.length;
   const nx = S.steps[i + 1];
-  const call = nx ? ((f.callees || []).includes(nx) ? `${t("calls")} <b>${esc(fname(fns[nx]))}</b>` : `${t("next")} <b>${esc(fname(fns[nx]))}</b>`) : t("end");
+  const call = nx ? (viaQueue(id, nx) ? `${t("viaQueueNext")} <b>${esc(fname(fns[nx]))}</b>` : (f.callees || []).includes(nx) ? `${t("calls")} <b>${esc(fname(fns[nx]))}</b>` : `${t("next")} <b>${esc(fname(fns[nx]))}</b>`) : t("end");
   const mi = MM[f.module];
   $("#cap").innerHTML = `<span class="t">${i + 1}. ${esc(fname(f))}</span>` +
     (f.status ? ` <span class="tag" style="color:var(--${f.status === "added" ? "add" : "mod"})">${stText(f.status)}</span>` : "") +

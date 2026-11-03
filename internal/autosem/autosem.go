@@ -1,11 +1,14 @@
-// Package autosem builds the semantic layer (the arch.model.json format) from
-// facts alone, with plain heuristics and no model: module layers and roles from
-// paths and contents, scenarios from walks over the call graph.
+// Package autosem builds the semantic layer (module layers and roles,
+// scenarios) from facts alone, with plain heuristics and no hand-written model:
+// layers and roles from paths and contents, scenarios from walks over the call
+// graph, including hand-offs through job queues (async_callees).
 //
 // Flow JSON: {name, desc, kind, top, steps[fid]}. kind is the entry-point kind
 // (http | task | main | lifecycle | ui); top marks up to MaxTop of the most
-// informative scenarios (deep, spanning several modules and layers, at least
-// one or two per kind); top flows come first, then the rest by the same score.
+// informative scenarios, ranked by the reach of the entry point (see rank.go:
+// modules, external services and queues in its call closure; plain CRUD is
+// demoted), at least one or two per kind; top flows come first, then the rest
+// by the same score.
 package autosem
 
 import (
@@ -22,7 +25,7 @@ type ModuleInfo struct {
 	Layer string `json:"layer"`
 }
 
-// Model is the arch.model.json format.
+// Model is the semantic layer handed to the viewer.
 type Model struct {
 	Title   string                `json:"title"`
 	Summary string                `json:"summary"`

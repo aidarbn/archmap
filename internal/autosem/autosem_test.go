@@ -66,7 +66,7 @@ func TestRoleOf(t *testing.T) {
 		{"src/components/cardStats", UI, "Card stats"},
 		{"pkg/db", Infra, "DB"},
 		{"internal/api", Entry, "API"},
-		{"crates/globset/src", Other, "Globset src"},
+		{"crates/globset/src", Other, "Globset"},
 		{"clients/payments", Adapter, "Payments client"},
 		{".", Other, "Project root"},
 	}

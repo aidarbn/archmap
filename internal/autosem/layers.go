@@ -90,6 +90,19 @@ func pathLayer(mod, lang string) string {
 		}
 	}
 	segs := strings.Split(m, "/")
+	if lang == "rust" {
+		if i := cratePrefix(segs); i >= 0 {
+			// Cargo layout <dir>/<crate>/src/<mods>: crate names are free-form
+			// ("cli", "core", "printer") and say nothing about a layer; only
+			// the module folders inside src do. Test folders still win.
+			for _, s := range segs {
+				if segmentRules[s] == Test {
+					return Test
+				}
+			}
+			segs = segs[i+1:]
+		}
+	}
 	for i := len(segs) - 1; i >= 0; i-- {
 		s := segs[i]
 		if s == "internal" {
@@ -111,6 +124,17 @@ func pathLayer(mod, lang string) string {
 		return l
 	}
 	return Other
+}
+
+// cratePrefix returns the index of the "src" segment of a Cargo crate path
+// (<dir>/<crate>/src/...), -1 when the module is not inside a crate's src.
+func cratePrefix(segs []string) int {
+	for i := 1; i < len(segs); i++ {
+		if segs[i] == "src" {
+			return i
+		}
+	}
+	return -1
 }
 
 // moduleStats summarizes a module's functions for content-based heuristics.
@@ -174,6 +198,8 @@ func classify(mod string, s *moduleStats) string {
 			return Entry
 		case s.uiEntries*2 >= s.funcs:
 			return UI
+		case s.lang == "rust" && cratePrefix(strings.Split(strings.ToLower(mod), "/")) >= 0:
+			return Domain // a library crate holds logic; a binary crate was caught by main above
 		}
 	}
 	return l

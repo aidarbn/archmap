@@ -129,7 +129,9 @@ func roleOf(mod, layer string) string {
 		}
 	}
 	// version-like or "internal" last segments read better with their parent
-	if len(segs) > 1 && (last == "internal" || last == "src" || last == "lib" || last == "app" || last == "pkg" || (len(last) <= 3 && strings.HasPrefix(strings.ToLower(last), "v"))) {
+	if len(segs) > 1 && last == "src" { // <crate>/src is the crate itself
+		last = segs[len(segs)-2]
+	} else if len(segs) > 1 && (last == "internal" || last == "src" || last == "lib" || last == "app" || last == "pkg" || (len(last) <= 3 && strings.HasPrefix(strings.ToLower(last), "v"))) {
 		last = segs[len(segs)-2] + " " + last
 	}
 	return humanize(last)
