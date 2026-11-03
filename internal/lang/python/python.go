@@ -140,7 +140,7 @@ func (p *state) classBases(def *sitter.Node) []string {
 		case "keyword_argument", "comment":
 			continue
 		}
-		out = append(out, collapse(p.tr.Text(a)))
+		out = append(out, expr(p.tr.Text(a)))
 	}
 	return out
 }
@@ -164,7 +164,7 @@ func (p *state) addFunc(outer, fn *sitter.Node, cls string, bases []string) {
 		for _, d := range ts.NamedChildren(outer) {
 			if d.Kind() == "decorator" {
 				if e := d.NamedChild(0); e != nil {
-					f.Decorators = append(f.Decorators, collapse(p.tr.Text(e)))
+					f.Decorators = append(f.Decorators, expr(p.tr.Text(e)))
 				}
 			}
 		}
@@ -422,6 +422,13 @@ func (p *state) importFrom(n *sitter.Node) {
 			p.addImport(mod + name)
 		}
 	}
+}
+
+var bracketSpace = strings.NewReplacer("( ", "(", "[ ", "[", "{ ", "{", " )", ")", " ]", "]", " }", "}")
+
+// expr renders an expression the way ast.unparse spaces multi-line brackets.
+func expr(s string) string {
+	return strings.ReplaceAll(bracketSpace.Replace(collapse(s)), ", )", ",)")
 }
 
 // collapse joins whitespace runs into single spaces.
