@@ -1,6 +1,54 @@
 /* views/sequence.css — layout and extras of the Scenario tab (the base .seq styles are in viewer.css) */
 .seqv { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) 288px; }
-.seqv .seq-wrap { position: relative; inset: auto; overflow: auto; min-width: 0; min-height: 0; }
+.seqv.list-on { grid-template-columns: 260px minmax(0, 1fr) 288px; }
+.seqv.noside { grid-template-columns: minmax(0, 1fr); }
+.seqv.noside.list-on { grid-template-columns: 260px minmax(0, 1fr); }
+.seqv.noside .seq-side { display: none; }
+.seqv:not(.list-on):not(.narrow) .seq-list { display: none; }
+.seq-list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--surface); }
+.seq-list .sl-hd { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 6px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.seq-list .sl-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 4px; border-radius: 5px; }
+.seq-list .sl-x:hover { color: var(--accent); background: var(--surface-2); }
+.seq-list .sl-q { margin: 0 12px 8px; height: 28px; padding: 0 9px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-2); color: var(--text); font: 12.5px var(--font); outline: 0; }
+.seq-list .sl-q:focus { border-color: var(--accent); background: var(--surface); }
+.seq-list .sl-body { flex: 1; overflow: auto; padding-bottom: 12px; }
+.seq-list .sl-gh { position: sticky; top: 0; z-index: 1; padding: 8px 14px 4px; background: var(--surface); font: 600 11px var(--font); color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; }
+.seq-list .sl-gh span { color: var(--muted); font-weight: 500; margin-left: 4px; }
+.seq-list .sl-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 12px 5px 14px; font-size: 12.5px; color: var(--text); cursor: pointer; border-left: 3px solid transparent; }
+.seq-list .sl-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seq-list .sl-row .sb { flex: none; color: var(--muted); font: 11px var(--mono); }
+.seq-list .sl-row:hover { background: var(--surface-2); }
+.seq-list .sl-row.cur { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
+.seq-list .sl-none { padding: 18px 14px; color: var(--muted); font-size: 12.5px; }
+.seqv.narrow { grid-template-columns: minmax(0, 1fr); }
+.seqv.narrow .seq-side { display: none; }
+.seqv.narrow .seq-list { position: absolute; top: 0; bottom: 0; left: 0; width: 280px; z-index: 6; box-shadow: 0 10px 30px rgba(0, 0, 0, .18); transform: translateX(-104%); visibility: hidden; transition: transform var(--t), visibility 0s linear var(--t); }
+.seqv.narrow.list-on .seq-list { transform: none; visibility: visible; transition: transform var(--t); }
+.seq-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.seqv .seq-wrap { position: relative; inset: auto; overflow: auto; min-width: 0; min-height: 0; flex: 1; }
+.seq-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--text-2); }
+.seq-bar .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.seq-bar .seg button { border: 0; background: transparent; color: var(--text-2); font: 600 12px var(--font); padding: 5px 11px; cursor: pointer; }
+.seq-bar .seg button + button { border-left: 1px solid var(--line-2); }
+.seq-bar .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seq-bar .lnk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.seq-bar .chip-btn { border: 1px solid var(--line-2); background: var(--surface); color: var(--text-2); border-radius: 12px; padding: 3px 10px; font: 12px var(--font); cursor: pointer; }
+.seq-bar .chip-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.seq-bar .hint { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.seq .head.svc rect:first-of-type { fill: color-mix(in oklab, var(--accent) 7%, var(--surface)); }
+.seq .msg .enter { opacity: 0; transition: opacity var(--t); }
+.seq .msg:hover .enter, .seq .msg:focus-within .enter, .seq .msg.cur .enter, .seq .msg .enter.on { opacity: 1; }
+.seq .msg.sub line, .seq .msg.sub path { stroke-width: 1.1; }
+.seq .msg.sub text { font-size: 11.5px; }
+.seq .frame.sub rect.f { fill: color-mix(in oklab, var(--accent) 3%, transparent); stroke: color-mix(in oklab, var(--accent) 45%, var(--edge)); }
+.seq .frame.sub .tag { fill: var(--accent-soft); }
+.seq .code { cursor: pointer; }
+.seq .code rect { fill: var(--surface-2); stroke: var(--line); }
+.seq .code text { font: 11px var(--mono); }
+.seq .code .loc { fill: var(--muted); }
+.seq .code .src { fill: var(--text); }
+.seq .code.future { opacity: .45; }
+.seq .code.cur rect { stroke: var(--accent); }
 .seq-side { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; padding-bottom: 16px; }
 .seq-side .thumb { margin: 16px 14px 0; height: 190px; box-shadow: none; }
 .seqlegend { margin: 14px 18px 0; display: grid; gap: 6px; font-size: 11.5px; color: var(--text-2); }

@@ -60,7 +60,7 @@ const I18N = {
     actHttp: 'HTTP-клиенты', actUser: 'Пользователь', actMain: 'Запуск', actTask: 'Планировщик', actPublic: 'Публичный доступ', actOthers: 'Прочие роли',
     epsN: (n, p) => n + ' ' + p(['ручка', 'ручки', 'ручек']), callsN: (n, p) => n + ' ' + p(['вызов', 'вызова', 'вызовов']),
     readsWrites: 'читает и пишет', calls: 'вызывает',
-    onlyChanged: 'только изменённые', branch: 'ветка', uncommitted: 'не в коммите', changesTip: 'изменения ветки: добавлено / изменено / удалено / не в коммите',
+    onlyChanged: 'только изменённые', moreTip: 'Изменения ветки и фильтр', branch: 'ветка', uncommitted: 'не в коммите', changesTip: 'изменения ветки: добавлено / изменено / удалено / не в коммите',
     st_added: 'добавлена', st_modified: 'изменена', st_deleted: 'удалена',
     grpMods: (n, p) => n + ' ' + p(['модуль', 'модуля', 'модулей']), grpHint: 'группа модулей — двойной клик раскрывает', collapse: 'свернуть', group: 'группа', root: '(корень)',
     fnShort: 'ф.', modShort: 'мод.', lines: 'стр.', entryLbl: 'точка входа', fnsFiles: (f, fl) => 'функций: ' + f + ', файлов: ' + fl,
@@ -93,7 +93,7 @@ const I18N = {
     actHttp: 'HTTP clients', actUser: 'User', actMain: 'Launch', actTask: 'Scheduler', actPublic: 'Public access', actOthers: 'Other roles',
     epsN: (n) => n + (n === 1 ? ' endpoint' : ' endpoints'), callsN: (n) => n + (n === 1 ? ' call' : ' calls'),
     readsWrites: 'reads & writes', calls: 'calls',
-    onlyChanged: 'changed only', branch: 'branch', uncommitted: 'uncommitted', changesTip: 'branch changes: added / modified / deleted / uncommitted',
+    onlyChanged: 'changed only', moreTip: 'Branch changes and filter', branch: 'branch', uncommitted: 'uncommitted', changesTip: 'branch changes: added / modified / deleted / uncommitted',
     st_added: 'added', st_modified: 'modified', st_deleted: 'deleted',
     grpMods: (n) => n + (n === 1 ? ' module' : ' modules'), grpHint: 'module group — double-click expands', collapse: 'collapse', group: 'group', root: '(root)',
     fnShort: 'fn', modShort: 'mod', lines: 'lines', entryLbl: 'entry point', fnsFiles: (f, fl) => 'functions: ' + f + ', files: ' + fl,
@@ -193,6 +193,7 @@ function indexData(data) {
   D.flows = (M.flows || []).map((fl, i) => Object.assign({ i }, fl)).filter((fl) => (fl.steps || []).some((s) => D.fns[s]));
   D.flowById = {}; D.flows.forEach((fl) => { if (fl.id) D.flowById[fl.id] = fl; });
   D.actors = computeActors();
+  PATHS.clear();
   bus.emit('data', D);
 }
 
@@ -382,6 +383,42 @@ function callLine(lines, target) {
 }
 // bridges(a, b): callees of a that call (or enqueue) b
 const bridges = (a, b) => fnInfo(a).out.filter((c) => c !== b && fnInfo(c).out.includes(b));
+// callSite(fid, target): the line of fid's body that calls target (or the callee that leads to it):
+// {no, text, file} when found; {no: 0, text: '', file, has} when the body is unknown (has = false) or has no such line
+function callSite(fid, target) {
+  const f = fnInfo(fid), body = srcOf(fid);
+  if (body == null) return { no: 0, text: '', file: f.file || '', has: false, loadable: canLoadSrc(fid) };
+  const lines = body.replace(/\t/g, '    ').split('\n');
+  let k = callLine(lines, target);
+  if (k < 0 && target) for (const c of bridges(fid, target)) { k = callLine(lines, c); if (k >= 0) break; }
+  return k < 0 ? { no: 0, text: '', file: f.file || '', has: true } : { no: (f.s || 1) + k, text: lines[k].trim(), file: f.file || '', has: true };
+}
+// callPath(a, b, max): the shortest chain of calls (callees and async hand-offs) from a to b, [a, …, b] with at
+// most max hops, or null; breadth-first, cached
+const PATHS = new Map();
+function callPath(a, b, max = 8) {
+  if (!D.fns[a] || !D.fns[b]) return null;
+  if (a === b) return [a];
+  const key = a + '>' + b + '>' + max;
+  if (PATHS.has(key)) return PATHS.get(key);
+  const par = new Map([[a, null]]); let front = [a], found = false;
+  for (let d = 0; d < max && front.length && !found && par.size < 20000; d++) {
+    const nx = [];
+    for (const x of front) {
+      for (const c of fnInfo(x).out) {
+        if (par.has(c)) continue;
+        par.set(c, x); nx.push(c);
+        if (c === b) { found = true; break; }
+      }
+      if (found) break;
+    }
+    front = nx;
+  }
+  let out = null;
+  if (found) { out = []; for (let c = b; c != null; c = par.get(c)) out.push(c); out.reverse(); }
+  PATHS.set(key, out);
+  return out;
+}
 // doc text without arch: annotations (they are shown structurally)
 const cleanDoc = (s) => { const d = String(s || ''), i = d.search(/\s*\barch:[a-z]/); return (i > 0 ? d.slice(0, i) : i === 0 ? '' : d).trim(); };
 // codeHTML(fid, target): {html, hlIdx, has} — body lines with numbers; highlighted call of target
@@ -434,6 +471,6 @@ function registerPanel(kind, fn) { PANELS[kind] = fn; }
 const AM = window.AM = {
   version: 3, D, state, bus, t, L, addI18n, plural, registerView, registerPanel,
   h: H, svg: S_, esc, cut, cutL, fnInfo, fname, short, modLabel, layerOf, modRole, modDesc, LAYERS, LCOLOR,
-  isAsync, isCall, extsOfFn, actorName, epRole, hlLine, codeHTML, loadSrc, srcOf,
+  isAsync, isCall, extsOfFn, actorName, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath,
   get lang() { return LANG; }, get RM() { return RM; }, get DUR() { return DUR; },
 };

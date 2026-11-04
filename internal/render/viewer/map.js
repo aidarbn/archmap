@@ -768,6 +768,39 @@ async function jumpToFn(id, lvl = 2) {
   if (lvl === 3) await drill(3, { from: fv.nodes[id] ? fv.nodes[id].el : null, fn: id });
   else selectFn(id);
 }
+// setLevel(lvl, fid): put the map on level lvl at function fid (the current step's by default) at once, without the
+// zoom transition — the Scenario tab uses it to keep the map on its level while the map is off screen
+let LVL_QUIET = false; // the level was set off screen: the map puts back its play and selection marks when shown
+function setLevel(lvl, fid) {
+  if (state.busy || lvl < 0 || lvl > 3) return;
+  LVL_QUIET = true;
+  const s = curStep();
+  if (!fid || !D.fns[fid]) fid = s ? s.fid : state.fn && D.fns[state.fn] ? state.fn : null;
+  if (!fid && lvl >= 2) { const m = state.mod && D.byMod[state.mod] ? state.mod : null; fid = m ? D.byMod[m][0] : D.entries[0] || D.fids[0] || null; }
+  const m = fid ? D.fns[fid].module : null;
+  if (lvl >= 2 && !m) lvl = 1;
+  if (lvl === state.level && (lvl < 2 || (lvl === 2 ? fv && fv.mod === m && fv.nodes[fid] : state.fn === fid))) return;
+  if (lvl >= 1) { if (m) revealMod(m); fitMap(m); }
+  if (lvl >= 2) {
+    const u = unitFor(m) || m;
+    if (state.mod !== u) state.fnAll = false;
+    state.mod = u; state.fn = fid;
+    buildFns(u); fitFns();
+  }
+  if (lvl === 3) {
+    const own = s && s.fid === fid;
+    state.mod = m; buildCode(fid, own ? s.next : null, own ? framesUpTo(state.step) : defaultFrames(fid));
+  }
+  state.level = lvl;
+  SC().forEach((e, i) => e.classList.toggle('hidden', i !== lvl));
+  // marks on the scene only: the selection (and the panel) stay as the Scenario tab left them
+  const keep = state.sel; QUIET = true;
+  try {
+    if (lvl === 1 && m && unitFor(m)) selectMod(unitFor(m));
+    else if (lvl === 2 && fv && fv.nodes[fid]) selectFn(fid);
+  } finally { QUIET = false; state.sel = keep; }
+  afterLevel();
+}
 function afterLevel() {
   $('#minimap').classList.toggle('off', state.level !== 1);
   $('#legend').classList.toggle('off', state.level !== 1);
@@ -858,7 +891,7 @@ function restorePlay() {
 
 Object.assign(AM, {
   map: {
-    drill, up, goModule, jumpToFn, revealMod, intoSelected, rebuild: rebuildMap, fit: fitCur,
+    drill, up, goModule, jumpToFn, setLevel, marks: () => { if (LVL_QUIET) { LVL_QUIET = false; restorePlay(); reapplySel(); } }, revealMod, intoSelected, rebuild: rebuildMap, fit: fitCur,
     get level() { return state.level; }, get units() { return units; }, unitOf: (m) => unitFor(m), unitLayer: (id) => (U[id] ? unitLayer(U[id]) : null),
     get modules() { return map; }, get system() { return sys; }, get functions() { return fv; }, groups: G,
   },
