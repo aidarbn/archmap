@@ -76,3 +76,13 @@
 .seq .head.ext rect:first-of-type { fill: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) { .seq * { transition: none !important; } }
 @media (max-width: 900px) { .seqv { grid-template-columns: minmax(0, 1fr); } .seq-side { display: none; } }
+.seq-bar .jv-tag { flex: 0 1 auto; margin-left: 8px; }
+.seq-list .sl-row.jv-j { align-items: baseline; }
+.seq-list .sl-row.jv-v { font-size: 12px; }
+.seq-list .sl-row .jv-chain { padding-top: 1px; }
+.seq-list .sl-row.cur .jv-chain { color: var(--text-2); font-weight: 400; }
+.seq-list .jv-tog { margin-left: 6px; }
+.jv-jump rect { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 5 3; }
+.jv-jump text { font: 12px var(--font); fill: var(--text); }
+.seq-list .sl-row.jv-j .nm { flex: 1 1 100%; white-space: normal; }
+.seq-list .sl-row.jv-j .sb { flex: 1 1 100%; font: 11px var(--font); }

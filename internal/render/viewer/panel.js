@@ -41,6 +41,7 @@ function scenSection(subset) {
   const flows = subset || D.flows; if (!flows.length) return '';
   const gs = flowGroups('', subset);
   let h = `<h3>${esc(t('grpFlows'))} · ${flows.length}</h3><div class="scen-list">`;
+  if (!subset) h += AM.jv.journeyRows('', jvCfg('sc'), PS.all ? 99 : PS_N);
   gs.forEach((g) => {
     if (!subset || gs.length > 1) h += `<div class="scen-grp">${esc(g.name)}<small>${g.items.length}</small></div>`;
     (PS.all ? g.items : g.items.slice(0, PS_N)).forEach((fl) => { h += flowRow(fl, 'sc'); });
@@ -156,6 +157,8 @@ function wirePanel(p, s) {
   act('code', () => jumpToFn(s.id, 3));
   act('playfn', () => playFrom(s.id));
   act('intomod', () => goModule(s.id));
+  p.querySelectorAll('[data-vt]').forEach((e) => e.addEventListener('click', (ev) => { ev.stopPropagation(); AM.jv.toggle(e.dataset.vt); }));
+  p.querySelectorAll('[data-k="journey"],[data-k="variant"]').forEach((e) => e.addEventListener('click', () => playRunKey(e.dataset.k + ':' + e.dataset.id)));
   p.querySelectorAll('[data-k="flow"]').forEach((e) => e.addEventListener('click', () => playFlowIdx(+e.dataset.id)));
   act('flowsall', () => { PS.all = !PS.all; renderPanel(); });
   act('flowsbrowse', () => openFlows());
@@ -175,3 +178,4 @@ function openMod(m) {
 }
 
 Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel });
+bus.on('jv', () => renderPanel());

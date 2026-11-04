@@ -15,6 +15,7 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `layout.js` | `layered()` — Sugiyama-lite band layout. |
 | `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, crumbs, minimap, legend. |
 | `playback.js` | Scenario runs: picker, steps through the levels, branches, effects/status badges, auto play. |
+| `journeys.js` | Through paths and variants: the shared list rows (`AM.jv.journeyRows`, `variantRows`, `tog`), runs `journey:<id>` and `variant:<id>` (`fixed` runs: no branch stop), the plate between flows / at the end of a variant (`AM.jv.plate`, `end`, `jump`), progress and the label of the current path (`.jv-tag`). Event `jv` — a variants fold changed. |
 | `panel.js` | Right card for the selection (`setSel`). |
 | `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), the scale zoom of content without a camera (`AM.zoom.scaleWheel`: code text, the Scenario diagram — past ×1.57 it dives, below ×0.65 it leaves, with the same gate), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
 | `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
@@ -22,7 +23,7 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. `fitHeader()` keeps the project name at least ~120px wide: when the header runs out of room the branch counters and "changed only" fold into the ⋯ menu, then the labels of the live badge and the Lists button go. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
-`layout.js`, `map.js`, `playback.js`, `panel.js`, `nav.js`, `zoom.js` (one shared scope), then every `views/*.js` by
+`layout.js`, `map.js`, `playback.js`, `journeys.js`, `panel.js`, `nav.js`, `zoom.js` (one shared scope), then every `views/*.js` by
 name, **each wrapped in its own `{ … }` block**, then `main.js`. The core list is in
 `render.go` (`coreJS`); views are picked up automatically — adding a view needs no Go change.
 Assembly fails (tests catch it) if a part contains `</script` / `</style`, or a placeholder.

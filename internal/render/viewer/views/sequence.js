@@ -191,7 +191,22 @@ function seqModel() {
   const guard = (b) => b.cond || b.text || '?';
   const keyOf = (b) => (b.flow || '') + '|' + (b.cond || '') + '|' + (b.text || '');
 
+  // a through path or a variant: the flows one after another, a plate between them, the end of the run at the bottom
+  const emitFixed = () => {
+    let base = 0;
+    run.segs.forEach((sg, si) => {
+      if (si) rows.push({ k: 'jump', text: AM.jv.viaText(sg), kind: AM.jv.viaKind(sg) });
+      emitGroups(lvl, sg.steps.map((fid, k) => P.stepAt(base + k)), 's' + si, true);
+      if (fr.length) closeReplies(-1);
+      base += sg.steps.length;
+    });
+    const e = AM.jv.end();
+    if (!e) return;
+    if (e.jump) rows.push({ k: 'jump', text: e.text, kind: 'on', go: true });
+    else rows.push({ k: 'exit', text: '', raw: e.text, good: e.tone !== 'bad' });
+  };
   const emitSeg = (si, base) => {
+    if (run.fixed) return emitFixed();
     const sg = run.segs[si], fl = sg.flow, last = si === run.segs.length - 1;
     emitGroups(lvl, sg.steps.map((fid, k) => P.stepAt(base + k)), 's' + si, true);
     if (fr.length) closeReplies(-1);
@@ -291,7 +306,7 @@ function seqRender() {
     } else if (r.k === 'pause') h = 32;
     else if (r.k === 'alt') h = r.t === 'end' ? 14 : 34;
     else if (r.k === 'branch') h = 46;
-    else if (r.k === 'out' || r.k === 'exit') h = 38;
+    else if (r.k === 'out' || r.k === 'exit' || r.k === 'jump') h = 38;
     else if (r.k === 'code') h = 24;
     y += h; o.h = h; lay.push(o);
   });
@@ -401,10 +416,18 @@ function seqRender() {
     }
     if (r.k === 'exit') {
       const g = AM.svg('g', { class: 'exitp' }, gm), cx = X.actor;
-      const tx = (r.good ? '✓ ' : '✕ ') + AM.t('exit') + ': ' + txt(r.text, 80), w = Math.min(rr - cx + 40, 34 + tx.length * 6.6);
+      const tx = (r.good ? '✓ ' : '✕ ') + (r.raw ? txt(r.raw, 90) : AM.t('exit') + ': ' + txt(r.text, 80)), w = Math.min(rr - cx + 40, 34 + tx.length * 6.6);
       const col = r.good ? 'var(--good)' : 'var(--critical)';
       AM.svg('rect', { x: cx - 60, y: o.y + 6, width: w, height: 24, rx: 12, fill: `color-mix(in oklab, ${col} 12%, var(--surface))`, stroke: col }, g);
       AM.svg('text', { x: cx - 46, y: o.y + 22, class: 'exit' }, g, tx);
+      return;
+    }
+    if (r.k === 'jump') {
+      const g = AM.svg('g', { class: 'jv-jump' }, gm), tx = txt(r.text, 100), w = Math.max(120, 30 + tx.length * 6.6);
+      AM.svg('rect', { x: l + 14, y: o.y + 6, width: Math.min(rr - l - 28, w), height: 24, rx: 12 }, g);
+      AM.svg('text', { x: l + 28, y: o.y + 22 }, g, tx);
+      AM.svg('title', null, g, r.text);
+      if (r.go) button(g, l + 14 + Math.min(rr - l - 28, w) + 14 + 18 + AM.t('jvGo').length * 6.3, o.y + 18, '↪ ' + AM.t('jvGo'), () => AM.jv.jump());
       return;
     }
     if (r.k === 'out') {
@@ -513,6 +536,8 @@ function seqBar() {
     const b = AM.h('button', { class: 'chip-btn' }, sBar, AM.esc(AM.t('seqFoldAll')));
     b.onclick = () => { sSub.clear(); seqRender(); seqSync(true); };
   }
+  AM.h('span', { class: 'jv-tag', hidden: true }, sBar);
+  AM.jv.paintTags();
   AM.h('span', { class: 'hint' }, sBar, AM.esc(AM.t('seqZoomHint')));
 }
 
@@ -687,6 +712,7 @@ function seqListMount() {
     else if (e.key === 'Escape') { q.value = ''; sListQ = ''; seqListDraw(); }
   });
   AM.h('div', { class: 'sl-body', role: 'listbox' }, sList).addEventListener('click', (e) => {
+    const vt = e.target.closest('[data-vt]'); if (vt) { AM.jv.toggle(vt.dataset.vt); return; }
     const r = e.target.closest('.sl-row'); if (r) seqListPick(r.dataset.k);
   });
   seqListDraw();
@@ -695,10 +721,12 @@ function seqListDraw() {
   const body = sList && sList.querySelector('.sl-body'); if (!body) return;
   const D = D_(), q = sListQ.trim().toLowerCase();
   const key = (fl) => 'flow:' + fl.i;
-  const row = (k, name, sub) => `<div class="sl-row" role="option" data-k="${AM.esc(k)}" title="${AM.esc(name)}"><span class="nm">${AM.esc(name)}</span>${sub ? `<span class="sb">${AM.esc(sub)}</span>` : ''}</div>`;
-  const fr = (fl) => row(key(fl), fl.name, String(fl.steps.filter((s) => D.fns[s]).length));
-  const ok = (fl) => !q || fl.name.toLowerCase().includes(q) || String(AM.flowActor(fl)).toLowerCase().includes(q);
-  let h = ''; sListKeys = [];
+  const row = (k, name, sub, extra) => `<div class="sl-row" role="option" data-k="${AM.esc(k)}" title="${AM.esc(name)}"><span class="nm">${AM.esc(name)}</span>${sub ? `<span class="sb">${AM.esc(sub)}</span>` : ''}${extra || ''}</div>`;
+  // journeys and variants: rows of the shared builders (journeys.js), the run key is in data-k
+  const jcfg = { row: 'sl-row', head: (title, n) => `<div class="sl-gh">${AM.esc(title)} <span>${n}</span></div>`, attr: (k, id) => `data-k="${k}:${AM.esc(id)}"` };
+  const fr = (fl) => row(key(fl), fl.name, String(fl.steps.filter((s) => D.fns[s]).length), AM.jv.tog(fl)) + AM.jv.variantRows(fl, sListQ, jcfg);
+  const ok = (fl) => !q || fl.name.toLowerCase().includes(q) || String(AM.flowActor(fl)).toLowerCase().includes(q) || AM.jv.flowHit(fl, q);
+  let h = AM.jv.journeyRows(sListQ, jcfg); sListKeys = [];
   const add = (title, items, toRow) => {
     if (!items.length) return;
     h += `<div class="sl-gh">${AM.esc(title)} <span>${items.length}</span></div>` + items.map(toRow).join('');
@@ -752,6 +780,7 @@ AM.registerView({
     sWrap.addEventListener('wheel', seqWheel, { passive: false });
     sLevel = sLink ? AM.map.level : 1;
     AM.bus.on('flow', () => { seqRefresh(false); seqListMark(true); });
+    AM.bus.on('jv', () => seqListDraw());
     window.addEventListener('keydown', seqListKey);
     AM.bus.on('level', (l) => { if (sLink && l !== sLevel) seqSetLevel(l, -1, true); });
   },

@@ -52,6 +52,8 @@ function buildRun(key) {
     if (!fl) return null;
     return { key, name: fl.name, desc: fl.desc || '', segs: [{ flow: fl, steps: fl.steps.filter((s) => D.fns[s]) }] };
   }
+  if (key.startsWith('journey:')) return jvBuildJourney(key);
+  if (key.startsWith('variant:')) return jvBuildVariant(key);
   if (key.startsWith('fn:')) {
     const id = key.slice(3);
     if (!D.fns[id]) return null;
@@ -69,7 +71,7 @@ function runList() {
 }
 const runFids = () => runList().map((x) => x.fid);
 const lastSeg = () => (state.run ? state.run.segs[state.run.segs.length - 1] : null);
-const branchesHere = () => { const sg = lastSeg(); return sg && sg.flow && (sg.flow.branches || []).length ? sg.flow.branches : null; };
+const branchesHere = () => { const sg = lastSeg(); return state.run && !state.run.fixed && sg && sg.flow && (sg.flow.branches || []).length ? sg.flow.branches : null; };
 // the run waits for a branch choice: at its last step, the last flow has branches, none taken yet
 const atBranch = () => { const n = runList().length; return n > 0 && state.step === n - 1 && !!branchesHere() && !state.exitText; };
 function runActor() {
@@ -86,14 +88,16 @@ function statesOf(fid) {
 function stepAt(i) {
   const L_ = runList(); const it = L_[i]; if (!it) return null;
   const sg = state.run.segs[it.seg], fl = sg.flow;
-  const prev = i > 0 ? L_[i - 1].fid : null, next = L_[i + 1] ? L_[i + 1].fid : null, f = D.fns[it.fid];
+  // the first step of a further flow of a path: a new entry (a queue hand-off keeps its caller)
+  const first = i > 0 && it.seg > 0 && L_[i - 1].seg !== it.seg, viaQ = first && sg.via && sg.via.via === 'queue';
+  const prev = i > 0 && (!first || viaQ) ? L_[i - 1].fid : null, next = L_[i + 1] ? L_[i + 1].fid : null, f = D.fns[it.fid];
   return {
     i, fid: it.fid, prev, next, seg: it.seg, flow: fl,
-    kind: !prev ? 'entry' : isAsync(prev, it.fid) ? 'async' : isCall(prev, it.fid) ? 'call' : 'next',
+    kind: !prev ? 'entry' : viaQ || isAsync(prev, it.fid) ? 'async' : isCall(prev, it.fid) ? 'call' : 'next',
     label: (fl && fl.labels && fl.labels[it.fid]) || fnInfo(it.fid).name,
     effects: (fl && fl.effects && fl.effects[it.fid]) || [],
     data: f.data || [], states: statesOf(it.fid), exts: extsOfFn(it.fid),
-    actor: i === 0 ? runActor() : null, mod: f.module,
+    actor: i === 0 ? runActor() : first && !prev ? actorOfFn(it.fid) : null, mod: f.module,
   };
 }
 const curStep = () => (state.step >= 0 ? stepAt(state.step) : null);
@@ -212,7 +216,8 @@ async function doStep(delta = 1) {
 function trimSegs() {
   state.exitText = null;
   const r = state.run; let start = 0;
-  for (let si = 0; si < r.segs.length; si++) { if (si > 0 && state.step < start) { r.segs.length = si; break; } start += r.segs[si].steps.length; }
+  // a fixed run (path, variant) keeps its flows; only the flow added by a jump from a variant is dropped
+  for (let si = 0; si < r.segs.length; si++) { if (si > 0 && state.step < start && (!r.fixed || r.segs[si].extra)) { r.segs.length = si; break; } start += r.segs[si].steps.length; }
 }
 async function replay() { if (state.busy) return; state.busy = true; try { await showStep(); } finally { state.busy = false; } }
 async function stepIn() {
@@ -294,9 +299,10 @@ function renderPlayer() {
   const fl = r && r.segs[0].flow;
   $('#scName').textContent = r ? r.name : t('noPlay');
   $('#pcur').title = r ? r.name + (r.desc ? '\n' + r.desc : '') : '';
-  const act = (fl && fl.actor) || (runActor() ? actorName(runActor()) : '');
+  const act = (r && r.actor) || (fl && fl.actor) || (runActor() ? actorName(runActor()) : '');
   const br = branchesHere();
-  const ex = state.exitText || (lastSeg() && lastSeg().flow && lastSeg().flow.exit) || (br ? br.map((b) => b.cond).join(' / ') : '');
+  const fe = r && r.fixed ? jvEnd() : null;
+  const ex = r && r.fixed ? (fe && fe.exit ? fe.text.replace(/^[^:]+:\s*/, '') : '') : state.exitText || (lastSeg() && lastSeg().flow && lastSeg().flow.exit) || (br ? br.map((b) => b.cond).join(' / ') : '');
   $('#scActor').textContent = r ? [act && `${t('actor')}: ${act}`, ex && `${t('exit')}: ${ex}`].filter(Boolean).join(' · ') || t('stepsN', list.length) : '';
   $('#pStep').innerHTML = `${esc(t('step'))} <kbd>→</kbd>`; $('#pIn').innerHTML = `${esc(t('stepIn'))} <kbd>↵</kbd>`; $('#pOut').innerHTML = `${esc(t('stepOut'))} <kbd>Esc</kbd>`;
   $('#pAuto').textContent = state.playing ? t('pause') : t('auto');
@@ -312,7 +318,7 @@ function renderPlayer() {
     el.onclick = () => { if (!state.busy) { state.step = i; trimSegs(); replay(); } };
   });
   if (extra) { H('span', { class: 'gap' }, tk); for (let i = 0; i < extra; i++) H('span', { class: 'br' }, tk); }
-  $('#capNo').textContent = s ? `${state.step + 1}/${list.length}${extra ? '+' : ''}` : '';
+  $('#capNo').textContent = s ? (r.fixed && r.segs.length > 1 ? jvProgress() : `${state.step + 1}/${list.length}${extra ? '+' : ''}`) : '';
   $('#capTx').textContent = s ? s.label + (state.exitText && state.step === list.length - 1 ? ' → ' + t('exit') + ': ' + state.exitText : '') : r && list.length ? t('start') : t('noPlay');
   $('#capTx').title = s ? fnInfo(s.fid).name : '';
   $('#capMut').innerHTML = s ? effBadges(s).map(mutBadge).join('') : '';
@@ -320,6 +326,14 @@ function renderPlayer() {
   $('#pPrev').disabled = state.step <= 0;
   ['pStep', 'pIn', 'pAuto'].forEach((id) => { $('#' + id).disabled = !list.length; });
   if (!atBranch()) showChoice(false);
+  showPlate(); jvPaintTags();
+}
+// the plate between flows of a path / the end of a variant, in the caption of the player
+function showPlate() {
+  const p = jvPlate(); if (!p || atBranch()) return;
+  const c = $('#choice'); c.classList.add('on');
+  H('span', { class: 'jv-plate ' + p.tone, title: p.text }, c, (p.kind ? jvIcon(p.kind) : '') + esc(p.text));
+  if (p.jump) { const b = H('button', { class: 'pbtn', style: 'height:26px', title: t('jvGoTip') }, c, '↪ ' + esc(cut(t('jvGo'), 30))); b.onclick = () => jvJump(); }
 }
 function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = state.run.segs[it.seg].flow; return (fl && fl.labels && fl.labels[it.fid]) || fnInfo(it.fid).name; }
 
@@ -327,6 +341,7 @@ function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = 
 // options: [value, label, kind ('\0g' = general), top, name]
 function tourOptions() {
   const opts = [];
+  jvJourneys().forEach((j) => opts.push(['journey:' + j.id, j.name, '\0j', false, j.name]));
   D.flows.forEach((fl) => opts.push(['flow:' + fl.i, fl.name, fl.kind || '', !!fl.top, fl.name]));
   if (D.changed.length) opts.push(['changes', t('optChanges'), '\0g', false]);
   if (D.entries.length) opts.push(['overview', t('optOverview'), '\0g', false]);
@@ -335,10 +350,11 @@ function tourOptions() {
 function pickGroups(opts, q) {
   q = q.trim().toLowerCase();
   const ok = (o) => !q || (o[4] || o[1]).toLowerCase().includes(q) || (o[2] && o[2][0] !== '\0' && o[2].toLowerCase().includes(q));
-  const flows = opts.filter((o) => o[2] !== '\0g'), gen = opts.filter((o) => o[2] === '\0g');
+  const flows = opts.filter((o) => o[2] !== '\0g' && o[2] !== '\0j'), gen = opts.filter((o) => o[2] === '\0g'), jr = opts.filter((o) => o[2] === '\0j');
   const hasKinds = flows.some((o) => o[2] || o[3]);
   const gs = [];
   const add = (label, arr) => { arr = arr.filter(ok); if (arr.length) gs.push({ label, items: arr }); };
+  add(t('jvTitle'), jr);
   if (hasKinds) {
     add(t('grpTop'), flows.filter((o) => o[3]));
     add(t('grpGeneral'), gen);
