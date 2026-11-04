@@ -59,7 +59,7 @@ func TestFilesBuildsAutoModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "sub", "a.html")
-	if err := Files(f, out); err != nil {
+	if err := Files(f, out, false); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(out)
@@ -90,5 +90,24 @@ func TestStaticRenderHasNoServeKey(t *testing.T) {
 	live, _ := HTMLLive([]byte(`{"repo":"r"}`), nil, Live{Seq: 3, Events: "/e", Data: "/d"})
 	if !strings.Contains(string(live), `"serve":{"seq":3,"events":"/e","data":"/d"}`) {
 		t.Error("live page lacks the serve key")
+	}
+}
+
+func TestFilesNoSrcDropsBodies(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "facts.json")
+	facts := `{"repo":"demo","functions":{"a.py::f":{"name":"f","cls":null,"start":1,"end":1,"sig":"","doc":"","callees":[],"file":"a.py","module":".","lang":"python","src":"SECRET-BODY"}}}`
+	if err := os.WriteFile(f, []byte(facts), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for noSrc, want := range map[bool]bool{false: true, true: false} {
+		out := filepath.Join(dir, "o.html")
+		if err := Files(f, out, noSrc); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(out)
+		if got := strings.Contains(string(b), "SECRET-BODY"); got != want {
+			t.Errorf("noSrc=%v: body present=%v, want %v", noSrc, got, want)
+		}
 	}
 }

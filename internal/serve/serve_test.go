@@ -94,7 +94,7 @@ func TestHandlers(t *testing.T) {
 	if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("index: %d %s", w.Code, w.Header().Get("Content-Type"))
 	}
-	if strings.Contains(body, "/*ARCH_DATA*/null") || !strings.Contains(body, `"serve":{"seq":1,"events":"/events","data":"/data.json"}`) {
+	if strings.Contains(body, "/*ARCH_DATA*/null") || !strings.Contains(body, `"serve":{"seq":1,"events":"/events","data":"/data.json","src":"/src"}`) {
 		t.Error("index must carry data with the serve endpoints")
 	}
 	if !strings.Contains(body, "app/a.py::alpha") {
@@ -244,5 +244,37 @@ func TestSSEUpdateAfterEdit(t *testing.T) {
 	defer cancel2()
 	if u := next(t, ch2, Ready); u.Seq != 2 || len(u.Flash) != 0 {
 		t.Errorf("reconnect event = %+v", u)
+	}
+}
+
+func TestSrcEndpoint(t *testing.T) {
+	root := newRepo(t)
+	s := newServer(t, root)
+	h := s.Handler()
+	fid := "app/a.py::alpha"
+	w := get(t, h, "GET", "/src?fid="+fid, "127.0.0.1:8000")
+	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != "def alpha -> beta" {
+		t.Errorf("src: %d %q", w.Code, w.Body.String())
+	}
+	if w := get(t, h, "GET", "/src?fid=../../etc/passwd::x", "127.0.0.1:8000"); w.Code != 404 {
+		t.Errorf("a fid that is not in the facts must be 404, got %d", w.Code)
+	}
+	fj, _, _ := s.current()
+	if strings.Contains(string(fj), `"src"`) {
+		t.Error("serve must not embed bodies in the data")
+	}
+}
+
+func TestNoSrcServer(t *testing.T) {
+	s, err := New(Options{Root: newRepo(t), Parsers: []lang.Parser{fakeParser{}}, NoSrc: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	if w := get(t, h, "GET", "/src?fid=app/a.py::alpha", "127.0.0.1:8000"); w.Code != 404 {
+		t.Errorf("--no-src: /src must be 404, got %d", w.Code)
+	}
+	if w := get(t, h, "GET", "/", "127.0.0.1:8000"); strings.Contains(w.Body.String(), `"src":"/src"`) {
+		t.Error("--no-src: the page must not advertise /src")
 	}
 }

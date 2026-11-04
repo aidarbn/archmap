@@ -88,10 +88,10 @@ archmap render --facts facts.json --out arch.html
 ## Commands
 
 ```sh
-archmap extract [--root DIR] [--base REF] [--tests] --out facts.json
-archmap render  --facts facts.json --out arch.html
-archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open]
-archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
+archmap extract [--root DIR] [--base REF] [--tests] [--no-src] --out facts.json
+archmap render  --facts facts.json --out arch.html [--no-src]
+archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
+archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
 archmap version
 ```
 
@@ -104,11 +104,21 @@ archmap version
 - `map` does both; the default output is `<root>/.archmap/arch.html`;
   scenarios start at entry points and follow the call graph.
 - `serve` is described below.
+- Besides functions, `extract` finds the outside systems the code talks to
+  (`externals`: databases, queues, caches, storage, payment/POS/auth providers,
+  found from adapter modules, driver and SDK imports and base URLs) and state
+  machines (`states`: status constants, enums and union types, with transitions
+  taken from assignments, `UpdateStatusIfX(...)` calls and `SET status = '...'`
+  SQL, including named sqlc queries). Only what is plainly visible is reported.
+- Function bodies (cut to 60 lines) go into the output by default; `--no-src`
+  leaves them out, for a page that leaves your machine. `serve` never embeds
+  them: the page reads a body from disk on demand at `/src?fid=` (`--no-src`
+  turns that endpoint off).
 
 ## serve: live map while you code
 
 ```sh
-archmap serve [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
+archmap serve [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
 ```
 
 Prints a `http://127.0.0.1:PORT/` URL (`--open` opens it). The page is the same

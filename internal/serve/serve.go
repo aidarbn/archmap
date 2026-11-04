@@ -45,6 +45,7 @@ type Options struct {
 	Base      string
 	WithTests bool
 	Parsers   []lang.Parser
+	NoSrc     bool          // do not serve function bodies (/src)
 	Poll      time.Duration // mtime poll interval (default 400ms)
 	Debounce  time.Duration // quiet time before a rebuild (default 300ms)
 }
@@ -79,6 +80,7 @@ type Server struct {
 
 	mu     sync.Mutex
 	factsJ []byte
+	srcIdx map[string]srcRef // where each function lives, for /src
 	modelJ []byte
 	last   Update
 	subs   map[chan Update]struct{}
@@ -123,6 +125,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/data.json", s.handleData)
 	mux.HandleFunc("/events", s.handleEvents)
+	if !s.opts.NoSrc {
+		mux.HandleFunc("/src", s.handleSrc)
+	}
 	return guard(mux)
 }
 
@@ -168,7 +173,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fj, mj, u := s.current()
-	html, err := render.HTMLLive(fj, mj, render.Live{Seq: u.Seq, Events: "/events", Data: "/data.json"})
+	html, err := render.HTMLLive(fj, mj, s.live(u.Seq))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -409,6 +414,10 @@ func (s *Server) build(snap snapshot, changed map[string]bool) error {
 	if err != nil {
 		return err
 	}
+	idx := make(map[string]srcRef, len(f.Functions))
+	for fid, fn := range f.Functions {
+		idx[fid] = srcRef{fn.File, fn.Start, fn.End, fn.Lang}
+	}
 
 	// Which functions to flash: new ones, ones whose body text changed (hash of
 	// their lines, so shifting line numbers alone does not count) and ones whose
@@ -445,6 +454,7 @@ func (s *Server) build(snap snapshot, changed map[string]bool) error {
 	s.snap, s.hashes, s.prev = snap, hashes, f
 	s.mu.Lock()
 	s.factsJ, s.modelJ = fj, mj
+	s.srcIdx = idx
 	seq := s.last.Seq + 1
 	s.mu.Unlock()
 	s.publish(Update{Seq: seq, State: Ready, Flash: flash, Ms: time.Since(t0).Milliseconds()})
@@ -483,4 +493,40 @@ func Listen(addr string) (net.Listener, error) {
 		return nil, fmt.Errorf("--addr %q: only loopback addresses (127.0.0.1, ::1, localhost) are allowed", addr)
 	}
 	return net.Listen("tcp", addr)
+}
+
+type srcRef struct {
+	file       string
+	start, end int
+	lang       string
+}
+
+// maxServedSrcLines caps a body returned by /src.
+const maxServedSrcLines = 400
+
+func (s *Server) live(seq int) render.Live {
+	l := render.Live{Seq: seq, Events: "/events", Data: "/data.json"}
+	if !s.opts.NoSrc {
+		l.Src = "/src"
+	}
+	return l
+}
+
+// handleSrc returns the body of a function read from disk: GET /src?fid=<fid>.
+// Only files that are in the current facts can be read.
+func (s *Server) handleSrc(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	ref, ok := s.srcIdx[r.URL.Query().Get("fid")]
+	s.mu.Unlock()
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(s.opts.Root, filepath.FromSlash(ref.file)))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = io.WriteString(w, extract.SourceSlice(string(b), ref.start, ref.end, maxServedSrcLines, ref.lang))
 }

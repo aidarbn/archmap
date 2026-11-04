@@ -38,6 +38,8 @@ type Live struct {
 	Seq    int    `json:"seq"`
 	Events string `json:"events"`
 	Data   string `json:"data"`
+	// Src is the endpoint that returns a function body by ?fid=; empty when bodies are off.
+	Src string `json:"src,omitempty"`
 }
 
 // HTMLLive renders the page for `archmap serve`: same as HTML plus a "serve"
@@ -83,9 +85,10 @@ func page(factsJSON, modelJSON []byte, live *Live) ([]byte, error) {
 	return []byte(html), nil
 }
 
-// Files renders factsPath into out, creating parent directories. The semantic
+// Files renders factsPath into out, creating parent directories; noSrc drops the
+// function bodies from the data. The semantic
 // layer is derived from the facts by autosem.
-func Files(factsPath, out string) error {
+func Files(factsPath, out string, noSrc bool) error {
 	fb, err := os.ReadFile(factsPath)
 	if err != nil {
 		return err
@@ -93,6 +96,19 @@ func Files(factsPath, out string) error {
 	var f facts.Facts
 	if err := json.Unmarshal(fb, &f); err != nil {
 		return fmt.Errorf("facts: %w", err)
+	}
+	if noSrc {
+		for id, fn := range f.Functions {
+			fn.Src = ""
+			f.Functions[id] = fn
+		}
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(&f); err != nil {
+			return err
+		}
+		fb = buf.Bytes()
 	}
 	mb, err := autosem.JSON(&f)
 	if err != nil {
