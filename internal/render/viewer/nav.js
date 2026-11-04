@@ -112,7 +112,12 @@ function setupSearch() {
     else if (e.key === 'Escape') { e.preventDefault(); if (SR.open) closeSearch(); else { q.value = ''; q.blur(); } }
   });
   $('#qpop').addEventListener('mousedown', (e) => { const r = e.target.closest('.qi'); if (r) { e.preventDefault(); pickSearch(+r.dataset.i, e.shiftKey); } });
-  document.addEventListener('mousedown', (e) => { if (SR.open && !e.target.closest('#search')) closeSearch(); });
+  // close on a click anywhere outside (capture: scenes stop the bubbling of their own events), on blur
+  // (late enough for a click on a row) and when the window loses focus
+  document.addEventListener('pointerdown', (e) => { if (SR.open && !e.target.closest('#search')) closeSearch(); }, true);
+  document.addEventListener('mousedown', (e) => { if (SR.open && !e.target.closest('#search')) closeSearch(); }, true);
+  q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) closeSearch(); }, 160));
+  window.addEventListener('blur', () => closeSearch());
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName, typing = tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable;
     if ((e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {

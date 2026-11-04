@@ -19,8 +19,20 @@ class Cam {
     svg.addEventListener('wheel', (e) => {
       e.preventDefault();
       const r = svg.getBoundingClientRect();
+      if (autoBusy()) return; // a level transition is running: the wheel does not move the camera under it
       this.zoomAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, Math.exp(e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
+      semanticZoom(this, e); // zoom.js: dive into / out of a level when the zoom crosses a threshold
     }, { passive: false });
+  }
+  // view box in which rect r (world) takes `ratio` of the free area (by its larger side), centred
+  rectForRatio(r, ratio) {
+    const a = this.freeAspect(), w = Math.max(r.w, r.h * a) / ratio, h = w / a;
+    return this.boxBelow(r.x + r.w / 2 - w / 2, r.y + r.h / 2 - h / 2, w, h);
+  }
+  // world rect of an element of this scene (via its screen box; the view box keeps the stage aspect)
+  worldRect(el) {
+    const r = el.getBoundingClientRect(), s = this.svg.getBoundingClientRect(), k = this.vb.w / (s.width || 1);
+    return { x: this.vb.x + (r.left - s.left) * k, y: this.vb.y + (r.top - s.top) * k, w: r.width * k, h: r.height * k };
   }
   aspect() { const p = this.svg.parentElement; return (p.offsetWidth || 1000) / (p.offsetHeight || 700); }
   // the strip at the top of the scene covered by the crumbs and level buttons: content is fitted below it

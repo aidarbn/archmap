@@ -16,12 +16,13 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, crumbs, minimap, legend. |
 | `playback.js` | Scenario runs: picker, steps through the levels, branches, effects/status badges, auto play. |
 | `panel.js` | Right card for the selection (`setSel`). |
+| `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
 | `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
 | `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. |
 | `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
-`layout.js`, `map.js`, `playback.js`, `panel.js`, `nav.js` (one shared scope), then every `views/*.js` by
+`layout.js`, `map.js`, `playback.js`, `panel.js`, `nav.js`, `zoom.js` (one shared scope), then every `views/*.js` by
 name, **each wrapped in its own `{ … }` block**, then `main.js`. The core list is in
 `render.go` (`coreJS`); views are picked up automatically — adding a view needs no Go change.
 Assembly fails (tests catch it) if a part contains `</script` / `</style`, or a placeholder.

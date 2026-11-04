@@ -342,7 +342,7 @@ function buildMap() {
   exts.forEach((o) => o.tg.forEach((u) => E.push({ a: u, b: o.x.id, w: 1, dash: true })));
   drawPortEdges(E, pos, ge);
   map.cam = new Cam(svg, (vb) => { updateMinimap(vb); svg.classList.toggle('lod-lo', (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
-  map.cam.insetTop = INSET; map.cam.maxW = map.extent.w * 1.8;
+  map.cam.insetTop = INSET; map.cam.maxW = Math.max(map.extent.w, map.extent.h * map.cam.aspect()) * 4; // far enough out for the level to drop below LEAVE (zoom.js)
   wireSelect(svg, map.cam, selectMod, (id) => {
     if (U[id] && U[id].kind === 'g') return expandGroup(U[id].node);
     if (U[id]) return drill(2, { from: map.nodes[id].el, mod: id });
@@ -637,7 +637,7 @@ function buildFns(mod) {
   const x1 = Math.min(frame.x, ...pr.map((r) => r.x)) - 10, x2 = Math.max(frame.x + frame.w, ...pr.map((r) => r.x + r.w)) + 10;
   fv.extent = { x: x1, y: frame.y - (nIn ? 100 : 10), w: x2 - x1, h: frame.h + (nIn ? 100 : 10) + (nOut ? 90 : 10) };
   fv.cam = new Cam(svg);
-  fv.cam.insetTop = INSET; fv.cam.maxW = fv.extent.w * 2.5;
+  fv.cam.insetTop = INSET; fv.cam.maxW = Math.max(fv.extent.w, fv.extent.h * fv.cam.aspect()) * 4;
   wireSelect(svg, fv.cam, selectFn, (id) => {
     if (id.startsWith('port:')) { goModule(id.split(':').slice(2).join(':')); return; }
     drill(3, { from: fv.nodes[id].el, fn: id });
@@ -698,7 +698,8 @@ async function drill(lvl, ctx = {}, inner = false) {
     afterLevel();
   } finally { state.busy = wasBusy; }
 }
-async function up(toLvl, inner = false) {
+// focusRatio (auto zoom-out): the parent's camera is set so the card we leave takes this share of the screen
+async function up(toLvl, inner = false, focusRatio = 0) {
   if (state.level === 0 || (state.busy && !inner)) return; const wasBusy = state.busy;
   const target = toLvl == null ? state.level - 1 : toLvl;
   state.busy = true;
@@ -714,6 +715,7 @@ async function up(toLvl, inner = false) {
         if (!fv || fv.mod !== m) { state.mod = m; buildFns(m); fitFns(); }
         el = fv.nodes[state.fn] && fv.nodes[state.fn].el;
       }
+      if (focusRatio && el && to <= 2) { const cam = [sys.cam, map.cam, fv.cam][to]; cam.set(cam.rectForRatio(cam.worldRect(el), focusRatio)); }
       const rect = el ? relRect(el) : midRect();
       state.level = to;
       await zoomSwap(from, to, rect, 'out');
