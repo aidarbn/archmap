@@ -5,5 +5,5 @@ AM.registerView({
   order: 0,
   title: () => AM.t('viewMap'),
   mount() { /* the map markup is part of shell.html (#v-map) and is built at start-up */ },
-  show(ctx) { ctx.renderPanel(); },
+  show(ctx) { ctx.renderPanel(); ctx.map.marks(); }, // play marks of a level the Scenario tab switched to
 });

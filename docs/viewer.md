@@ -16,10 +16,10 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, crumbs, minimap, legend. |
 | `playback.js` | Scenario runs: picker, steps through the levels, branches, effects/status badges, auto play. |
 | `panel.js` | Right card for the selection (`setSel`). |
-| `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
+| `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), the scale zoom of content without a camera (`AM.zoom.scaleWheel`: code text, the Scenario diagram — past ×1.57 it dives, below ×0.65 it leaves, with the same gate), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
 | `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
 | `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. |
-| `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. |
+| `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. `fitHeader()` keeps the project name at least ~120px wide: when the header runs out of room the branch counters and "changed only" fold into the ⋯ menu, then the labels of the live badge and the Lists button go. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
 `layout.js`, `map.js`, `playback.js`, `panel.js`, `nav.js`, `zoom.js` (one shared scope), then every `views/*.js` by
@@ -85,12 +85,21 @@ logged and do not break the page.
 - **Facts helpers** `AM.fnInfo(fid)`, `AM.fname`, `AM.short(module)`, `AM.modLabel`,
   `AM.layerOf`, `AM.modRole`, `AM.modDesc`, `AM.LAYERS`, `AM.LCOLOR`, `AM.isCall`, `AM.isAsync`,
   `AM.extsOfFn`, `AM.actorName`, `AM.epRole`.
+- **Call graph** `AM.callPath(a, b, max = 8)` — the shortest chain of calls (callees and async hand-offs)
+  `[a, …, b]` or null; `AM.callSite(fid, target)` → `{no, text, file, has, loadable?}` — the line of
+  `fid` that calls `target` (or a callee leading to it); `has` is false while the body is unknown.
+- **Scenarios** `AM.flowGroups(query)` → `[{name, items: [flow], auto?}]` (by actor, then the automatic
+  ones), `AM.flowActor(flow)`.
+- **Zoom** `AM.zoom.scaleWheel(e, {z, set(z), in?(), out?()})` — scale content by the wheel and change the
+  level past the thresholds (once per gesture); `AM.zoom.on` — auto-dive is on.
 - **Code** `AM.hlLine(line, lang)`, `AM.codeHTML(fid, targetFid)` → `{html, hlIdx, has}`,
   `AM.srcOf(fid)`, `AM.loadSrc(fid)` (fetches `/src` only under `archmap serve`),
   `AM.fnSection(fid)` (the function card used by the panel).
 - **Navigation** `AM.setView(id)`, `AM.select(sel)`, `AM.openFn(fid)`, `AM.openMod(module)`,
   `AM.map.jumpToFn(fid, 2|3)`, `AM.map.goModule(module)`, `AM.map.drill`, `AM.map.up`,
-  `AM.map.unitOf(module)`; the scenes are `AM.map.system`, `AM.map.modules` (`pos`, `nodes`,
+  `AM.map.unitOf(module)`, `AM.map.setLevel(level, fid?)` (switch the map's level at once, without the
+  transition — for a view that keeps the map on its level while it is off screen; `AM.map.marks()` puts
+  the play and selection marks back when the map is shown); the scenes are `AM.map.system`, `AM.map.modules` (`pos`, `nodes`,
   `edges`, `extent`), `AM.map.functions`.
 - **Playback** `AM.play.load(key)` (`'flow:<i>'`, `'fn:<fid>'`, `'changes'`, `'overview'`),
   `step(±1)`, `go(i)`, `stepIn`, `stepOut`, `auto`, `pause`, `reset`, `playFrom(fid)`,

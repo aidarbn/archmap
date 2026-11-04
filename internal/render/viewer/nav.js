@@ -339,3 +339,4 @@ function watchMarks() {
 bus.on('filter', () => { if (LS.open) drawLists(); });
 bus.on('level', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
 bus.on('view', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
+Object.assign(AM, { flowGroups, flowActor });

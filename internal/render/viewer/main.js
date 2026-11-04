@@ -55,7 +55,29 @@ function renderHeader() {
   $('#themeBtn').title = t('theme'); paintAutoZoom(); paintFlowsBtn();
   $('#zIn').title = t('zIn'); $('#zOut').title = t('zOut'); $('#zFit').title = t('zFit');
   $$('#langSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === LANG));
+  $('#moreBtn').title = t('moreTip');
   document.documentElement.lang = LANG;
+  fitHeader();
+}
+// fitHeader(): the project name keeps at least ~120px (then an ellipsis); when the header runs out of room the
+// branch counters and "changed only" fold into the ⋯ menu (compact), then the labels of the live badge and of the
+// Lists button go (compact2)
+function fitHeader() {
+  const h = $('header'), nm = $('#repoName'); if (!h || !nm) return;
+  h.classList.remove('compact', 'compact2');
+  // tight: the header overflows, or the name is cut although it would fit in 240px
+  const tight = () => h.scrollWidth > h.clientWidth + 1 || nm.clientWidth + 1 < Math.min(nm.scrollWidth, 240);
+  const hasChg = !!$('#chg').childElementCount;
+  if (tight() && hasChg) h.classList.add('compact');
+  if (tight()) h.classList.add('compact2');
+  $('#moreBtn').hidden = !h.classList.contains('compact');
+  if ($('#moreBtn').hidden) toggleMore(false);
+}
+function toggleMore(on) {
+  const h = $('header'); on = on == null ? !h.classList.contains('more-open') : on;
+  h.classList.toggle('more-open', on); $('#moreBtn').setAttribute('aria-expanded', on);
+  const c = $('#chg'); c.style.left = ''; // the menu opens under its button, inside the window
+  if (on) c.style.left = Math.max(8, Math.min($('#moreBtn').offsetLeft, h.clientWidth - c.offsetWidth - 8)) + 'px';
 }
 
 /* ---------- theme and language ---------- */
@@ -194,7 +216,10 @@ function init() {
     else if (e.key === 'ArrowLeft') { e.preventDefault(); doStep(-1); }
     else if (e.key === 'Home') { e.preventDefault(); resetRun(); }
   });
-  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { fitHeader(); rebuildMap(); bus.emit('resize'); }, 150); });
+  $('#moreBtn').onclick = (e) => { e.stopPropagation(); toggleMore(); };
+  document.addEventListener('mousedown', (e) => { if ($('header').classList.contains('more-open') && !e.target.closest('#chg, #moreBtn')) toggleMore(false); });
+  if (window.ResizeObserver) { let fr = 0; new ResizeObserver(() => { cancelAnimationFrame(fr); fr = requestAnimationFrame(fitHeader); }).observe($('#live')); }
   rebuildMap();
   loadRun(defaultRunKey());
   setView('map');

@@ -42,8 +42,15 @@ button, select, input { font: inherit; color: inherit; }
 
 /* header */
 header { display: flex; align-items: center; gap: 16px; padding: 0 16px 0 18px; background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
-.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
-.brand b { font-size: 15px; letter-spacing: -.01em; white-space: nowrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 150px; flex: 0 1 auto; overflow: hidden; }
+.brand b { font-size: 15px; letter-spacing: -.01em; white-space: nowrap; min-width: 120px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+header { position: relative; }
+header #moreBtn { flex: none; font-size: 16px; line-height: 1; }
+header.compact #chg { display: none; }
+header.compact.more-open #chg { display: flex; flex-wrap: wrap; position: absolute; top: calc(100% + 6px); z-index: 30; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-2, 0 8px 24px rgba(0,0,0,.14)); }
+header.compact2 #liveInfo, header.compact2 #listBtn span, header.compact2 #flowsBtn { display: none; } /* scenarios stay in Lists and the Scenario tab */
+header.compact2 .search { min-width: 100px; }
+header.compact2 { gap: 10px; }
 .brand .logo { width: 22px; height: 22px; align-self: center; flex: none; }
 .brand .meta { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tabs { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: 9px; margin-left: 4px; flex: none; }
