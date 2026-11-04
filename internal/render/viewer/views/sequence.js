@@ -158,9 +158,10 @@ function seqRender() {
   const m = seqModel();
   if (!m || !m.rows.length) { AM.h('div', { class: 'seq-empty' }, sWrap, AM.esc(AM.t('seqEmpty'))); seqSide(); return; }
   const parts = m.parts, np = parts.length;
-  const cw = sWrap.clientWidth || 900, x0 = 84, colMin = 150;
-  const W = Math.max(cw - 1, x0 * 2 + (np - 1) * colMin);
-  const colW = np > 1 ? (W - x0 * 2) / (np - 1) : 0;
+  // the right margin is wider than the left: a self-call loop with its label hangs to the right of the last lifeline
+  const cw = sWrap.clientWidth || 900, x0 = 84, xr = 240, colMin = 150;
+  const W = Math.max(cw - 1, x0 + xr + (np - 1) * colMin);
+  const colW = np > 1 ? (W - x0 - xr) / (np - 1) : 0;
   const X = {}; parts.forEach((p, i) => { X[p.key] = np > 1 ? x0 + i * colW : W / 2; });
 
   // vertical layout

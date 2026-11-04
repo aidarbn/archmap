@@ -15,9 +15,58 @@ with [tree-sitter](https://tree-sitter.github.io/).
 
 The viewer UI is bilingual (English and Russian): it follows the browser
 language, can be forced with `?lang=en` / `?lang=ru`, and has an EN/RU switch
-in the header. One scene goes from the system context down to modules, functions
-and code; scenarios play through all four levels. How the viewer is built and how
-to add a view: [docs/viewer.md](docs/viewer.md).
+in the header, plus a light and a dark theme. See [Views](#views) for what the
+tabs show. How the viewer is built and how to add a view:
+[docs/viewer.md](docs/viewer.md).
+
+## Views
+
+The header has five tabs; a scenario that is playing stays in sync across all of
+them (the player bar at the bottom is shared).
+
+- **Map** is one scene that goes through four **levels of understanding**:
+  system (who uses it and what it talks to) -> modules -> functions of a module
+  -> code. Click selects an element and its links; double-click or "Inside" dives
+  in, Esc, "Back" or the breadcrumbs go up. A scenario plays through all four
+  levels, so you can follow a request from the outside system down to the lines
+  that run.
+- **Scenario** shows the same scenario as a sequence diagram: lifelines for the
+  actor, modules and external systems, `alt` blocks for the branches
+  (`arch:on`), a pause where a step goes through a queue, and the effects and
+  status changes of every step. A module mini map shows where the step is.
+- **API** lists every endpoint (HTTP, gRPC, WebSocket, tasks, CLI) grouped by
+  service, with filters by kind and access and a search. The card shows the
+  request and response types, the function, the scenario to play and the tables
+  the endpoint reaches through its calls; a table opens in the Data view.
+- **Data** shows the schema as an ER diagram (tables, fields, foreign keys), a
+  table card (who reads and changes it, which endpoints reach it) and an
+  endpoints x tables matrix. An endpoint in the card opens in the API view.
+  While a scenario plays, the tables the current step touches are marked.
+- **Statuses** draws the state machines found in the code (status constants and
+  enums, transitions from assignments, `UpdateStatusIfX(...)` calls and SQL,
+  plus `arch:state` lines); the transition of the current step lights up.
+
+Search (`/` or Ctrl/Cmd+K) finds functions, modules and files; the Lists
+drop-down holds modules by layer, all functions and the branch changes.
+
+![API view on spring-petclinic](docs/img/api-petclinic.png)
+*API: endpoints of [spring-petclinic](https://github.com/spring-projects/spring-petclinic) by controller, the card on the right.*
+
+![Data view on spring-petclinic](docs/img/data-petclinic.png)
+*Data: the schema of spring-petclinic with the selected table and its links.*
+
+![Scenario view on django-oscar](docs/img/sequence-oscar.png)
+*Scenario: a flow written with `arch:` lines (see below), on [django-oscar](https://github.com/django-oscar/django-oscar); the markup was added to a temporary copy, not to the project.*
+
+![Statuses view on django-oscar](docs/img/status-oscar.png)
+*Statuses: a state machine from `arch:state` lines on the same copy.*
+
+Endpoints are found from routers (Go: gin, chi, echo and the like), decorators
+(FastAPI, Flask, Express-style), Django/DRF urls, NestJS, Spring annotations,
+Next.js routes, Rails routes, `.proto` files and background tasks; tables come from migrations, SQL schemas and ORM models, and the access
+of a function to a table from queries (including named sqlc queries) and ORM
+calls. As everywhere in archmap, only what is plainly visible is reported: a
+project with no endpoints or tables gets an empty tab with a note, not a guess.
 
 ## How it explains code
 
@@ -124,7 +173,21 @@ archmap version
 The automatic scenarios follow the call graph. To tell the story yourself, mark
 functions with `arch:` lines in the comment right above them (a decorator or
 annotation line between the comment and the declaration is fine). It works in
-every supported language; the comment style is the language's own.
+every supported language; the comment style is the language's own. The markup
+feeds the Scenario view (flows, steps, branches) and the Statuses view
+(`arch:state`); `archmap lint` checks it. The screenshots above of django-oscar
+come from a temporary copy with exactly this kind of markup, for example:
+
+```python
+# arch:flow place-order "Place an order"
+# arch:actor Customer
+# arch:exit "the order is saved and the customer is notified"
+def place_order(self, basket, total, ...):
+
+# arch:step place-order "write the order header"
+# arch:state order: new -> pending
+def create_order_model(self, ...):
+```
 
 ```go
 // Request a Kaspi QR code for the order.
@@ -212,6 +275,8 @@ viewer as `map`, but it follows the repo:
   changed functions), rebuilding, or the error text; it reconnects by itself.
   Function code is read from `/src` on demand (not embedded); the code of a
   changed function is re-read.
+- All five tabs follow the update (the endpoint list, the ER diagram and the
+  state machines are rebuilt from the new facts).
 - Search (`/` or Ctrl/Cmd+K) finds functions, modules and files; Enter opens the
   function on the map, Shift+Enter in its code. The Lists drop-down holds
   modules by layer, all functions with a filter, and the branch changes.
