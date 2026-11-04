@@ -30,7 +30,7 @@ AM.addI18n({
     seqZoomHint: 'щипок / ⌘/Ctrl+колесо — масштаб и уровень', seqNoSrc: 'исходник недоступен', seqCallLine: 'строка вызова',
     dockBottom: 'Панель снизу', dockRight: 'Панель справа', dockMin: 'Свернуть в полоску', dockRestore: 'Развернуть диаграмму',
     dockFull: 'На весь экран (карта скрыта)', dockUnfull: 'Вернуть карту (Esc)', dockClose: 'Закрыть диаграмму',
-    dockGrip: 'Потяните, чтобы изменить размер; двойной щелчок — по умолчанию', dockToggle: 'Диаграмма последовательности сценария',
+    dockGrip: 'Потяните, чтобы изменить размер; двойной щелчок — по умолчанию', dockToggle: 'Сценарий: лист и последовательность',
   },
   en: {
     seqTitle: 'Scenario', seqEntry: 'Entry', seqReply: 'reply', seqPause: 'pause: the job waits in the queue', seqEnq: 'enqueue',
@@ -45,7 +45,7 @@ AM.addI18n({
     seqZoomHint: 'pinch / ⌘/Ctrl+wheel — zoom and level', seqNoSrc: 'source unavailable', seqCallLine: 'call line',
     dockBottom: 'Panel at the bottom', dockRight: 'Panel on the right', dockMin: 'Collapse to a strip', dockRestore: 'Expand the diagram',
     dockFull: 'Full screen (hides the map)', dockUnfull: 'Back to the map (Esc)', dockClose: 'Close the diagram',
-    dockGrip: 'Drag to resize; double-click for the default', dockToggle: 'Sequence diagram of the scenario',
+    dockGrip: 'Drag to resize; double-click for the default', dockToggle: 'Scenario: sheet and sequence',
   },
 });
 
@@ -62,6 +62,17 @@ const sOpen = new Set(); // expanded branch previews
 const sSub = new Set();  // messages opened into frames (keys)
 const sReq = new Set();  // function bodies already requested for the call lines
 try { sLink = localStorage.getItem('archmap.seqlink') !== '0'; } catch (e) { /* file:// without storage */ }
+// the dock shows the scenario sheet (views/sheet.js, the default) or the sequence diagram; the choice is remembered
+let sMode = 'sheet';
+try { if (localStorage.getItem('archmap.seqmode') === 'seq') sMode = 'seq'; } catch (e) { /* file:// without storage */ }
+const isSheet = () => sMode === 'sheet' && !!AM.sheet;
+function seqMode(mode) {
+  if (mode === sMode) return;
+  sMode = mode === 'seq' ? 'seq' : 'sheet';
+  try { localStorage.setItem('archmap.seqmode', sMode); } catch (e) { /* ignore */ }
+  if (!isSheet() && AM.sheet) AM.sheet.clear();
+  if (sShown()) { seqRender(); seqSync(false); } else sDirty = true;
+}
 
 const D_ = () => AM.D;
 const txt = (s, n) => AM.cut(s, n);
@@ -100,6 +111,7 @@ function seqModel() {
   const callers = new Map();
   const caller = (s) => {
     if (!s.prev) return null;
+    if (s.planned) return s.prev;
     const ck = s.i >= 0 ? s.i : 'p' + s.prev + '>' + s.fid;
     if (callers.has(ck)) return callers.get(ck);
     let c = s.prev;
@@ -149,22 +161,23 @@ function seqModel() {
   const groups = (l, steps) => {
     const out = []; let cur = null;
     steps.forEach((s) => {
-      const src = caller(s), fromK = src ? partAt(l, src) : 'actor', toK = partAt(l, s.fid);
-      if (!cur || s.kind === 'async' || fromK !== toK) { cur = { l, from: fromK, to: toK, src, async: s.kind === 'async', steps: [s] }; out.push(cur); }
+      // a planned step (no code yet) is its own message to the module it is meant for (or the service)
+      const src = caller(s), fromK = src ? partAt(l, src) : 'actor', toK = s.planned ? (l > 0 && s.mod ? modPart(s.mod) : svcPart()) : partAt(l, s.fid);
+      if (!cur || s.kind === 'async' || s.planned || cur.plan || fromK !== toK) { cur = { l, from: fromK, to: toK, src, async: s.kind === 'async', plan: !!s.planned, steps: [s] }; out.push(cur); }
       else cur.steps.push(s);
     });
     return out;
   };
   // the chain of calls from the caller of s to s (for frames on the function and code levels)
   const hops = (s) => { const src = caller(s); if (!src) return []; return AM.callPath(src, s.fid, SEQ_HOPS) || [src, s.fid]; };
-  const enterable = (g) => g.l < 2 || g.steps.some((s) => hops(s).length > (g.l === 3 ? 2 : 1));
+  const enterable = (g) => !g.plan && g.l < 2 || g.steps.some((s) => hops(s).length > (g.l === 3 ? 2 : 1));
 
   const emitGroups = (l, steps, pkey, top) => {
     groups(l, steps).forEach((g) => {
       const h = g.steps[0], real = h.i >= 0, st = idxOf(g.steps);
       if (top && real && fr.length) closeReplies(depthOf(h.i));
       const key = pkey + '/' + l + ':' + (real ? h.i : 'p' + h.fid) + ':' + g.from + '>' + g.to;
-      const base = { k: 'msg', steps: st, i: real ? h.i : -1, pv: !real, fid: h.fid, main: true, key, l, more: g.steps.length - 1, titles: g.steps.map((s) => s.label) };
+      const base = { k: 'msg', steps: st, i: real ? h.i : -1, pv: !real, fid: h.fid, main: true, key, l, more: g.steps.length - 1, titles: g.steps.map((s) => s.label), plan: g.plan };
       const can = enterable(g), isOpen = can && sSub.has(key);
       const badges = badgesOf(g.steps);
       if (g.async) {
@@ -175,7 +188,7 @@ function seqModel() {
       } else {
         rows.push(Object.assign({}, base, { dir: g.from === g.to ? 'self' : 'call', from: g.from, to: g.to, text: h.label, badges, fname: AM.fnInfo(h.fid).name, can, open: isOpen }));
       }
-      if (l === 3 && g.src && !isOpen) codeRow(g.src, h.fid, g.from, g.to, st, !real);
+      if (l === 3 && g.src && !isOpen && !g.plan) codeRow(g.src, h.fid, g.from, g.to, st, !real);
       if (isOpen) {
         rows.push({ k: 'alt', t: 'start', sub: true, key, l: Math.min(3, l + 1), guard: h.label });
         if (l < 2) emitGroups(l + 1, g.steps, key, false);
@@ -191,7 +204,7 @@ function seqModel() {
         });
         rows.push({ k: 'alt', t: 'end', sub: true });
       } else g.steps.forEach((s) => extRows(s, g.to, l));
-      if (top && real && fr.length && !g.async && g.from !== g.to) open.push({ from: g.from, to: g.to, depth: depthOf(h.i), i: h.i });
+      if (top && real && fr.length && !g.async && !g.plan && g.from !== g.to) open.push({ from: g.from, to: g.to, depth: depthOf(h.i), i: h.i });
     });
   };
   const exitRow = (text, taken) => rows.push({ k: 'exit', text: AM.L(text), good: taken !== false && !seqBad.test(AM.L(text)) });
@@ -288,6 +301,7 @@ function seqToggle(key) {
 
 function seqRender() {
   sDirty = false; sItems = []; sAct = null;
+  if (isSheet()) { seqBar(); AM.sheet.render(sWrap, { level: sLevel, setLevel: (l) => seqSetLevel(l) }); return; }
   const top = sWrap.scrollTop, left = sWrap.scrollLeft;
   sWrap.innerHTML = '';
   seqBar();
@@ -458,7 +472,7 @@ function seqRender() {
     // message
     const a = X[r.from], b = X[r.to], reply = r.dir === 'reply';
     const yy = o.y + (reply ? 16 : 28);
-    const cls = 'msg ' + (reply ? 'reply' : r.dir === 'async' ? 'async' : '') + (r.pv ? ' pv' : '') + (r.sub ? ' sub' : '') + (r.open ? ' opened' : '');
+    const cls = 'msg ' + (reply ? 'reply' : r.dir === 'async' ? 'async' : '') + (r.plan ? ' plan' : '') + (r.pv ? ' pv' : '') + (r.sub ? ' sub' : '') + (r.open ? ' opened' : '');
     const g = AM.svg('g', { class: cls, tabindex: r.main ? 0 : null, role: r.main ? 'button' : null, 'data-i': r.steps && r.steps.length ? r.steps[0] : -1, 'data-fid': r.fid || '', 'data-key': r.key || '' }, gm);
     const mk = reply ? 'url(#arrM)' : r.dir === 'async' ? 'url(#arrO)' : 'url(#arrT)';
     let lx = (a + b) / 2, labEnd;
@@ -502,8 +516,6 @@ function seqRender() {
     });
     sItems.push({ g, steps: r.pv ? [] : (r.steps || []), main: r.main, sub: r.sub, ext: r.ext, y: o.y + 20, x: b, x0: a, fid: r.fid, pv: r.pv, key: r.key });
   });
-  // the editor (views/editor.js) adds the planned steps of a described scenario below the diagram
-  if (AM.spec && AM.spec.seqPlanned) { const add = AM.spec.seqPlanned({ svg, parts, X, W, Ht, sZ }); if (add) sDim = { W, Ht: Ht + add }; }
   sAct = AM.svg('rect', { class: 'act cur', width: 10, rx: 2, x: -100, y: -100, height: 0 }, gl);
   sWrap.scrollTop = top; sWrap.scrollLeft = left;
   if (need.length) {
@@ -516,10 +528,19 @@ function seqRender() {
 function seqBar() {
   if (!sBar) return;
   sBar.innerHTML = '';
+  if (AM.sheet) {
+    const md = AM.h('span', { class: 'seg sd-mode', role: 'group', 'aria-label': 'view' }, sBar);
+    [['sheet', 'shSheet', 'shSheetTip'], ['seq', 'shSeq', 'shSeqTip']].forEach(([k, lab, tip]) => {
+      const b = AM.h('button', { 'aria-pressed': sMode === k, 'data-mode': k, title: AM.t(tip) }, md, AM.esc(AM.t(lab)));
+      b.onclick = () => seqMode(k);
+    });
+  }
+  const sheet = isSheet();
   const seg = AM.h('span', { class: 'seg', role: 'group', 'aria-label': 'level' }, sBar);
   AM.t('lv').forEach((name, i) => {
-    const b = AM.h('button', { 'aria-pressed': i === sLevel, 'data-l': i }, seg, AM.esc(name));
-    b.onclick = () => seqSetLevel(i);
+    if (sheet && i === 3) return; // the sheet has no code level: "functions" stands for it
+    const b = AM.h('button', { 'aria-pressed': i === (sheet ? Math.min(2, sLevel) : sLevel), 'data-l': i }, seg, AM.esc(name));
+    b.onclick = () => (sheet && i === 2 && sLevel === 3 ? null : seqSetLevel(i));
   });
   const lk = AM.h('label', { class: 'lnk', title: AM.t('seqLinkTip') }, sBar);
   const cb = AM.h('input', { type: 'checkbox' }, lk); cb.checked = sLink;
@@ -529,12 +550,12 @@ function seqBar() {
     try { localStorage.setItem('archmap.seqlink', sLink ? '1' : '0'); } catch (e) { /* ignore */ }
     if (sLink && AM.map.level !== sLevel) AM.map.setLevel(sLevel, seqFocusFid(seqFocusStep()));
   };
-  if (sLevel >= 2) {
+  if (sLevel >= 2 && !sheet) {
     const s = AM.play.current(), m = sScope || (AM.state.level === 2 && AM.state.mod) || (s && s.mod) || (AM.play.stepAt(0) || {}).mod;
     const b = AM.h('button', { class: 'chip-btn', 'aria-pressed': !!sScope, title: AM.t('seqScopeTip') }, sBar, AM.esc(sScope ? AM.t('seqScopeMod', AM.short(sScope)) : AM.t('seqScopeAll')));
     b.onclick = () => { sScope = sScope ? null : m || null; seqRender(); seqSync(true); };
   }
-  if (sSub.size) {
+  if (sSub.size && !sheet) {
     const b = AM.h('button', { class: 'chip-btn' }, sBar, AM.esc(AM.t('seqFoldAll')));
     b.onclick = () => { sSub.clear(); seqRender(); seqSync(true); };
   }
@@ -589,6 +610,7 @@ function seqScale(z, e) {
 }
 function seqWheel(e) {
   if (!sShown()) return;
+  if (isSheet()) { AM.sheet.wheel(e, sLevel, (l) => seqSetLevel(l)); return; }
   if (!AM.zoom.isZoomWheel(e)) return; // a plain wheel / two-finger scroll scrolls the diagram natively
   const focus = seqStepAt(e);
   AM.zoom.scaleWheel(e, {
@@ -606,6 +628,7 @@ function seqSig() {
 }
 // seqSync(keep): light the messages of the current step; keep = do not scroll
 function seqSync(keep) {
+  if (isSheet()) { AM.sheet.sync(keep); return; }
   const cur = AM.state.step;
   let last = null;
   sItems.forEach((it) => {
@@ -640,6 +663,7 @@ function seqRefresh(force) {
   seqSync();
 }
 function seqSelect(sel) {
+  if (isSheet()) { AM.sheet.select(sel); return; }
   if (!sItems.length) return;
   sItems.forEach((it) => it.g.classList.toggle('sel', !!sel && sel.t === 'fn' && it.fid === sel.id && !!it.main));
 }
@@ -904,6 +928,8 @@ AM.dock = {
   open(full) { const r = AM.state.run; if (!r || !sdBuild()) return; sUser = { key: r.key, on: true }; if (full) sFull = true; sdSync(true, 0); },
   esc: sdEsc,
   refresh() { if (sDock) seqRefresh(true); },
+  // mode: 'sheet' (the scenario sheet) or 'seq' (the sequence diagram)
+  get mode() { return isSheet() ? 'sheet' : 'seq'; }, setMode: (m) => seqMode(m),
   get shown() { return sShown(); },
 };
 
@@ -916,3 +942,9 @@ AM.bus.on('view', () => { if (sDock) sdSync(false, 0); });
 AM.bus.on('lang', () => { if (!sDock) return; sdPopMount(); sdTitles(); sSig = seqSig(); sdNames(); if (sShown()) { seqRender(); seqSync(); } else sDirty = true; });
 AM.bus.on('live', () => { if (!sDock) return; seqListDraw(); sdSync(true); });
 AM.bus.on('resize', () => { if (sDock) sdSync(true, 0); });
+// a walk step / its arrows changed: the sheet grows (the sequence follows the run by itself)
+AM.bus.on('walk', (w) => {
+  if (!sDock || !isSheet()) return;
+  if (!sShown()) { sDirty = true; return; }
+  if (w && w.kind === 'sel') AM.sheet.sync(true); else { seqRender(); seqSync(true); }
+});

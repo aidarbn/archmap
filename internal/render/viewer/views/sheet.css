@@ -1,0 +1,92 @@
+/* views/sheet.css — the scenario sheet in the sequence dock (views/sheet.js) */
+.seq-wrap.sh-host { cursor: grab; background: var(--bg); }
+.seq-wrap.sh-host.panning { cursor: grabbing; user-select: none; }
+.sh-box { display: flex; min-width: 100%; min-height: calc(100% - var(--sh-strip, 0px)); }
+.sh-box > svg.sh { margin: auto; flex: none; display: block; }
+svg.sh-old { position: absolute; pointer-events: none; margin: 0; }
+.sh-strip { position: sticky; top: 0; left: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 12px; background: color-mix(in oklab, var(--surface) 92%, transparent); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--text-2); cursor: default; }
+.sh-strip[hidden] { display: none; }
+.sh-strip .seg { border: 1px solid var(--line-2); background: var(--surface); color: var(--text); border-radius: 12px; padding: 2px 10px; font: 12px var(--font); cursor: pointer; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-strip .seg b { font: 600 11px var(--mono); color: var(--text-2); margin-right: 2px; }
+.sh-strip .seg:hover, .sh-strip .seg:focus-visible { border-color: var(--accent); outline: none; }
+.sh-strip .seg.cur { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.sh-strip .sep { color: var(--muted); }
+.sh-strip .ex { color: var(--text); }
+.sh-strip .ex i { font-style: normal; font-weight: 600; color: var(--text-2); }
+.sh-strip .hint { color: var(--muted); }
+
+svg.sh { font-family: var(--font); overflow: visible; }
+svg.sh .band { fill: color-mix(in oklab, var(--surface-2) 60%, transparent); }
+svg.sh .colh { font: 600 10.5px var(--font); fill: var(--muted); letter-spacing: .07em; }
+/* frames of modules */
+svg.sh .fr { cursor: pointer; }
+svg.sh .fr rect { fill: color-mix(in oklab, var(--lc, var(--oth)) 6%, var(--surface)); stroke: color-mix(in oklab, var(--lc, var(--oth)) 42%, var(--line)); stroke-width: 1.2; }
+svg.sh .fr text { font: 600 11px var(--font); fill: var(--text-2); }
+svg.sh .fr.plan rect { stroke-dasharray: 5 4; }
+svg.sh .fr.ghost { opacity: .55; }
+svg.sh .fr.ghost rect { stroke-dasharray: 4 3; }
+svg.sh .fr:hover rect { stroke: var(--accent); }
+/* nodes */
+svg.sh .n { cursor: pointer; transition: opacity var(--t); }
+svg.sh .n rect.b { fill: var(--surface); stroke: var(--line-2); stroke-width: 1.2; transition: fill var(--t), stroke var(--t); }
+svg.sh .n .strip { fill: var(--lc, var(--oth)); }
+svg.sh .n text { fill: var(--text); pointer-events: none; }
+svg.sh .n text.lb { font: 12px var(--font); }
+svg.sh .n text.lb.mono { font: 11.5px var(--mono); }
+svg.sh .n text.sub { font: 10px var(--font); fill: var(--muted); }
+svg.sh .n.k-mod text.lb, svg.sh .n.k-svc text.lb { font: 600 12px var(--font); }
+svg.sh .n.k-actor rect.b { fill: var(--surface-2); stroke: var(--text-2); }
+svg.sh .n.k-actor text.lb { font-weight: 600; }
+svg.sh .n.k-svc rect.b { fill: color-mix(in oklab, var(--accent) 7%, var(--surface)); stroke: color-mix(in oklab, var(--accent) 40%, var(--line-2)); }
+svg.sh .n.k-ext rect.b, svg.sh .n.k-queue rect.b { fill: var(--surface-2); stroke: var(--ext); }
+svg.sh .n.k-queue rect.b { stroke-dasharray: 6 3; }
+svg.sh .n.k-plan rect.b, svg.sh .n.plan rect.b { stroke: var(--muted); stroke-dasharray: 5 3; fill: color-mix(in oklab, var(--surface) 70%, transparent); }
+svg.sh .n.k-plan text.lb, svg.sh .n.plan text.lb { font-style: italic; fill: var(--text-2); }
+svg.sh .n.k-out rect.b { fill: color-mix(in oklab, var(--good) 9%, var(--surface)); stroke: var(--good); stroke-dasharray: 4 3; }
+svg.sh .n.k-out.bad rect.b { fill: color-mix(in oklab, var(--critical) 9%, var(--surface)); stroke: var(--critical); }
+svg.sh .n.k-out.taken rect.b { stroke-dasharray: none; stroke-width: 2; }
+svg.sh .n.k-flowref rect.b { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 5 3; }
+svg.sh .n.ghost { opacity: .6; }
+svg.sh .n.ghost rect.b { stroke-dasharray: 4 3; }
+svg.sh .n .inner rect { fill: var(--surface-2); stroke: var(--line-2); }
+svg.sh .n .inner text { font: 600 10px var(--font); fill: var(--text-2); }
+svg.sh .n:hover rect.b, svg.sh .n:focus-visible rect.b, svg.sh .n.sel rect.b { stroke: var(--accent); }
+svg.sh .n:focus-visible { outline: none; }
+svg.sh .n.cur rect.b { stroke: var(--accent); stroke-width: 2.4; fill: var(--accent-soft); }
+svg.sh .n.cur .inner rect { fill: var(--accent); stroke: var(--accent); }
+svg.sh .n.cur .inner text { fill: var(--surface); }
+/* arrows */
+svg.sh .e { cursor: pointer; transition: opacity var(--t); }
+svg.sh .e path.l { fill: none; stroke: var(--edge); stroke-width: 1.5; marker-end: url(#arrT); transition: stroke var(--t), stroke-width var(--t); }
+svg.sh .e path.hit { fill: none; stroke: transparent; stroke-width: 12; }
+svg.sh .e.k-enq path.l, svg.sh .e.k-deq path.l { stroke-dasharray: 7 4; marker-end: url(#arrO); }
+svg.sh .e.k-ext path.l { stroke-width: 1.2; stroke-dasharray: 2 3; }
+svg.sh .e.k-plan path.l { stroke: var(--muted); stroke-dasharray: 4 3; marker-end: url(#arrM); }
+svg.sh .e.k-branch path.l { stroke: var(--muted); stroke-dasharray: 5 3; marker-end: url(#arrM); }
+svg.sh .e.k-branch.taken path.l { stroke: var(--text-2); stroke-dasharray: none; marker-end: url(#arrT); }
+svg.sh .e.k-opt path.l { stroke: var(--accent); stroke-dasharray: 5 4; opacity: .55; marker-end: url(#arrA); }
+svg.sh .e.k-opt.sel path.l { opacity: 1; stroke-width: 2.4; stroke-dasharray: none; }
+svg.sh .e.k-opt.seen path.l { opacity: .3; }
+svg.sh .e:hover path.l { stroke: var(--accent); }
+svg.sh .e.cur path.l { stroke: var(--accent); stroke-width: 2.6; marker-end: url(#arrA); }
+svg.sh .e.choice path.l { stroke: var(--accent); stroke-dasharray: 5 3; opacity: 1; }
+/* numbers and tags */
+svg.sh .num { cursor: pointer; }
+svg.sh .num rect { fill: var(--surface); stroke: var(--text-2); stroke-width: 1.2; }
+svg.sh .num text { font: 600 10.5px var(--font); fill: var(--text); pointer-events: none; }
+svg.sh .num:hover rect, svg.sh .num:focus-visible rect { stroke: var(--accent); }
+svg.sh .num:focus-visible { outline: none; }
+svg.sh .num.cur rect, svg.sh .num.sel rect { fill: var(--accent); stroke: var(--accent); }
+svg.sh .num.cur text, svg.sh .num.sel text { fill: var(--surface); }
+svg.sh .num.choice rect { stroke: var(--accent); stroke-width: 2; }
+svg.sh .tag rect { fill: color-mix(in oklab, var(--surface) 92%, transparent); stroke: var(--line); }
+svg.sh .tag text { font: 11px var(--mono); fill: var(--text-2); }
+svg.sh .tag.cond text { font-family: var(--font); font-style: italic; }
+svg.sh .tag .lead { fill: none; stroke: var(--line-2); stroke-dasharray: 2 2; }
+svg.sh .tag.cur rect { stroke: var(--accent); }
+svg.sh .tag.cur text { fill: var(--text); }
+svg.sh .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
+/* playback: future dimmed, past saturated */
+svg.sh .future { opacity: .3; }
+svg.sh .e.future.choice, svg.sh .num.future.choice, svg.sh .n.future.choice { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { svg.sh * { transition: none !important; } }

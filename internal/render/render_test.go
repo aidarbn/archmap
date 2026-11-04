@@ -207,3 +207,18 @@ func TestLiveFlashVisibleAndPersistent(t *testing.T) {
 		t.Error("the flash animation must last 3.2 s")
 	}
 }
+
+// The scenario sheet is a part of the sequence dock: its view file follows sequence.js (the dock calls AM.sheet
+// at run time) and comes with its own styles.
+func TestScenarioSheetAssembled(t *testing.T) {
+	v := Viewer()
+	seq, sheet := strings.Index(v, "/* --- views/sequence.js --- */"), strings.Index(v, "/* --- views/sheet.js --- */")
+	if seq < 0 || sheet < 0 || sheet < seq {
+		t.Fatalf("views/sheet.js must be assembled after views/sequence.js (%d, %d)", seq, sheet)
+	}
+	for _, s := range []string{"/* --- views/sheet.css --- */", "AM.sheet = {", "flowSteps", "planMod"} {
+		if !strings.Contains(v, s) {
+			t.Errorf("%q missing from the page", s)
+		}
+	}
+}
