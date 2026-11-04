@@ -111,3 +111,58 @@ func TestLintBadFormat(t *testing.T) {
 		t.Fatal(code)
 	}
 }
+
+const journeySrc = `package main
+
+// arch:flow order "Order"
+// arch:journey guest "Guest"
+func Order() {}
+
+// arch:flow qr "QR"
+// arch:then guest qr > ghost
+// arch:then nojourney qr
+func QR() {}
+
+// arch:flow pay "Pay"
+// arch:journey guest "Again"
+func Pay() {}
+
+func main() { Order(); QR(); Pay() }
+`
+
+func TestLintJourneys(t *testing.T) {
+	var out, errb bytes.Buffer
+	code := run([]string{"lint", "--root", lintRepo(t, journeySrc)}, &out, &errb)
+	if code != 1 {
+		t.Fatalf("exit %d\n%s", code, out.String())
+	}
+	s := out.String()
+	for _, want := range []string{`no such flow "ghost"`, `no such journey "nojourney"`, `journey "guest" is already declared at main.go:4`, `warning: main.go:4: journey "guest": flows "order" and "qr"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+}
+
+// A gap between flows is a warning: the exit code stays 0.
+func TestLintJourneyGapIsWarning(t *testing.T) {
+	src := `package main
+
+// arch:flow order "Order"
+// arch:journey guest "Guest"
+func Order() {}
+
+// arch:flow qr "QR"
+// arch:then guest qr
+func QR() {}
+
+func main() { Order(); QR() }
+`
+	var out, errb bytes.Buffer
+	if code := run([]string{"lint", "--root", lintRepo(t, src)}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d\n%s%s", code, out.String(), errb.String())
+	}
+	if !strings.Contains(out.String(), "warning: main.go:4:") {
+		t.Fatal(out.String())
+	}
+}

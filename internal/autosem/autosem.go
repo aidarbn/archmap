@@ -36,11 +36,13 @@ type Model struct {
 	Summary string                `json:"summary"`
 	Modules map[string]ModuleInfo `json:"modules"`
 	Flows   []Flow                `json:"flows"`
+	// Journeys are paths over several flows (see Journey): declared first.
+	Journeys []Journey `json:"journeys"`
 }
 
 // Build derives the model from facts.
 func Build(f *facts.Facts) Model {
-	m := Model{Title: f.Repo, Modules: map[string]ModuleInfo{}, Flows: []Flow{}}
+	m := Model{Title: f.Repo, Modules: map[string]ModuleInfo{}, Flows: []Flow{}, Journeys: []Journey{}}
 	if f.Project != nil {
 		if f.Project.Name != "" {
 			m.Title = f.Project.Name
@@ -60,7 +62,10 @@ func Build(f *facts.Facts) Model {
 			m.Modules[p] = ModuleInfo{Role: roleOf(p, layer[p]), Layer: layer[p]}
 		}
 	}
-	m.Flows = buildFlows(newGraph(f, layer))
+	g := newGraph(f, layer)
+	m.Flows = buildFlows(g)
+	buildVariants(m.Flows)
+	m.Journeys = g.buildJourneys(m.Flows)
 	return m
 }
 

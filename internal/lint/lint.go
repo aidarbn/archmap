@@ -26,6 +26,7 @@ func (p Problem) String() string { return fmt.Sprintf("%s:%d: %s", p.File, p.Lin
 // Result is the outcome of a lint run.
 type Result struct {
 	Problems  []Problem `json:"problems"`
+	Warnings  []Problem `json:"warnings"`  // do not fail the run (journey gaps)
 	Annotated int       `json:"annotated"` // functions with arch: markup
 	Flows     int       `json:"flows"`     // distinct declared flow ids
 }
@@ -148,15 +149,70 @@ func Run(root string, f *facts.Facts) Result {
 			}
 		}
 	}
-	sort.SliceStable(res.Problems, func(i, j int) bool {
-		a, b := res.Problems[i], res.Problems[j]
-		if a.File != b.File {
-			return a.File < b.File
+	// journeys: ids, references, gaps
+	type site struct {
+		file string
+		line int
+	}
+	journeyAt := map[string]site{}
+	for _, fid := range autosem.NoteOrder(f) {
+		fn := f.Functions[fid]
+		for _, j := range fn.Arch.Journeys {
+			ln := at(fid, "arch:journey", " "+j.ID)
+			if prev, dup := journeyAt[j.ID]; dup {
+				add(fn.File, ln, "journey %q is already declared at %s:%d", j.ID, prev.file, prev.line)
+				continue
+			}
+			journeyAt[j.ID] = site{fn.File, ln}
+			for _, id := range j.Flows {
+				if _, ok := entryOf[id]; !ok {
+					add(fn.File, ln, "journey %q: no such flow %q", j.ID, id)
+				}
+			}
 		}
-		return a.Line < b.Line
-	})
+	}
+	for _, fid := range autosem.NoteOrder(f) {
+		fn := f.Functions[fid]
+		for _, t := range fn.Arch.Then {
+			ln := at(fid, "arch:then", " "+t.Journey)
+			if _, ok := journeyAt[t.Journey]; !ok {
+				add(fn.File, ln, "arch:then: no such journey %q", t.Journey)
+				continue
+			}
+			for _, id := range t.Flows {
+				if _, ok := entryOf[id]; !ok {
+					add(fn.File, ln, "arch:then %s: no such flow %q", t.Journey, id)
+				}
+			}
+		}
+	}
+	for _, j := range autosem.Build(f).Journeys {
+		s, ok := journeyAt[j.ID]
+		if !ok || !j.Declared {
+			continue
+		}
+		for _, l := range j.Links {
+			if l.Via == autosem.ViaDeclared {
+				res.Warnings = append(res.Warnings, Problem{s.file, s.line, fmt.Sprintf("journey %q: flows %q and %q follow each other with no link in the code (no arch:on, no queue); fine if the client calls them in turn", j.ID, l.From, l.To)})
+			}
+		}
+	}
+	byPos := func(ps []Problem) {
+		sort.SliceStable(ps, func(i, j int) bool {
+			a, b := ps[i], ps[j]
+			if a.File != b.File {
+				return a.File < b.File
+			}
+			return a.Line < b.Line
+		})
+	}
+	byPos(res.Problems)
+	byPos(res.Warnings)
 	if res.Problems == nil {
 		res.Problems = []Problem{}
+	}
+	if res.Warnings == nil {
+		res.Warnings = []Problem{}
 	}
 	return res
 }

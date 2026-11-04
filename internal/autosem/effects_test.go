@@ -43,7 +43,7 @@ func TestFlowEffects(t *testing.T) {
 	}
 	// automatic flow from the other entry point also gets effects
 	for _, fl := range m.Flows {
-		if fl.ID == "" && len(fl.Steps) > 0 && fl.Steps[0] == id("Other") {
+		if fl.Kind != KindDeclared && len(fl.Steps) > 0 && fl.Steps[0] == id("Other") {
 			if len(fl.Effects[id("save")]) != 2 {
 				t.Fatalf("auto flow effects %v", fl.Effects)
 			}
