@@ -371,14 +371,26 @@ aside { background: var(--surface); border-left: 1px solid var(--line); overflow
 .lrow .chgt { font: 600 10.5px var(--mono); color: var(--mod); }
 .lrow.del { cursor: default; opacity: .75; } .lrow.del:hover { background: none; }
 
-/* what a live update changed */
+/* what a live update changed: a flash that fades (3.2 s) and a dot that stays until the page is reloaded */
 :root { --hl: #f2b705; }
 :root[data-theme="dark"] { --hl: #e3b341; }
-.n.lflash .card { animation: lflashn 2.6s ease-out 1; }
-@keyframes lflashn { 0% { stroke: var(--hl); stroke-width: 7; } 60% { stroke: var(--hl); stroke-width: 4; } 100% { stroke-width: 1; } }
-.lrow.lflash, #pane.lflash, .src.lflash { animation: lflashr 2.6s ease-out 1; }
-@keyframes lflashr { 0% { background: color-mix(in srgb, var(--hl) 55%, transparent); } 100% { background: transparent; } }
-@media (prefers-reduced-motion: reduce) {
-  .n.lflash .card { animation: none; stroke: var(--hl); stroke-width: 3; }
-  .lrow.lflash, #pane.lflash, .src.lflash { animation: none; background: color-mix(in srgb, var(--hl) 25%, transparent); }
+.n.lflash .card { animation: lflashn 3.2s ease-out 1; }
+@keyframes lflashn { 0% { stroke: var(--hl); stroke-width: 8; } 50% { stroke: var(--hl); stroke-width: 5; } 100% { opacity: 1; } }
+.lflash:not(.n) { animation: lflashr 3.2s ease-out 1; }
+@keyframes lflashr { 0% { background: color-mix(in srgb, var(--hl) 60%, transparent); } 100% { background: transparent; } }
+svg .lflash:not(.n) { animation: lflashs 3.2s ease-out 1; }
+@keyframes lflashs { 0% { filter: drop-shadow(0 0 6px var(--hl)); } 100% { filter: none; } }
+.ldot { fill: var(--hl); stroke: var(--bg, #fff); stroke-width: 1.5; pointer-events: none; }
+.lflash > .ldot { animation: ldotp 3.2s ease-out 1; transform-box: fill-box; transform-origin: center; }
+@keyframes ldotp { 0% { transform: scale(2.4); } 100% { transform: scale(1); } }
+.lrow.lmark::before, .api-row.lmark::before, .matrix tr.lmark > .rh::before, .matrix th.lmark::before, li.lmark::before, [data-jf].lmark::before, #pane.lmark::before, .src.lmark::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--hl); margin-right: 6px; flex: none; vertical-align: middle;
 }
+#pane.lmark::before, .src.lmark::before { position: absolute; top: 8px; right: 10px; margin: 0; }
+.api-row.lmark::before { position: absolute; left: 3px; top: 50%; margin-top: -4px; }
+@media (prefers-reduced-motion: reduce) {
+  .n.lflash .card, .lflash, .lflash > .ldot { animation: none !important; }
+  .n.lflash .card { stroke: var(--hl); stroke-width: 3; }
+}
+#pane.lmark, .src.lmark { position: relative; }
+g.tr.lmark path, .seqv .msg.lmark line, .seqv .msg.lmark path { stroke: var(--hl); stroke-width: 3; }

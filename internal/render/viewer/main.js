@@ -195,7 +195,7 @@ function init() {
   loadRun(defaultRunKey());
   setView('map');
   renderPanel();
-  if (D.live) setupLive();
+  if (D.live) { setupLive(); watchMarks(); }
 }
 
 Object.assign(AM, { setView, setData, setTheme, setLang, viewEl, views: VIEWS });
