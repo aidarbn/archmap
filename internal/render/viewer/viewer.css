@@ -74,8 +74,15 @@ header { display: flex; align-items: center; gap: 16px; padding: 0 16px 0 18px; 
 main { display: grid; grid-template-columns: 1fr 380px; min-height: 0; }
 .stage { position: relative; overflow: hidden; background: var(--bg);
   background-image: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--text) 7%, transparent) 1px, transparent 0); background-size: 22px 22px; }
-.view { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity var(--t) var(--ease); }
-.view.on { opacity: 1; pointer-events: auto; }
+/* an inactive view is gone for the eyes, the pointer, Tab and screen readers: visibility (delayed
+ * until the fade-out ends) hides every descendant, even ones with their own pointer-events */
+.view { position: absolute; inset: 0; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--t) var(--ease), visibility 0s linear var(--t); }
+.view.on { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+.view[inert] * { pointer-events: none !important; }
+.zsw { gap: 5px; }
+.zsw[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.zsw::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; background: transparent; }
+.zsw[aria-pressed="true"]::before { background: currentColor; }
 .scene { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform, opacity; }
 .scene svg { width: 100%; height: 100%; display: block; user-select: none; }
 .scene.hidden { visibility: hidden; }
@@ -163,7 +170,7 @@ aside { background: var(--surface); border-left: 1px solid var(--line); overflow
 .rel-list .md { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 .rel-list .q { font-size: 10px; color: var(--accent); border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line)); border-radius: 4px; padding: 0 4px; }
 .st-a { color: var(--add); font-weight: 700; } .st-m { color: var(--mod); font-weight: 700; } .st-d { color: var(--del); font-weight: 700; }
-.code { font-family: var(--mono); font-size: 12px; line-height: 1.6; position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 360px; }
+.code { font-family: var(--mono); font-size: calc(12px * var(--cz, 1)); line-height: 1.6; position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 360px; }
 .code .ln { display: flex; padding: 0 10px 0 0; white-space: pre; min-width: max-content; }
 .code .ln .no { width: 44px; flex: none; text-align: right; padding-right: 10px; color: var(--muted); user-select: none; }
 .code .ln.hl { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }

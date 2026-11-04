@@ -16,11 +16,15 @@ function setView(id) {
   const el = viewEl(id);
   if (!v._mounted) { v._mounted = true; try { v.mount(el, AM); } catch (err) { console.error('archmap view', id, err); } }
   if (prev && prev !== v && prev._mounted && prev.hide) prev.hide(AM);
+  const changed = state.view !== id;
   state.view = id;
-  $$('#stage > .view').forEach((x) => x.classList.toggle('on', x.id === 'v-' + id));
+  // one place decides what is shown: the active view only; everything else is inert and hidden
+  $$('#stage > .view').forEach((x) => { const on = x.id === 'v-' + id; x.classList.toggle('on', on); x.toggleAttribute('inert', !on); x.setAttribute('aria-hidden', on ? 'false' : 'true'); });
+  if (changed) { closeSearch(); if (LS.open) toggleLists(false); }
   renderTabs();
   if (v.show) v.show(AM);
   bus.emit('view', id);
+  if (DEBUG) setTimeout(() => auditPanels('view:' + id), DUR + 120);
 }
 function renderTabs() {
   const tb = $('#tabs'); tb.innerHTML = '';
@@ -48,7 +52,7 @@ function renderHeader() {
       `<button class="chgbtn" id="onlyBtn" aria-pressed="${state.only}">${esc(t('onlyChanged'))}</button>`;
     $('#onlyBtn').onclick = () => { state.only = !state.only; $('#onlyBtn').setAttribute('aria-pressed', state.only); paintMap(); if (fv && state.level === 2) { buildFns(fv.mod); } bus.emit('filter', state.only); };
   }
-  $('#themeBtn').title = t('theme');
+  $('#themeBtn').title = t('theme'); paintAutoZoom();
   $('#zIn').title = t('zIn'); $('#zOut').title = t('zOut'); $('#zFit').title = t('zFit');
   $$('#langSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === LANG));
   document.documentElement.lang = LANG;
@@ -180,7 +184,7 @@ function init() {
   $('#pAuto').onclick = () => auto();
   $('#pReset').onclick = () => resetRun();
   $('#pSpeed').onchange = (e) => { state.speed = +e.target.value; };
-  setupPicker(); setupSearch(); setupLists();
+  setupPicker(); setupSearch(); setupLists(); setupAutoZoom();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
