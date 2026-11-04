@@ -31,9 +31,11 @@ them (the player bar at the bottom is shared).
   levels, so you can follow a request from the outside system down to the lines
   that run.
 - **Scenario** shows the same scenario as a sequence diagram: lifelines for the
-  actor, modules and external systems, `alt` blocks for the branches
-  (`arch:on`), a pause where a step goes through a queue, and the effects and
-  status changes of every step. A module mini map shows where the step is.
+  actor, the service, modules or functions, the queue and external systems,
+  `alt` blocks for the branches (`arch:on`), a pause where a step goes through a
+  queue, and the effects and status changes of every step. It is nested like the
+  map (see below). The list of scenarios on the left (search, groups by actor,
+  "Main" on top, ↑/↓ for the neighbour) switches between them.
 - **API** lists every endpoint (HTTP, gRPC, WebSocket, tasks, CLI) grouped by
   service, with filters by kind and access and a search. The card shows the
   request and response types, the function, the scenario to play and the tables
@@ -60,6 +62,37 @@ drop-down holds modules by layer, all functions and the branch changes.
 
 ![Statuses view on django-oscar](docs/img/status-oscar.png)
 *Statuses: a state machine from `arch:state` lines on the same copy.*
+
+### Nested scenario
+
+The sequence diagram has the same four levels as the map, and by default follows
+the map's level ("link with the map"; switching either one moves the other):
+
+- **System**: the actor, the service as one participant, the queue and external
+  systems. Only the hand-offs between them are messages (entry -> service ->
+  Kaspi -> ... -> reply); the steps inside the service fold into one message
+  labelled with its first step and the number of folded steps.
+- **Modules**: modules by layer, the queue and externals; one message per change
+  of module.
+- **Functions**: one message per call, for the whole scenario or for one module
+  (the rest stays folded into modules).
+- **Code**: as functions, with the line of the caller that makes each call.
+
+The messages come from the steps of the flow (with `arch:step` labels: on the
+function level per step, on the upper levels the label of the first step of the
+fold) and from the call graph between them: the caller of a step is the previous
+step or a frame below it on the call stack that reaches it. **Enter** on a message
+(or a double-click) opens it in a frame one level deeper; at the function level
+the frame holds the chain of calls from the caller to the step (up to 8 hops)
+with the call lines. Frames nest; **Leave** folds one. Ctrl+wheel or a pinch over
+the diagram zooms it and, past the same thresholds as the map's auto-dive, moves
+the whole diagram a level in or out with the current step kept in view. The
+current step is lit on every level (on the system level, the message that holds
+it); branches and queue pauses are drawn on every level. Works the same for
+annotated flows and for automatic scenarios.
+
+![Nested scenario on ripgrep](docs/img/sequence-nested-ripgrep.png)
+*A scenario of [ripgrep](https://github.com/BurntSushi/ripgrep) on the system level with a message opened into modules, functions and code.*
 
 Endpoints are found from routers (Go: gin, chi, echo and the like), decorators
 (FastAPI, Flask, Express-style), Django/DRF urls, NestJS, Spring annotations,
