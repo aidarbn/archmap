@@ -58,6 +58,9 @@ func rows(table [][]string) []string {
 		var sb strings.Builder
 		sb.WriteString("  ")
 		for i := 0; i <= last; i++ {
+			if w[i] == 0 {
+				continue // nobody uses this column
+			}
 			sb.WriteString(r[i])
 			if i < last {
 				sb.WriteString(strings.Repeat(" ", w[i]-width(r[i])) + gap)
