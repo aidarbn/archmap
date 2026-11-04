@@ -182,3 +182,38 @@ then spreads edges over card ports and pulls their control points toward a commo
 `go test ./internal/render/` covers the assembly and the data contract. To try a change, render a
 repo and open the file: `go run ./cmd/archmap map --root <repo> --out /tmp/x.html`.
 `window.__errs` collects JS errors; `?slow=8` slows transitions, `?lang=en`, `?theme=dark`.
+
+## Editor and Walk (`views/editor.js`, `views/walk.js`)
+
+**Edit mode** is a header toggle (`#editBtn`), present only under `archmap serve` when `GET /spec` answers
+(`?edit=1` opens it on load); the static HTML never shows it. It has no tab: the right panel gets tabs
+Card | Scenarios | Text | Drift. `AM.spec` is the client: `avail`, `on`, `model`, `files`, `errors`,
+`findings`, `undo`/`redo` stacks, `send(ops)`, `doUndo()`, `doRedo()`, `do.*` (state and transition
+helpers used by `views/status.js`), `ask()` (inline field), `mergeMachines()`. Bus events `spec` (data
+read or written) and `edit` (mode toggled).
+
+Contract (see `docs/spec.md`): `GET /spec` → `{seq, files:[{path,text}], model, errors:[{file,line,col,msg}], findings}`;
+`POST /spec/ops` takes `{ops:[…]}`; `PUT /spec/file` `{path,text}` (422 with `errors`). The editor re-reads
+`/spec` after every `live` update (SSE `ready`). Model fields used: `states[].{entity,states,transitions[{from,to,on,label,line,source,drift,fid}],final,file,line,code}`,
+`flows[].{id,name,actor,exit,steps[{ref,planned,ext,text,line,fid,drift}],alts[{cond,flow,text}],file,line}`,
+`journeys[].{missing}`. Operations sent: `add_state remove_state rename_state set_final add_transition
+remove_transition add_flow remove_flow add_step remove_step move_step add_alt remove_alt set_actor set_exit`,
+fields as in docs/spec.md. Undo/redo (Cmd+Z, Shift+Cmd+Z) replays the inverse operations (computed against the model before
+the op); a text save clears the stacks. Hand-written `.arch` text: `PUT /spec/file`, errors by line.
+
+Statuses (`views/status.js`): transitions get `st` = `both` (described and in code), `code` (`drift: undeclared`, orange)
+or `spec` (`drift: not_implemented`, dashed grey); in edit mode: double click empty space adds a status, double click a node
+renames, drag node to node draws a transition (inline `event` or `event "label"`), Del removes a status or the selected
+transition, double click an orange edge adds it to the spec. Planned steps (`planned: true`) are dashed chips on the map
+(system / module level) and dashed rows under the sequence diagram (`AM.spec.seqPlanned`, called by `views/sequence.js`);
+they read `model.spec` from the data, so they also show in a static HTML.
+
+**Walk** (`#walkBtn`, "▶ Walk from here" in a function card, `AM.walk.start(fid, guide?)`): a run with key `walk` whose steps
+are the chosen path. On the level "functions of a module" every outgoing arrow of the current function is drawn
+(`callees`, `async_callees` dashed "queue →", external systems "→ Name"; helpers folded by the same name/file/class/module
+rules as `autosem.isHelper`; arrows to visited functions muted); click or →/Enter takes the arrow, ↑/↓ chooses, ←/Backspace
+steps back, Esc exits. The right card (`registerPanel('walk')`) shows the arrows, the code with the call of the chosen
+arrow highlighted, data, statuses and the trace. Started inside a scenario, its next step is marked "by scenario".
+In edit mode the card can save the path: `add_flow` + `add_step` (`ref` = fid, `text` = caption, `ext`, planned steps
+as `planned:true,text`) + `add_alt`; "save as variant" saves the steps from the deviation as a new flow and hooks it with
+`add_alt {target}` on the guide scenario.
