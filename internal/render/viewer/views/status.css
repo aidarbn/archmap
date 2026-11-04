@@ -1,0 +1,33 @@
+.sv-split { position: absolute; inset: 0; display: grid; grid-template-columns: 250px 1fr; }
+.sv-list { overflow: auto; border-right: 1px solid var(--line); background: var(--surface); }
+.sv-head { position: sticky; top: 0; background: var(--surface); padding: 12px 16px 8px; border-bottom: 1px solid var(--line); z-index: 1; }
+.sv-head b { font-size: 13px; }
+.sv-row { padding: 8px 16px; cursor: pointer; border-bottom: 1px solid color-mix(in oklab, var(--line) 50%, transparent); display: flex; flex-direction: column; gap: 1px; }
+.sv-row:hover { background: var(--surface-2); }
+.sv-row.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.sv-row.dim { opacity: .55; }
+.sv-row .nm { font: 600 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-row .ct { font-size: 11px; color: var(--muted); }
+.sv-more { margin: 10px 16px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 7px; padding: 5px 10px; cursor: pointer; color: var(--text-2); font-size: 12px; }
+.sv-more:hover { background: var(--surface-2); }
+.sv-none { padding: 20px 16px; color: var(--muted); }
+.sv-wrap { position: relative; overflow: hidden; }
+.sv-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.sv-legend { position: absolute; left: 16px; bottom: 12px; display: flex; gap: 16px; align-items: center; font-size: 11.5px; color: var(--text-2); background: color-mix(in oklab, var(--surface) 88%, transparent); border: 1px solid var(--line); border-radius: 9px; padding: 5px 12px; pointer-events: none; }
+.sv-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sv-legend .gl { font: 700 12px var(--mono); color: var(--accent); }
+.sv-legend .gl.ok { color: var(--good-text); }
+.sv-fit { position: absolute; right: 16px; top: 12px; }
+.sv-svg .n { cursor: pointer; }
+.sv-svg .n.sel .card { stroke: var(--accent); stroke-width: 2.5; fill: var(--accent-soft); }
+.sv-svg .tr { cursor: pointer; }
+.sv-svg .tr .hit { fill: none; stroke: transparent !important; stroke-width: 14 !important; pointer-events: stroke; }
+.sv-svg .tr .ln { pointer-events: none; }
+.sv-svg .tr:hover path.ln, .sv-svg .tr.sel path.ln { stroke: var(--accent); stroke-width: 2.2; }
+.sv-svg .tr.hot path.ln { stroke: var(--accent); stroke-width: 2.8; }
+.sv-svg .tr .fnl { font: 12px var(--mono); fill: var(--accent); text-decoration: none; }
+.sv-svg .tr:hover .fnl, .sv-svg .tr.sel .fnl, .sv-svg .tr.hot .fnl { font-weight: 700; text-decoration: underline; }
+.sv-svg .anydot { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.sv-svg .startdot { fill: var(--text); }
+.sv-svg .startln { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+.sv-svg .sv-note { font-size: 13px; fill: var(--muted); }
