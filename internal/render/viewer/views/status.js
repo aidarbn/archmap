@@ -164,7 +164,7 @@ function renderDiagram() {
   m.trs.forEach((x, ti) => {
     const B = pos[x.to]; if (!B) return;
     const grp = pairs[pairKey(x)], k = grp.indexOf(x), off = (k - (grp.length - 1) / 2) * 12;
-    const g = AM.svg('g', { class: 'tr' + (x.from ? '' : ' any') }, gE);
+    const g = AM.svg('g', { class: 'tr' + (x.from ? '' : ' any'), 'data-fid': x.fid || '' }, gE);
     let d, lab, anchor = 'middle';
     if (!x.from) {
       const c = (anyCount[x.to] = (anyCount[x.to] || 0) + 1) - 1;

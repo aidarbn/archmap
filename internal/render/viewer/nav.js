@@ -201,27 +201,98 @@ function markCur() {
 function relangNav() { $('#q').placeholder = t('search'); const b = $('#listBtn'); b.title = t('listsTip'); b.querySelector('span').textContent = t('lists'); if (SR.open) drawSearch(); if (LS.open) drawLists(); }
 
 /* ---------- flash of what a live update changed ---------- */
+// FL.fns / FL.mods: the flash in progress (cleared after it fades); SES.fns / SES.mods: everything changed
+// since the page was opened, kept until a reload and shown as a dot (class lmark) next to the name.
 const FL = { fns: new Set(), mods: new Set(), timer: null };
+const SES = { fns: new Set(), mods: new Set(), reach: new Map() };
+const FLASH_MS = 3200;
 function startFlash(ids) {
   const live = (ids || []).filter((id) => D.fns[id]);
   clearTimeout(FL.timer);
   $$('.lflash').forEach((e) => e.classList.remove('lflash'));
   FL.fns = new Set(live); FL.mods = new Set(live.map((id) => D.fns[id].module));
-  if (!live.length) return;
+  live.forEach((id) => { SES.fns.add(id); SES.mods.add(D.fns[id].module); });
+  SES.reach.clear();
+  if (!live.length) { applyFlash(); return; }
   applyFlash();
-  FL.timer = setTimeout(() => { FL.fns = new Set(); FL.mods = new Set(); $$('.lflash').forEach((e) => e.classList.remove('lflash')); }, 2900);
+  FL.timer = setTimeout(() => { FL.fns = new Set(); FL.mods = new Set(); $$('.lflash').forEach((e) => e.classList.remove('lflash')); }, FLASH_MS);
 }
-// put the flash class on what is on screen now; also called when a level is built during the flash
+// functions that reach a changed one through calls (an endpoint "contains" the edit)
+function reachesSes(fid) {
+  if (SES.reach.has(fid)) return SES.reach.get(fid);
+  const seen = new Set([fid]); let cur = [fid], hit = SES.fns.has(fid);
+  for (let d = 0; d < 8 && cur.length && !hit; d++) {
+    const nx = [];
+    cur.forEach((x) => { const f = D.fns[x]; if (f) (f.callees || []).concat(f.async_callees || []).forEach((c) => { if (!seen.has(c) && D.fns[c]) { seen.add(c); nx.push(c); if (SES.fns.has(c)) hit = true; } }); });
+    cur = nx;
+  }
+  SES.reach.set(fid, hit); return hit;
+}
+// the session dot: a circle in SVG nodes, a ::before dot (css) in HTML rows
+function mark(el, fresh) {
+  if (!el) return;
+  if (!el.classList.contains('lmark')) {
+    el.classList.add('lmark');
+    if (el instanceof SVGElement) {
+      const c = el.querySelector('.card') || el.querySelector('rect');
+      if (c && !el.querySelector('.ldot')) {
+        const x = +c.getAttribute('x') + +c.getAttribute('width') - 10, y = +c.getAttribute('y') + 10;
+        const d = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        d.setAttribute('class', 'ldot'); d.setAttribute('cx', x); d.setAttribute('cy', y); d.setAttribute('r', 5);
+        el.appendChild(d);
+      }
+    }
+  }
+  if (fresh && !el.classList.contains('lflash')) { void el.getBoundingClientRect(); el.classList.add('lflash'); }
+}
+// put flash and marks on what is on screen now; also called when a level or a view draws during the session
 function applyFlash() {
-  if (!FL.fns.size) return;
-  const on = (el) => { if (el) { el.classList.remove('lflash'); void el.getBoundingClientRect(); el.classList.add('lflash'); } };
-  if (sys && sys.nodes.svc) on(sys.nodes.svc.el);
-  if (map) FL.mods.forEach((m) => { const u = unitFor(m); if (u && map.nodes[u]) on(map.nodes[u].el); });
-  if (fv) FL.fns.forEach((id) => { if (fv.nodes[id]) on(fv.nodes[id].el); });
+  if (!SES.fns.size) return;
+  const isF = (id) => FL.fns.has(id), isM = (m) => FL.mods.has(m);
+  const f = (id) => SES.fns.has(id), m = (x) => SES.mods.has(x);
+  if (sys && sys.nodes.svc) mark(sys.nodes.svc.el, FL.fns.size > 0);
+  if (map) SES.mods.forEach((x) => { const u = unitFor(x); if (u && map.nodes[u]) mark(map.nodes[u].el, FL.mods.has(x)); });
+  if (fv) SES.fns.forEach((id) => { if (fv.nodes[id]) mark(fv.nodes[id].el, isF(id)); });
   const s = state.sel;
-  if (s && ((s.t === 'fn' && FL.fns.has(s.id)) || (s.t === 'mod' && FL.mods.has(s.id)) || (s.t === 'step' && curStep() && FL.fns.has(curStep().fid)))) on($('#pane'));
-  if (state.level === 3 && state.fn && FL.fns.has(state.fn)) on($('#sc3 .src'));
-  $$('#lists .lrow').forEach((e) => { if ((e.dataset.k === 'fn' && FL.fns.has(e.dataset.id)) || (e.dataset.k === 'mod' && FL.mods.has(e.dataset.id))) on(e); });
+  if (s && ((s.t === 'fn' && f(s.id)) || (s.t === 'mod' && m(s.id)) || (s.t === 'step' && curStep() && f(curStep().fid)))) {
+    const fresh = (s.t === 'fn' && isF(s.id)) || (s.t === 'mod' && isM(s.id)) || (s.t === 'step' && curStep() && isF(curStep().fid));
+    mark($('#pane'), fresh);
+  }
+  if (state.level === 3 && state.fn && f(state.fn)) mark($('#sc3 .src'), isF(state.fn));
+  $$('#lists .lrow').forEach((e) => { const fn = e.dataset.k === 'fn' && e.dataset.id, mo = e.dataset.k === 'mod' && e.dataset.id; if ((fn && f(fn)) || (mo && m(mo))) mark(e, (fn && isF(fn)) || (mo && isM(mo))); });
+  // views
+  $$('.seqv .msg:not(.reply)[data-fid]').forEach((g) => { const id = g.dataset.fid; if (id && f(id)) mark(g, isF(id)); });
+  const eps = D.endpoints || [];
+  $$('.api-row[data-i]').forEach((e) => { const ep = eps[+e.dataset.i]; if (ep && ep.fid && reachesSes(ep.fid)) mark(e, reachesFresh(ep.fid)); });
+  $$('.matrix tr[data-i]').forEach((e) => { const ep = eps[+e.dataset.i]; if (ep && ep.fid && reachesSes(ep.fid)) mark(e, reachesFresh(ep.fid)); });
+  const tbl = new Map(); // table -> fresh?
+  SES.fns.forEach((id) => D.fns[id] && (D.fns[id].data || []).forEach((a) => { tbl.set(a.table, tbl.get(a.table) || isF(id)); }));
+  $$('.matrix thead th[data-t]').forEach((e) => { if (tbl.has(e.dataset.t)) mark(e, tbl.get(e.dataset.t)); });
+  $$('g.tb[data-id]').forEach((e) => { if (tbl.has(e.dataset.id)) mark(e, tbl.get(e.dataset.id)); });
+  $$('g.tr[data-fid]').forEach((e) => { const id = e.dataset.fid; if (id && f(id)) mark(e, isF(id)); });
+  $$('[data-jf]').forEach((e) => { const id = e.dataset.jf; if (id && f(id)) mark(e, isF(id)); });
+  $$('li[data-fn]').forEach((e) => { const id = e.dataset.fn; if (f(id)) mark(e, isF(id)); });
+}
+function reachesFresh(fid) {
+  const seen = new Set([fid]); let cur = [fid];
+  if (FL.fns.has(fid)) return true;
+  for (let d = 0; d < 8 && cur.length; d++) {
+    const nx = [];
+    for (const x of cur) { const f = D.fns[x]; if (f) for (const c of (f.callees || []).concat(f.async_callees || [])) { if (!seen.has(c) && D.fns[c]) { if (FL.fns.has(c)) return true; seen.add(c); nx.push(c); } } }
+    cur = nx;
+  }
+  return false;
+}
+// views redraw their rows on scroll/select: re-apply the marks after any DOM change inside the stage
+let _mkq = 0;
+function watchMarks() {
+  const root = document.getElementById('stage') || document.body;
+  new MutationObserver((ms) => {
+    if (!SES.fns.size || _mkq) return;
+    if (!ms.some((m) => m.type === 'childList' && (m.addedNodes.length))) return;
+    _mkq = requestAnimationFrame(() => { _mkq = 0; applyFlash(); });
+  }).observe(root, { childList: true, subtree: true });
 }
 bus.on('filter', () => { if (LS.open) drawLists(); });
-bus.on('level', () => { if (FL.fns.size) requestAnimationFrame(applyFlash); });
+bus.on('level', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
+bus.on('view', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });

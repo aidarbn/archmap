@@ -189,3 +189,21 @@ func TestFilesNoSrcDropsBodies(t *testing.T) {
 		}
 	}
 }
+
+// A live edit must be visible: the flash lasts at least 1.5 s, a marker stays until reload, and
+// prefers-reduced-motion keeps the marker without the animation.
+func TestLiveFlashVisibleAndPersistent(t *testing.T) {
+	v := Viewer()
+	for _, s := range []string{"const FLASH_MS = 3200", "const SES = ", ".ldot", "g.tb[data-id]", ".api-row[data-i]", "li[data-fn]"} {
+		if !strings.Contains(v, s) {
+			t.Errorf("viewer lacks %q", s)
+		}
+	}
+	i := strings.Index(v, "@media (prefers-reduced-motion: reduce) {\n  .n.lflash")
+	if i < 0 || !strings.Contains(v[i:i+300], "animation: none") {
+		t.Error("reduced motion must switch the flash animation off")
+	}
+	if strings.Contains(v, "lflashn 2.6s") || !strings.Contains(v, "lflashn 3.2s") {
+		t.Error("the flash animation must last 3.2 s")
+	}
+}
