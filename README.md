@@ -82,14 +82,20 @@ drop-down holds modules by layer, all functions and the branch changes.
 ### Scenario sheet
 
 The whole scenario on one sheet, a flowchart from left to right: columns are
-the layers (actor and outcome -> entry points -> logic -> adapters -> external
-systems: databases, the queue, outside APIs), the functions of the steps sit in
+the layers (actor -> entry points -> logic -> adapters -> external systems:
+databases, the queue, outside APIs -> outcome), the functions of the steps sit in
 frames of their modules, and every step is an arrow numbered in the order of the
-run. A function visited again keeps one node and gets one more numbered arrow; a
-hand-off through the queue is two dashed arrows ("enqueue ..." / "from the
-queue"); the effect of a step (`Order -> payment_requested`, `UPDATE orders`)
-is written on its arrow; branches (`arch:on`, `alt`) leave the fork node as
-`5a`, `5b` with their condition, towards an outcome or another scenario.
+run. The steps of the run are the main path: bold arrows that run as straight as
+they can and end in the outcome; calls of external systems are thin and muted,
+and many calls into one system share a bus (one entry, the effects on its
+branches). A function visited again keeps one node and gets one more numbered
+arrow; a hand-off through the queue is two dashed arrows ("enqueue ..." / "from
+the queue"); the effect of a step (`Order -> payment_requested`, `UPDATE orders`)
+is a short plate at its number (the whole text on hover). Branches (`arch:on`,
+`alt`) are folded into stubs under the fork node — `5b · QR expired ✕`,
+`5a · paid -> Send to the POS ↪`, three at most and then "N more"; a click
+unfolds a branch (its outcome joins the outcome column), another click folds
+it, and playing a variant unfolds the branch it ends in.
 Planned steps (`step plan "..." in <module>`) are dashed nodes in the frame of
 their module and play like the others.
 
@@ -108,10 +114,12 @@ their module and play like the others.
   scroll it); pinch or Cmd/Ctrl+wheel zooms it and changes the level.
 
 Columns, frames and arrows are laid out by archmap itself (no libraries): items
-are ordered by the median of their neighbours over several sweeps keeping the
-order with the fewest crossings, arrows are orthogonal, turn in the gaps between
-columns on separate tracks and cross other columns only between frames; numbers
-and labels are placed where they cover nothing.
+are ordered by the median of their neighbours over several sweeps, then a short
+local search over the real routes (swaps in a column, the side of a loop, the
+order of the tracks) keeps the layout with the fewest crossings and the
+straightest main path; arrows are orthogonal, turn in the gaps between columns
+on separate tracks and cross other columns only between frames; numbers and
+labels are placed where they cover nothing and pushed apart until no two overlap.
 
 ![Scenario sheet on spring-petclinic](docs/img/sheet-petclinic.png)
 *A path of [spring-petclinic](https://github.com/spring-projects/spring-petclinic) on the sheet: three coded steps, then two planned ones (dashed), the fourth playing.*
