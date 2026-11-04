@@ -6,12 +6,16 @@ addI18n({
     search: 'Поиск: функция, модуль или файл…', searchNone: 'Ничего не найдено', searchFns: 'Функции', searchMods: 'Модули', searchFiles: 'Файлы',
     searchHint: '↑↓ выбрать · ↵ на карту · ⇧↵ в код · Esc закрыть', lists: 'Списки', listsTip: 'Модули, функции и изменения ветки',
     tabMods: 'Модули', tabFns: 'Функции', tabChg: 'Изменения', fnFilter: 'Фильтр функций…', moreRows: (n) => '+ ещё ' + n + ' — уточните фильтр', deletedFns: 'Удалённые',
+    tabFlows: 'Сценарии', flowsBtn: (n) => 'Сценарии (' + n + ')', flowsTip: 'Все сценарии: поиск, группы по актору', flowsFilter: 'Поиск сценария или актора…',
+    grpAuto: 'Авто — без разметки', noActor: 'Без актора', flowsAll: (n) => 'Показать все (' + n + ')', flowsFewer: 'Свернуть', flowsBrowse: 'Открыть браузер сценариев', flowSteps: (n) => n + ' шаг.',
     ms: 'мс', changedN: 'изм.', noConnTip: 'Сервер archmap не отвечает; страница переподключится сама', closeLists: 'Закрыть',
   },
   en: {
     search: 'Search: function, module or file…', searchNone: 'Nothing found', searchFns: 'Functions', searchMods: 'Modules', searchFiles: 'Files',
     searchHint: '↑↓ select · ↵ on the map · ⇧↵ to code · Esc close', lists: 'Lists', listsTip: 'Modules, functions and branch changes',
     tabMods: 'Modules', tabFns: 'Functions', tabChg: 'Changes', fnFilter: 'Filter functions…', moreRows: (n) => '+ ' + n + ' more — refine the filter', deletedFns: 'Deleted',
+    tabFlows: 'Scenarios', flowsBtn: (n) => 'Scenarios (' + n + ')', flowsTip: 'All scenarios: search, grouped by actor', flowsFilter: 'Search a scenario or actor…',
+    grpAuto: 'Auto — not annotated', noActor: 'No actor', flowsAll: (n) => 'Show all (' + n + ')', flowsFewer: 'Collapse', flowsBrowse: 'Open the scenario browser', flowSteps: (n) => n + ' steps',
     ms: 'ms', changedN: 'changed', noConnTip: 'The archmap server does not answer; the page reconnects by itself', closeLists: 'Close',
   },
 });
@@ -137,9 +141,39 @@ function rowMod(m) {
   const c = D.modChg[m], l = layerOf(m);
   return `<div class="lrow${state.mod === m ? ' cur' : ''}" data-k="mod" data-id="${esc(m)}" title="${esc(modLabel(m))}"><i class="dot" style="background:${LCOLOR[l]}"></i><span class="nm">${esc(short(m))}</span>${hasChg(c) ? `<span class="chgt">${esc(chgText(c))}</span>` : ''}<span class="sb">${(D.byMod[m] || []).length}</span></div>`;
 }
+/* scenarios: the actor of a flow, groups by actor (declared) then the auto ones, play on click */
+const flowActor = (fl) => { if (fl.actor) return fl.actor; const a = fl.steps && fl.steps.length ? actorOfFn(fl.steps[0]) : null; return a ? actorName(a) : ''; };
+function flowGroups(q, subset) {
+  q = lc(q).trim();
+  const ok = (fl) => !q || lc(fl.name).includes(q) || lc(flowActor(fl)).includes(q);
+  const by = new Map(), auto = [];
+  (subset || D.flows).filter(ok).forEach((fl) => {
+    if (fl.kind === 'declared') { const k = flowActor(fl) || t('noActor'); if (!by.has(k)) by.set(k, []); by.get(k).push(fl); } else auto.push(fl);
+  });
+  const topFirst = (a) => a.map((x, i) => [x, i]).sort((p, q2) => (q2[0].top ? 1 : 0) - (p[0].top ? 1 : 0) || p[1] - q2[1]).map((p) => p[0]);
+  const gs = Array.from(by, ([name, items]) => ({ name, items: topFirst(items) })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name));
+  if (auto.length) gs.push({ name: by.size ? t('grpAuto') : t('grpFlows'), items: topFirst(auto), auto: true });
+  return gs;
+}
+const flowRow = (fl, cls = 'lrow') => `<div class="${cls}${state.run && state.run.key === 'flow:' + fl.i ? ' cur' : ''}" data-k="flow" data-id="${fl.i}" title="${esc(fl.name)}"><span class="nm">${esc(fl.name)}</span><span class="sb">${esc(t('flowSteps', fl.steps.length))}</span></div>`;
+function playFlowIdx(i) {
+  if (state.view !== 'map') setView('map');
+  loadRun('flow:' + i); auto();
+}
+function openFlows() {
+  LS.tab = 'flows'; LS.q = ''; toggleLists(true);
+  const i = $('#lists .lq'); if (i) i.focus();
+}
+function paintFlowsBtn() {
+  const b = $('#flowsBtn'); if (!b) return;
+  b.hidden = !D.flows.length; b.textContent = t('flowsBtn', D.flows.length); b.title = t('flowsTip');
+}
 function listBody() {
   const q = lc(LS.q).trim(); let h = '';
-  if (LS.tab === 'mods') {
+  if (LS.tab === 'flows') {
+    const gs = flowGroups(LS.q);
+    h = gs.map((g) => `<div class="gh">${esc(g.name)} · ${g.items.length}</div>` + g.items.map((fl) => flowRow(fl)).join('')).join('') || `<div class="none">${esc(t('flowNone'))}</div>`;
+  } else if (LS.tab === 'mods') {
     LAYERS.forEach((l) => {
       const ms = D.allMods.filter((m) => layerOf(m) === l && (!state.only || hasChg(D.modChg[m])));
       if (!ms.length) return;
@@ -163,10 +197,11 @@ function drawLists() {
   const box = $('#lists'); if (!box) return;
   const hasChgs = D.changed.length || D.deleted.length;
   if (LS.tab === 'chg' && !hasChgs) LS.tab = 'mods';
-  const tabs = [['mods', 'tabMods', D.allMods.length], ['fns', 'tabFns', D.fids.length]].concat(hasChgs ? [['chg', 'tabChg', D.changed.length + D.deleted.length]] : []);
+  if (LS.tab === 'flows' && !D.flows.length) LS.tab = 'mods';
+  const tabs = [['mods', 'tabMods', D.allMods.length], ['fns', 'tabFns', D.fids.length]].concat(D.flows.length ? [['flows', 'tabFlows', D.flows.length]] : []).concat(hasChgs ? [['chg', 'tabChg', D.changed.length + D.deleted.length]] : []);
   const top = box.querySelector('.lbody') ? box.querySelector('.lbody').scrollTop : 0;
   box.innerHTML = `<div class="lhead"><div class="ltabs" role="tablist">${tabs.map(([k, lab, n]) => `<button role="tab" data-tab="${k}" aria-selected="${LS.tab === k}">${esc(t(lab))}<small>${n}</small></button>`).join('')}</div><button class="x" data-close title="${esc(t('closeLists'))}">×</button></div>` +
-    (LS.tab === 'fns' ? `<input type="search" class="lq" placeholder="${esc(t('fnFilter'))}" value="${esc(LS.q)}" autocomplete="off">` : '') +
+    (LS.tab === 'fns' || LS.tab === 'flows' ? `<input type="search" class="lq" placeholder="${esc(t(LS.tab === 'flows' ? 'flowsFilter' : 'fnFilter'))}" value="${esc(LS.q)}" autocomplete="off">` : '') +
     `<div class="lbody">${listBody()}</div>`;
   box.querySelector('.lbody').scrollTop = top;
   const inp = box.querySelector('.lq');
@@ -179,17 +214,20 @@ function drawLists() {
 function toggleLists(on) {
   LS.open = on == null ? !LS.open : on;
   $('#lists').hidden = !LS.open; $('#listBtn').setAttribute('aria-expanded', LS.open);
-  if (LS.open) { drawLists(); const i = $('#lists .lq'); if (i && LS.tab === 'fns') i.focus(); }
+  if (LS.open) { drawLists(); const i = $('#lists .lq'); if (i && (LS.tab === 'fns' || LS.tab === 'flows')) i.focus(); }
 }
 function setupLists() {
   const box = $('#lists'), btn = $('#listBtn');
   btn.title = t('listsTip'); btn.querySelector('span').textContent = t('lists');
   btn.onclick = () => toggleLists();
+  const fb = $('#flowsBtn'); if (fb) fb.onclick = () => (LS.open && LS.tab === 'flows' ? toggleLists(false) : openFlows());
+  paintFlowsBtn();
   box.addEventListener('click', (e) => {
     if (e.target.closest('[data-close]')) return toggleLists(false);
-    const tb = e.target.closest('[data-tab]'); if (tb) { LS.tab = tb.dataset.tab; drawLists(); return; }
+    const tb = e.target.closest('[data-tab]'); if (tb) { if (LS.tab !== tb.dataset.tab) LS.q = ''; LS.tab = tb.dataset.tab; drawLists(); return; }
     const r = e.target.closest('[data-k]'); if (!r) return;
     const k = r.dataset.k, id = r.dataset.id;
+    if (k === 'flow') { toggleLists(false); playFlowIdx(+id); return; }
     navTo(k === 'fn' ? { k, id } : { k: 'mod', id }, e.shiftKey);
   });
   window.addEventListener('keydown', (e) => {
@@ -203,7 +241,7 @@ function markCur() {
   const s = state.sel, id = s && s.t === 'fn' ? s.id : null, m = s && s.t === 'mod' ? s.id : state.mod;
   $$('#lists .lrow').forEach((e) => { if ((e.dataset.k === 'fn' && e.dataset.id === id) || (e.dataset.k === 'mod' && e.dataset.id === m)) e.classList.add('cur'); });
 }
-function relangNav() { $('#q').placeholder = t('search'); const b = $('#listBtn'); b.title = t('listsTip'); b.querySelector('span').textContent = t('lists'); if (SR.open) drawSearch(); if (LS.open) drawLists(); }
+function relangNav() { paintFlowsBtn(); $('#q').placeholder = t('search'); const b = $('#listBtn'); b.title = t('listsTip'); b.querySelector('span').textContent = t('lists'); if (SR.open) drawSearch(); if (LS.open) drawLists(); }
 
 /* ---------- flash of what a live update changed ---------- */
 // FL.fns / FL.mods: the flash in progress (cleared after it fades); SES.fns / SES.mods: everything changed

@@ -449,6 +449,7 @@ func flowName(fn facts.Function) string {
 // buildFlows makes one flow per entry point, ordered with the "top" ones first.
 func buildFlows(g *graph) []Flow {
 	declared := declaredFlows(g)
+	declTop := g.markDeclaredTop(declared)
 	isDeclared := map[string]bool{}
 	for _, fl := range declared {
 		isDeclared[fl.Steps[0]] = true
@@ -540,7 +541,7 @@ func buildFlows(g *graph) []Flow {
 		return false
 	}
 	take := func(c *cand) {
-		if len(top) < MaxTop && !chosen[c] && !overlaps(c) {
+		if len(top)+declTop < MaxTop && !chosen[c] && !overlaps(c) {
 			chosen[c] = true
 			top = append(top, c)
 		}

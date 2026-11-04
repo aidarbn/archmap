@@ -1,6 +1,7 @@
 package autosem
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -34,6 +35,45 @@ func declFacts() *facts.Facts {
 	// another entry point without markup: stays an automatic flow
 	add("Other", nil, true, []string{id("save")}, nil)
 	return f
+}
+
+// Declared scenarios are ranked like automatic ones: at most MaxTop are "top",
+// and every actor keeps one.
+func TestDeclaredTopCapped(t *testing.T) {
+	f := &facts.Facts{Repo: "demo", Modules: map[string]facts.Module{"internal/x": {}}, Functions: map[string]facts.Function{}}
+	id := func(n string) string { return "internal/x/f.go::" + n }
+	add := func(name string, arch *facts.ArchNote, entry bool, callees []string) {
+		fn := facts.Function{Name: name, Start: 1, End: 9, Module: "internal/x", File: "internal/x/f.go", Lang: "go", Callees: callees, Arch: arch}
+		if entry {
+			fn.Entry = &facts.Entry{Kind: "http"}
+		}
+		f.Functions[id(name)] = fn
+	}
+	actors := []string{"Tablet", "Cabinet", "Admin"}
+	for i := 0; i < 15; i++ {
+		fl, step := fmt.Sprintf("f%d", i), fmt.Sprintf("step%d", i)
+		add(fmt.Sprintf("Entry%d", i), &facts.ArchNote{
+			Flows: []facts.FlowDecl{{ID: fl, Name: "Flow " + fl, Actor: actors[i%3]}},
+			Steps: []facts.StepNote{{Flow: fl}},
+		}, true, []string{id(step)})
+		add(step, &facts.ArchNote{Steps: []facts.StepNote{{Flow: fl}}}, false, nil)
+	}
+	m := Build(f)
+	top, byActor := 0, map[string]bool{}
+	for _, fl := range m.Flows {
+		if fl.Top {
+			top++
+			byActor[fl.Actor] = true
+		}
+	}
+	if top == 0 || top > MaxTop {
+		t.Fatalf("%d top flows of %d, want 1..%d", top, len(m.Flows), MaxTop)
+	}
+	for _, a := range actors {
+		if !byActor[a] {
+			t.Errorf("actor %s has no top flow", a)
+		}
+	}
 }
 
 func TestDeclaredFlowsFirst(t *testing.T) {
