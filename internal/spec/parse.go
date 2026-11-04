@@ -28,12 +28,12 @@ func tokenize(line string) ([]tok, *perr) {
 	i := 0
 	for i < len(rs) {
 		c := rs[i]
-		switch {
-		case c == ' ' || c == '\t' || c == '\r':
+		switch c {
+		case ' ', '\t', '\r':
 			i++
-		case c == '#':
+		case '#':
 			return out, nil
-		case c == '"':
+		case '"':
 			start := i
 			i++
 			var sb strings.Builder
