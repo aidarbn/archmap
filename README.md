@@ -92,6 +92,7 @@ archmap extract [--root DIR] [--base REF] [--tests] --out facts.json
 archmap render  --facts facts.json --out arch.html
 archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open]
 archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
+archmap lint    [--root DIR] [--format text|json] [--tests]
 archmap version
 ```
 
@@ -104,6 +105,74 @@ archmap version
 - `map` does both; the default output is `<root>/.archmap/arch.html`;
   scenarios start at entry points and follow the call graph.
 - `serve` is described below.
+- `lint` checks `arch:` scenario markup, see [Annotating flows](#annotating-flows).
+
+## Annotating flows
+
+The automatic scenarios follow the call graph. To tell the story yourself, mark
+functions with `arch:` lines in the comment right above them (a decorator or
+annotation line between the comment and the declaration is fine). It works in
+every supported language; the comment style is the language's own.
+
+```go
+// Request a Kaspi QR code for the order.
+// arch:flow kaspi-pay "Pay an order by Kaspi QR"
+// arch:actor Tablet
+// arch:exit "order is paid or cancelled"
+func (s *TabletsServer) RequestKaspiQRForOrder(ctx context.Context, req *pb.Req) (*pb.Resp, error) {
+
+// arch:step kaspi-pay "ask Kaspi for a QR"
+// arch:ext Kaspi
+func (s *Service) requestQR(ctx context.Context, o Order) (QR, error) {
+
+// arch:step kaspi-pay "poll the payment status"
+// arch:on paid -> order-paid
+// arch:on expired "cancel the order"
+// arch:state order: payment_requested -> paid
+func (w *CheckKaspiPaymentWorker) Work(ctx context.Context, job *river.Job[Args]) error {
+```
+
+```python
+# arch:flow signup "Sign up"
+# arch:actor User
+def register(request):
+    ...
+
+# arch:step signup "send the welcome mail"
+# arch:ext SendGrid
+@shared_task
+def send_welcome(user_id):
+    ...
+```
+
+Directives:
+
+- `arch:flow <id> "Name"` declares a scenario that starts at this function. Optional
+  `arch:actor <who>` and `arch:exit "how it ends"` below it belong to that flow.
+  Several flows on one function are fine; ids are letters, digits, `_`, `-`, `.`.
+- `arch:step <flow-id> "caption"` makes the function a step of the flow. There are
+  no step numbers: the order comes from the call graph (calls, then queue
+  hand-offs) starting at the entry point, depth-first in call order.
+- `arch:ext <System>[, <System>]` the function talks to an external system.
+- `arch:on <condition> -> <flow-id>` the story branches into another flow;
+  `arch:on <condition> "text"` is an outcome of the step.
+- `arch:state <entity>: <from> -> <to>` a state transition.
+
+Declared scenarios come first in the map (kind `declared`, with `id`, `actor`,
+`exit`, per-step `labels` and `branches`) and replace the automatic scenario of
+the same entry point; the rest follow as before. Each function also carries the
+parsed markup as `arch` in `facts.json`.
+
+### Lint
+
+```sh
+archmap lint [--root DIR] [--format text|json] [--tests]
+```
+
+Checks the markup and exits with 1 when something is wrong, so it fits CI:
+syntax errors (with the line); a `step` or `on -> …` that names a flow that is
+not declared; a flow id declared twice; a step that cannot be reached by calls
+from the flow's entry point; `ext` and `state` of a wrong shape.
 
 ## serve: live map while you code
 

@@ -96,11 +96,17 @@ func isHelper(fn facts.Function) bool {
 
 // Flow is a scenario: a path through the call graph from an entry point.
 type Flow struct {
+	ID    string   `json:"id,omitempty"` // declared flows only
 	Name  string   `json:"name"`
 	Desc  string   `json:"desc,omitempty"`
-	Kind  string   `json:"kind,omitempty"` // entry-point kind: http | task | main | lifecycle | ui
+	Kind  string   `json:"kind,omitempty"` // entry-point kind: http | task | main | lifecycle | ui; "declared" for arch:flow
 	Top   bool     `json:"top"`            // among the most informative scenarios (<= MaxTop)
 	Steps []string `json:"steps"`
+	// Declared flows (arch: comments) only:
+	Actor    string            `json:"actor,omitempty"`
+	Exit     string            `json:"exit,omitempty"`
+	Labels   map[string]string `json:"labels,omitempty"` // step fid -> caption
+	Branches []Branch          `json:"branches,omitempty"`
 }
 
 type graph struct {
@@ -439,9 +445,14 @@ func flowName(fn facts.Function) string {
 
 // buildFlows makes one flow per entry point, ordered with the "top" ones first.
 func buildFlows(g *graph) []Flow {
+	declared := declaredFlows(g)
+	isDeclared := map[string]bool{}
+	for _, fl := range declared {
+		isDeclared[fl.Steps[0]] = true
+	}
 	var fids []string
 	for fid, fn := range g.f.Functions {
-		if fn.Entry != nil && g.layer[fn.Module] != Test {
+		if fn.Entry != nil && g.layer[fn.Module] != Test && !isDeclared[fid] {
 			fids = append(fids, fid)
 		}
 	}
@@ -556,7 +567,7 @@ func buildFlows(g *graph) []Flow {
 	}
 	sort.SliceStable(top, func(i, j int) bool { return top[i].score > top[j].score })
 
-	flows := make([]Flow, 0, len(cands))
+	flows := append(make([]Flow, 0, len(declared)+len(cands)), declared...)
 	for _, c := range top {
 		c.flow.Top = true
 		flows = append(flows, c.flow)

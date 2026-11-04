@@ -48,7 +48,8 @@ type fn struct {
 	lang.Func
 	file, module, lang string
 	callees            []string
-	async              []string // queue handlers this function hands work to
+	async              []string        // queue handlers this function hands work to
+	arch               *facts.ArchNote // `arch:` markup above the function
 }
 
 // commonNames are method names of standard libraries/ORMs/DOM: a call `x.get()`
@@ -167,6 +168,11 @@ func Run(opts Options) (*facts.Facts, error) {
 				}
 			}
 		}
+		starts := map[int]bool{}
+		for _, pf := range f.Funcs {
+			starts[pf.Start] = true
+		}
+		notes := archNotes(b, starts)
 		for _, pf := range f.Funcs {
 			fid := p + "::"
 			if pf.Cls != "" {
@@ -176,7 +182,7 @@ func Run(opts Options) (*facts.Facts, error) {
 			if _, dup := fns[fid]; dup { // overloads/duplicates are told apart by line
 				fid += "@" + itoa(pf.Start)
 			}
-			x := &fn{Func: pf, file: p, module: facts.ModuleOf(p), lang: name}
+			x := &fn{Func: pf, file: p, module: facts.ModuleOf(p), lang: name, arch: notes[pf.Start]}
 			fns[fid] = x
 			order = append(order, fid)
 			perFile[p] = append(perFile[p], toGitFn(fid, pf))
@@ -434,6 +440,7 @@ func Run(opts Options) (*facts.Facts, error) {
 			Name: f.Name, Cls: facts.StrPtr(f.Cls), Start: f.Start, End: f.End,
 			Sig: f.Sig, Doc: f.Doc, Callees: f.callees, File: f.file, Module: f.module, Lang: f.lang,
 			AsyncCallees: f.async,
+			Arch:         f.arch,
 			Entry:        entries[fid], Decorators: f.Decorators, Bases: f.Bases,
 		}
 		if s, ok := status[fid]; ok {

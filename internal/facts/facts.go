@@ -58,6 +58,50 @@ type Function struct {
 	Uncommitted  *bool    `json:"uncommitted,omitempty"` // set together with Status
 	Decorators   []string `json:"decorators,omitempty"`
 	Bases        []string `json:"bases,omitempty"`
+	// Arch holds the scenario annotations (`arch:` comments) above the function.
+	Arch *ArchNote `json:"arch,omitempty"`
+}
+
+// ArchNote is the parsed `arch:` markup of one function (see package annot).
+type ArchNote struct {
+	Flows []FlowDecl  `json:"flows,omitempty"`
+	Steps []StepNote  `json:"steps,omitempty"`
+	Ext   []string    `json:"ext,omitempty"`
+	On    []OnNote    `json:"on,omitempty"`
+	State []StateNote `json:"state,omitempty"`
+}
+
+// FlowDecl declares a scenario that starts at the annotated function.
+type FlowDecl struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Actor string `json:"actor,omitempty"`
+	Exit  string `json:"exit,omitempty"`
+}
+
+// StepNote makes the function a step of flow Flow with a caption.
+type StepNote struct {
+	Flow string `json:"flow"`
+	Text string `json:"text,omitempty"`
+}
+
+// OnNote is a branch or outcome of the step: either a jump to flow Flow or a text.
+type OnNote struct {
+	Cond string `json:"cond"`
+	Flow string `json:"flow,omitempty"`
+	Text string `json:"text,omitempty"`
+}
+
+// StateNote is a state transition of an entity.
+type StateNote struct {
+	Entity string `json:"entity"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+}
+
+// Empty reports a note with no content.
+func (a *ArchNote) Empty() bool {
+	return a == nil || len(a.Flows)+len(a.Steps)+len(a.Ext)+len(a.On)+len(a.State) == 0
 }
 
 // Entry marks a function as an entry point.

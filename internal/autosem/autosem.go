@@ -3,6 +3,11 @@
 // layers and roles from paths and contents, scenarios from walks over the call
 // graph, including hand-offs through job queues (async_callees).
 //
+// Scenarios declared with `arch:` comments (package annot) come first, with
+// kind "declared", top=true and the extra fields id, actor, exit, labels (step
+// fid -> caption) and branches ({at, cond, flow?, text?}); automatic scenarios
+// follow, without duplicates of the declared entry points.
+//
 // Flow JSON: {name, desc, kind, top, steps[fid]}. kind is the entry-point kind
 // (http | task | main | lifecycle | ui); top marks up to MaxTop of the most
 // informative scenarios, ranked by the reach of the entry point (see rank.go:
