@@ -183,4 +183,6 @@ type Transition struct {
 	To     string `json:"to"`
 	Fid    string `json:"fid"`
 	Source string `json:"source"`
+	// Confirmed is set on a code transition that is also declared with arch:state.
+	Confirmed bool `json:"confirmed,omitempty"`
 }

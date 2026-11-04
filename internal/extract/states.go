@@ -19,9 +19,7 @@ import (
 // the name of the call (UpdateStatusIfAccepted). Only what is plainly visible
 // is reported.
 //
-// TODO: merge transitions declared with `arch:state` annotations (Source
-// "annotation") once the annotation parser fills them in; they take priority
-// over a code transition with the same From, To and Fid.
+// Transitions declared with `arch:state` are merged in by mergeAnnotatedStates.
 
 // stFile is a source file given to the state pass.
 type stFile struct{ Path, Module, Lang, Text string }
@@ -848,4 +846,91 @@ func sqlQueries(root string) map[string]string {
 		return nil
 	})
 	return out
+}
+
+// mergeAnnotatedStates adds the transitions declared with `arch:state`
+// (Function.Arch.State) to out.States with Source "annotation". The machine is
+// the one whose key equals the entity (case-insensitive, or the entity plus a
+// Status/State suffix); with none, a machine keyed by the entity is created.
+// A code transition with the same Fid, From and To is not duplicated: it is
+// kept and marked Confirmed together with the annotation one.
+func mergeAnnotatedStates(out *facts.Facts) {
+	fids := make([]string, 0, len(out.Functions))
+	for fid, fn := range out.Functions {
+		if fn.Arch != nil && len(fn.Arch.State) > 0 {
+			fids = append(fids, fid)
+		}
+	}
+	if len(fids) == 0 {
+		return
+	}
+	sort.Strings(fids)
+	if out.States == nil {
+		out.States = map[string]*facts.StateMachine{}
+	}
+	keys := make([]string, 0, len(out.States))
+	for k := range out.States {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	find := func(entity string) string {
+		e := strings.ToLower(entity)
+		for _, k := range keys {
+			if strings.ToLower(k) == e {
+				return k
+			}
+		}
+		for _, k := range keys {
+			lk := strings.ToLower(k)
+			if strings.HasPrefix(lk, e) && statusTypeRe.MatchString(lk) && len(lk) > len(e) {
+				return k
+			}
+		}
+		return entity
+	}
+	for _, fid := range fids {
+		for _, st := range out.Functions[fid].Arch.State {
+			key := find(st.Entity)
+			sm := out.States[key]
+			if sm == nil {
+				sm = &facts.StateMachine{}
+				out.States[key] = sm
+				keys = append(keys, key)
+				sort.Strings(keys)
+			}
+			has := map[string]bool{}
+			for _, s := range sm.States {
+				has[s] = true
+			}
+			for _, s := range []string{st.From, st.To} {
+				if s != "" && !has[s] {
+					has[s] = true
+					sm.States = append(sm.States, s)
+				}
+			}
+			dup := false
+			for i := range sm.Transitions {
+				t := &sm.Transitions[i]
+				if t.Fid == fid && t.From == st.From && t.To == st.To {
+					t.Confirmed = true
+					dup = true
+				}
+			}
+			if !dup {
+				sm.Transitions = append(sm.Transitions, facts.Transition{From: st.From, To: st.To, Fid: fid, Source: "annotation"})
+			}
+		}
+	}
+	for _, sm := range out.States {
+		sort.SliceStable(sm.Transitions, func(i, j int) bool {
+			a, b := sm.Transitions[i], sm.Transitions[j]
+			if a.Fid != b.Fid {
+				return a.Fid < b.Fid
+			}
+			if a.From != b.From {
+				return a.From < b.From
+			}
+			return a.To < b.To
+		})
+	}
 }

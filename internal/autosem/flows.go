@@ -107,6 +107,9 @@ type Flow struct {
 	Exit     string            `json:"exit,omitempty"`
 	Labels   map[string]string `json:"labels,omitempty"` // step fid -> caption
 	Branches []Branch          `json:"branches,omitempty"`
+	// Effects: step fid -> what the function itself changes ("orders.status ←
+	// paid", "INSERT kaspi_payments"); declared and automatic flows alike.
+	Effects map[string][]string `json:"effects,omitempty"`
 }
 
 type graph struct {
@@ -577,5 +580,43 @@ func buildFlows(g *graph) []Flow {
 			flows = append(flows, c.flow)
 		}
 	}
+	for i := range flows {
+		flows[i].Effects = g.effects(flows[i].Steps)
+	}
 	return flows
+}
+
+// effects lists, per step, what the function itself changes: declared state
+// transitions and writes to tables (not the closure over its callees).
+func (g *graph) effects(steps []string) map[string][]string {
+	var out map[string][]string
+	for _, fid := range steps {
+		fn, ok := g.f.Functions[fid]
+		if !ok {
+			continue
+		}
+		var list []string
+		if fn.Arch != nil {
+			for _, s := range fn.Arch.State {
+				list = append(list, s.Entity+" ← "+s.To)
+			}
+		}
+		for _, a := range fn.Data {
+			if a.Op == "read" {
+				continue
+			}
+			e := strings.ToUpper(a.Op) + " " + a.Table
+			if a.Op == "update" && len(a.Fields) > 0 {
+				e += " (" + strings.Join(a.Fields, ", ") + ")"
+			}
+			list = append(list, e)
+		}
+		if len(list) > 0 {
+			if out == nil {
+				out = map[string][]string{}
+			}
+			out[fid] = list
+		}
+	}
+	return out
 }

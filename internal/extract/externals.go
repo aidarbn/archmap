@@ -536,4 +536,5 @@ func addSystemContext(out *facts.Facts, fns map[string]*fn, order []string, rawI
 	}
 	sort.Slice(sfiles, func(i, j int) bool { return sfiles[i].Path < sfiles[j].Path })
 	out.States = detectStates(sfiles, funcs, queries)
+	mergeAnnotatedStates(out)
 }
