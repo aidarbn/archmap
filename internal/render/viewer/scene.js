@@ -26,7 +26,7 @@ function onGesture(el, fn) {
 // new Cam(svg, onChange): drag to pan, wheel to zoom; set/fit/animTo work in world coordinates.
 class Cam {
   constructor(svg, onChange) {
-    this.svg = svg; this.vb = { x: 0, y: 0, w: 100, h: 100 }; this.onChange = onChange; this.maxW = 1e5; this.minW = 120; this.insetTop = 0; // px; the map scenes set it to clear their overlays
+    this.svg = svg; this.vb = { x: 0, y: 0, w: 100, h: 100 }; this.onChange = onChange; this.maxW = 1e5; this.minW = 120; this.insetTop = 0; this.insetBottom = 0; this.insetRight = 0; // px; the map scenes set them to clear their overlays
     let drag = null;
     svg.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; drag = { x: e.clientX, y: e.clientY, vb: { ...this.vb }, moved: false }; });
     window.addEventListener('pointermove', (e) => {
@@ -65,12 +65,19 @@ class Cam {
     return { x: this.vb.x + (r.left - s.left) * k, y: this.vb.y + (r.top - s.top) * k, w: r.width * k, h: r.height * k };
   }
   aspect() { const p = this.svg.parentElement; return (p.offsetWidth || 1000) / (p.offsetHeight || 700); }
-  // the strip at the top of the scene covered by the crumbs and level buttons: content is fitted below it
-  insetPx() { const H = this.svg.parentElement.offsetHeight || 700; return Math.min(this.insetTop, H * 0.25); }
-  // aspect of the free area below the inset
-  freeAspect() { const p = this.svg.parentElement, H = p.offsetHeight || 700; return (p.offsetWidth || 1000) / (H - this.insetPx()); }
-  // view box of width w whose free area (below the inset) is h tall and starts at world y0
-  boxBelow(x, y0, w, h) { const k = (this.svg.parentElement.offsetHeight || 700) / ((this.svg.parentElement.offsetHeight || 700) - this.insetPx()), fh = h * k; return { x, y: y0 - (fh - h), w, h: fh }; }
+  // the strips covered by overlays: insetTop (crumbs, level buttons), insetBottom / insetRight (the sequence dock) —
+  // content is fitted into the free area that is left; each is capped so that the free area stays usable
+  size() { const p = this.svg.parentElement; return { W: p.offsetWidth || 1000, H: p.offsetHeight || 700 }; }
+  insetPx() { return Math.min(this.insetTop, this.size().H * 0.25); }
+  insetBPx() { return Math.min(this.insetBottom, this.size().H * 0.6); }
+  insetRPx() { return Math.min(this.insetRight, this.size().W * 0.6); }
+  // aspect of the free area (inside the insets)
+  freeAspect() { const { W, H } = this.size(); return (W - this.insetRPx()) / (H - this.insetPx() - this.insetBPx()); }
+  // view box whose free area is w x h (world) and starts at world (x, y0); the free area is the top-left part minus the top strip
+  boxBelow(x, y0, w, h) {
+    const { W, H } = this.size(), iT = this.insetPx(), fw = w * W / (W - this.insetRPx()), fh = h * H / (H - iT - this.insetBPx());
+    return { x, y: y0 - fh * iT / H, w: fw, h: fh };
+  }
   set(vb) {
     this.vb = vb;
     this.svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
@@ -95,8 +102,11 @@ class Cam {
     this.set(this.boxBelow(r.x + r.w / 2 - w / 2, r.y - pad, w, h));
   }
   // contains(r): the rect is fully visible (below the inset)
-  contains(r, m = 0) { const v = this.vb, top = v.y + this.insetWorld(v.w); return r.x >= v.x + m && r.y >= top + m && r.x + r.w <= v.x + v.w - m && r.y + r.h <= v.y + v.h - m; }
-  insetWorld(w) { return this.insetPx() * w / (this.svg.parentElement.offsetWidth || 1000); }
+  contains(r, m = 0) {
+    const v = this.vb, k = v.w / this.size().W, top = v.y + this.insetPx() * k;
+    return r.x >= v.x + m && r.y >= top + m && r.x + r.w <= v.x + v.w - this.insetRPx() * k - m && r.y + r.h <= v.y + v.h - this.insetBPx() * k - m;
+  }
+  insetWorld(w) { return this.insetPx() * w / this.size().W; }
   animTo(r, pad = 40, minW = 0, dur = DUR) { return this.animToVB(this.rectFor(r, pad, minW), dur); }
   animToVB(to, dur = DUR) {
     const from = { ...this.vb };

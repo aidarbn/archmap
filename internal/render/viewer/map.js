@@ -3,6 +3,24 @@
 
 let sys = null, map = null, fv = null, mini = null;
 const INSET = 64; // px at the top of every scene covered by the crumbs and the level buttons
+// the sequence dock (views/sequence.js) covers a strip at the bottom or on the right of the map: cameras fit into the rest
+const DOCK = { b: 0, r: 0 };
+const dockInsets = (cam) => { cam.insetBottom = DOCK.b; cam.insetRight = DOCK.r; };
+// setDock(bottom, right, dur): the dock changed; re-frame the current step (or the whole level) in the free area
+function setDock(b, r, dur = 220) {
+  b = Math.max(0, b | 0); r = Math.max(0, r | 0);
+  if (DOCK.b === b && DOCK.r === r) return;
+  DOCK.b = b; DOCK.r = r;
+  [sys, map, fv].forEach((sc) => { if (sc && sc.cam) dockInsets(sc.cam); });
+  if (state.view !== 'map' || state.busy) return;
+  const s = curStep();
+  if (state.level === 0 && sys) sys.cam.animTo(sys.extent, 30, 0, RM ? 0 : dur);
+  else if (state.level === 1 && map) {
+    const a = s && s.prev ? unitFor(D.fns[s.prev].module) : s && s.actor && map.nodes[s.actor.id] ? s.actor.id : null, c = s ? unitFor(s.mod) : null;
+    const ra = a && map.pos[a], rb = c && map.pos[c];
+    if (rb) map.cam.animTo(bbox([ra, rb]), 160, 1100, RM ? 0 : dur); else map.cam.animTo(map.extent, 10, 0, RM ? 0 : dur);
+  } else if (state.level === 2 && fv) fv.cam.animTo(fv.extent, 10, 0, RM ? 0 : dur);
+}
 
 /* ===================== module groups (more than GROUP_MIN modules) ===================== */
 // A path trie of modules; the start cut greedily splits the largest branch while blocks <= GROUP_TARGET.
@@ -194,7 +212,7 @@ function buildSystem() {
   const svg = S_('svg', {}, root);
   const g = S_('g', {}, svg), gl = S_('g', {}, g), ge = S_('g', {}, g), gn = S_('g', {}, g), fx = S_('g', {}, g);
   sys = { svg, g, fx, nodes: {}, edges: [] };
-  sys.cam = new Cam(svg); sys.cam.insetTop = INSET;
+  sys.cam = new Cam(svg); sys.cam.insetTop = INSET; dockInsets(sys.cam);
   const { P, labels } = sysLayout();
   labels.forEach((l) => S_('text', { x: l.x, y: l.y, 'text-anchor': 'middle', class: 'grp' }, gl, l.text));
   // service card
@@ -342,7 +360,7 @@ function buildMap() {
   exts.forEach((o) => o.tg.forEach((u) => E.push({ a: u, b: o.x.id, w: 1, dash: true })));
   drawPortEdges(E, pos, ge);
   map.cam = new Cam(svg, (vb) => { updateMinimap(vb); svg.classList.toggle('lod-lo', (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
-  map.cam.insetTop = INSET; map.cam.maxW = Math.max(map.extent.w, map.extent.h * map.cam.aspect()) * 4; // far enough out for the level to drop below LEAVE (zoom.js)
+  map.cam.insetTop = INSET; dockInsets(map.cam); map.cam.maxW = Math.max(map.extent.w, map.extent.h * map.cam.aspect()) * 4; // far enough out for the level to drop below LEAVE (zoom.js)
   wireSelect(svg, map.cam, selectMod, (id) => {
     if (U[id] && U[id].kind === 'g') return expandGroup(U[id].node);
     if (U[id]) return drill(2, { from: map.nodes[id].el, mod: id });
@@ -637,7 +655,7 @@ function buildFns(mod) {
   const x1 = Math.min(frame.x, ...pr.map((r) => r.x)) - 10, x2 = Math.max(frame.x + frame.w, ...pr.map((r) => r.x + r.w)) + 10;
   fv.extent = { x: x1, y: frame.y - (nIn ? 100 : 10), w: x2 - x1, h: frame.h + (nIn ? 100 : 10) + (nOut ? 90 : 10) };
   fv.cam = new Cam(svg);
-  fv.cam.insetTop = INSET; fv.cam.maxW = Math.max(fv.extent.w, fv.extent.h * fv.cam.aspect()) * 4;
+  fv.cam.insetTop = INSET; dockInsets(fv.cam); fv.cam.maxW = Math.max(fv.extent.w, fv.extent.h * fv.cam.aspect()) * 4;
   wireSelect(svg, fv.cam, selectFn, (id) => {
     if (id.startsWith('port:')) { goModule(id.split(':').slice(2).join(':')); return; }
     drill(3, { from: fv.nodes[id].el, fn: id });
@@ -891,7 +909,7 @@ function restorePlay() {
 
 Object.assign(AM, {
   map: {
-    drill, up, goModule, jumpToFn, setLevel, marks: () => { if (LVL_QUIET) { LVL_QUIET = false; restorePlay(); reapplySel(); } }, revealMod, intoSelected, rebuild: rebuildMap, fit: fitCur,
+    drill, up, goModule, jumpToFn, setLevel, setDock, marks: () => { if (LVL_QUIET) { LVL_QUIET = false; restorePlay(); reapplySel(); } }, revealMod, intoSelected, rebuild: rebuildMap, fit: fitCur,
     get level() { return state.level; }, get units() { return units; }, unitOf: (m) => unitFor(m), unitLayer: (id) => (U[id] ? unitLayer(U[id]) : null),
     get modules() { return map; }, get system() { return sys; }, get functions() { return fv; }, groups: G,
   },

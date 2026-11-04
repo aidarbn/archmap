@@ -17,9 +17,9 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `playback.js` | Scenario runs: picker, steps through the levels, branches, effects/status badges, auto play. |
 | `journeys.js` | Through paths and variants: the shared list rows (`AM.jv.journeyRows`, `variantRows`, `tog`), runs `journey:<id>` and `variant:<id>` (`fixed` runs: no branch stop), the plate between flows / at the end of a variant (`AM.jv.plate`, `end`, `jump`), progress and the label of the current path (`.jv-tag`). Event `jv` — a variants fold changed. |
 | `panel.js` | Right card for the selection (`setSel`). |
-| `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), the scale zoom of content without a camera (`AM.zoom.scaleWheel`: code text, the Scenario diagram — past ×1.57 it dives, below ×0.65 it leaves, with the same gate), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
+| `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), the scale zoom of content without a camera (`AM.zoom.scaleWheel`: code text, the sequence panel — past ×1.57 it dives, below ×0.65 it leaves, with the same gate), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
 | `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
-| `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. |
+| `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. `views/sequence.js` is the exception: no tab, it builds the **sequence panel** (a dock over `#v-map`, see below) and exports `AM.dock`. |
 | `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. `fitHeader()` keeps the project name at least ~120px wide: when the header runs out of room the branch counters and "changed only" fold into the ⋯ menu, then the labels of the live badge and the Lists button go. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
@@ -68,8 +68,23 @@ logged and do not break the page.
 - **Bus** `AM.bus.on(event, fn)` → unsubscribe; events: `data`, `lang`, `theme`, `view`,
   `level`, `select`, `step`, `flow`, `filter`, `resize`, `live` (after a serve update; `{flash: [fid]}` — functions that
   changed, to highlight in your own view; the core flashes its own scenes and lists). `onData`
-  is called before `live`. `Cam` has an optional `insetTop` (px, default 0): `fit`/`fitTop`
-  keep that strip free of content.
+  is called before `live`. `Cam` has optional `insetTop`, `insetBottom` and `insetRight` (px,
+  default 0; capped at 25% / 60% / 60% of the scene): `fit`/`fitTop`/`animTo`/`contains` keep
+  those strips free of content (the free area is the top-left part of the scene minus the top strip).
+  `AM.map.setDock(bottom, right, dur)` sets the bottom/right insets of all map cameras and re-frames the
+  current step (or the level) in what is left.
+- **Sequence panel** `AM.dock` (`views/sequence.js`): `toggle()`, `open(full)`, `esc()` (closes the
+  scenario list, then leaves the full screen; returns true when it took the key — `main.js` calls it
+  first on Esc), `shown`. The panel is `section.seqdock` inside `#v-map`: bottom (40% of the height by
+  default) or right (45% of the width), a separator (`.sd-grip`: drag, arrows, double-click for the default),
+  a strip when folded, full screen over the whole map. It appears when the run is a scenario, path, variant
+  or function run other than the one the page started with, or as soon as a step was taken; the diagram
+  button `#btnSeq` and the × of the panel override that per run. Header: the scenario combobox with search
+  (`AM.jv` rows, the same list as "Scenarios"), levels, "with map" (keeps the diagram's level equal to the map's),
+  function scope, fold frames, place buttons, fold, full screen, close. `localStorage` `archmap.seqdock`
+  holds `{pos, bottom, right, min}` (shares of the stage); `archmap.seqlink` the "with map" switch. CSS
+  variables `--dock-b` / `--dock-r` on `#v-map` (and `data-dock="b|r"`) move the map's own buttons; the code
+  scene `#sc3` is shrunk by them. `?view=sequence` opens the map with the panel full screen.
 - **Cross-view events** (API ↔ Data), both emitted after `AM.setView(…)` of the target tab:
   - `api:open-table` `{table, op, ep, fid, via}` — from the API view (a table in the endpoint card);
     `op` is `R`/`W`/`RW`, `ep` the endpoint object, `via` the first function of the call closure that

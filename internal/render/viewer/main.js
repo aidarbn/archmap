@@ -210,7 +210,7 @@ function init() {
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === 'Escape') { if (PK.open) return closePick(true); e.preventDefault(); if (state.view === 'map') up(); }
+    if (e.key === 'Escape') { if (PK.open) return closePick(true); e.preventDefault(); if (AM.dock && AM.dock.esc()) return; if (state.view === 'map') up(); }
     else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.step >= 0 ? stepIn() : intoSelected()); }
     else if (e.key === 'ArrowRight' || (e.key === ' ' && tg !== 'BUTTON')) { e.preventDefault(); doStep(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); doStep(-1); }
@@ -224,6 +224,7 @@ function init() {
   loadRun(defaultRunKey());
   setView('map');
   renderPanel();
+  if (qs.get('view') === 'sequence' && AM.dock) AM.dock.open(true); // the old Scenario tab: the map with the diagram full screen
   if (D.live) { setupLive(); watchMarks(); }
 }
 

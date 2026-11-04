@@ -1,4 +1,7 @@
-/* views/sequence.js — the "Scenario" tab: a nested sequence diagram of the current scenario.
+/* views/sequence.js — the sequence diagram dock of the map: a nested sequence diagram of the current scenario.
+ * Not a tab: a panel over the map view that appears when a scenario, path or variant is chosen or plays, at the
+ * bottom (default, 40%) or on the right, with a draggable separator, a collapse-to-a-strip button and a full-screen
+ * mode that hides the map (Esc leaves it); the map's cameras fit into the free part (AM.map.setDock).
  * Four levels, like the map (and kept on the map's level while "link levels" is on):
  *   0 system    — the actor, the service as one participant, the queue, external systems; only the hand-offs
  *                 between them, the inner steps folded into one message labelled with its first step;
@@ -12,7 +15,7 @@
  * diagram scales it and, past the thresholds of the map's semantic zoom (zoom.js), changes the level keeping the
  * current step in view. Replies, async hand-offs with a pause, alt blocks of the branches, effect and status
  * badges and the exit are drawn on every level. Follows the player: the messages holding the current step are lit
- * and scrolled to, a click plays up to the message's first step. A module mini map sits on the right. */
+ * and scrolled to, a click plays up to the message's first step. */
 AM.addI18n({
   ru: {
     seqTitle: 'Сценарий', seqEntry: 'Вход', seqReply: 'ответ', seqPause: 'пауза: задача ждёт в очереди', seqEnq: 'в очередь',
@@ -20,12 +23,14 @@ AM.addI18n({
     seqMapCap: 'Карта модулей', seqEmpty: 'Нет сценария для показа', seqExternal: 'внешняя', seqFlowTo: 'сценарий',
     seqSteps: (n, p) => n + ' ' + p(['шаг', 'шага', 'шагов']),
     seqLegend: 'вызов', seqLegendReply: 'ответ', seqLegendAsync: 'асинхронно через очередь', seqNoMap: 'карта модулей недоступна',
-    seqSvc: 'сервис', seqLink: 'связать с картой', seqLinkTip: 'Уровень сценария и уровень карты меняются вместе',
+    seqSvc: 'сервис', seqLink: 'с картой', seqLinkTip: 'Уровень сценария и уровень карты меняются вместе',
     seqEnter: '⤵ войти', seqLeave: '⤴ выйти', seqEnterTip: 'Раскрыть сообщение в рамку под-сценария (двойной клик, +)',
     seqFoldAll: 'свернуть рамки', seqScopeAll: 'функции: весь сценарий', seqScopeMod: (m) => 'функции модуля ' + m,
     seqScopeTip: 'Функции всего сценария или только одного модуля (остальные — модулями)',
     seqZoomHint: 'щипок / ⌘/Ctrl+колесо — масштаб и уровень', seqNoSrc: 'исходник недоступен', seqCallLine: 'строка вызова',
-    seqListTitle: 'Сценарии', seqListHide: 'Свернуть список сценариев',
+    dockBottom: 'Панель снизу', dockRight: 'Панель справа', dockMin: 'Свернуть в полоску', dockRestore: 'Развернуть диаграмму',
+    dockFull: 'На весь экран (карта скрыта)', dockUnfull: 'Вернуть карту (Esc)', dockClose: 'Закрыть диаграмму',
+    dockGrip: 'Потяните, чтобы изменить размер; двойной щелчок — по умолчанию', dockToggle: 'Диаграмма последовательности сценария',
   },
   en: {
     seqTitle: 'Scenario', seqEntry: 'Entry', seqReply: 'reply', seqPause: 'pause: the job waits in the queue', seqEnq: 'enqueue',
@@ -33,12 +38,14 @@ AM.addI18n({
     seqMapCap: 'Module map', seqEmpty: 'No scenario to show', seqExternal: 'external', seqFlowTo: 'scenario',
     seqSteps: (n, p) => n + ' ' + p(['step', 'steps']),
     seqLegend: 'call', seqLegendReply: 'reply', seqLegendAsync: 'async via the queue', seqNoMap: 'module map unavailable',
-    seqSvc: 'service', seqLink: 'link with the map', seqLinkTip: 'The scenario and the map change their level together',
+    seqSvc: 'service', seqLink: 'with map', seqLinkTip: 'The scenario and the map change their level together',
     seqEnter: '⤵ enter', seqLeave: '⤴ leave', seqEnterTip: 'Open the message in a frame of its sub-scenario (double-click, +)',
     seqFoldAll: 'fold frames', seqScopeAll: 'functions: whole scenario', seqScopeMod: (m) => 'functions of ' + m,
     seqScopeTip: 'Functions of the whole scenario or of one module only (the rest as modules)',
     seqZoomHint: 'pinch / ⌘/Ctrl+wheel — zoom and level', seqNoSrc: 'source unavailable', seqCallLine: 'call line',
-    seqListTitle: 'Scenarios', seqListHide: 'Fold the scenario list',
+    dockBottom: 'Panel at the bottom', dockRight: 'Panel on the right', dockMin: 'Collapse to a strip', dockRestore: 'Expand the diagram',
+    dockFull: 'Full screen (hides the map)', dockUnfull: 'Back to the map (Esc)', dockClose: 'Close the diagram',
+    dockGrip: 'Drag to resize; double-click for the default', dockToggle: 'Sequence diagram of the scenario',
   },
 });
 
@@ -48,8 +55,8 @@ const SEQ_HOPS = 8;       // the longest call chain shown inside a frame
 const SEQ_TONE = { good: 'var(--good)', warning: 'var(--warning)', critical: 'var(--critical)', serious: 'var(--serious)', neutral: 'var(--muted)' };
 const seqBad = /(fail|error|cancel|reject|denied|block|expire|timeout|ошиб|отмен|отклон|истек|истёк|отказ|не оплач)/i;
 
-let sEl = null, sWrap = null, sSide = null, sBar = null, sSig = '', sDirty = true;
-let sItems = [], sAct = null, sThumb = null, sDim = null;
+let sWrap = null, sBar = null, sSig = '', sDirty = true, sBox = '';
+let sItems = [], sAct = null, sDim = null;
 let sLevel = 1, sScope = null, sZ = 1, sLink = true;
 const sOpen = new Set(); // expanded branch previews
 const sSub = new Set();  // messages opened into frames (keys)
@@ -280,14 +287,12 @@ function seqToggle(key) {
 }
 
 function seqRender() {
-  sDirty = false; sItems = []; sAct = null; sThumb = null;
-  const vw = sEl.clientWidth;
-  if (vw) { sEl.classList.toggle('narrow', vw < 900); sEl.classList.toggle('noside', vw >= 900 && vw < (sListOn ? 1300 : 1040)); }
+  sDirty = false; sItems = []; sAct = null;
   const top = sWrap.scrollTop, left = sWrap.scrollLeft;
   sWrap.innerHTML = '';
   seqBar();
   const m = seqModel();
-  if (!m || !m.rows.length) { AM.h('div', { class: 'seq-empty' }, sWrap, AM.esc(AM.t('seqEmpty'))); seqSide(); return; }
+  if (!m || !m.rows.length) { AM.h('div', { class: 'seq-empty' }, sWrap, AM.esc(AM.t('seqEmpty'))); return; }
   const parts = m.parts, np = parts.length;
   // the right margin is wider than the left: a self-call loop with its label hangs to the right of the last lifeline
   const cw = (sWrap.clientWidth || 900) / sZ, x0 = 84, xr = 240, colMin = sLevel >= 2 ? 170 : 150;
@@ -499,10 +504,9 @@ function seqRender() {
   });
   sAct = AM.svg('rect', { class: 'act cur', width: 10, rx: 2, x: -100, y: -100, height: 0 }, gl);
   sWrap.scrollTop = top; sWrap.scrollLeft = left;
-  seqSide();
   if (need.length) {
     need.forEach((f) => sReq.add(f));
-    Promise.all(need.map((f) => AM.loadSrc(f))).then((bs) => { if (bs.some((x) => x != null) && AM.state.view === 'sequence') { seqRender(); seqSync(false); } });
+    Promise.all(need.map((f) => AM.loadSrc(f))).then((bs) => { if (bs.some((x) => x != null) && sShown()) { seqRender(); seqSync(false); } });
   }
 }
 
@@ -510,11 +514,7 @@ function seqRender() {
 function seqBar() {
   if (!sBar) return;
   sBar.innerHTML = '';
-  if (!sListOn || seqNarrow()) {
-    const lb = AM.h('button', { class: 'chip-btn sl-open', 'aria-expanded': sListOn, title: AM.t('seqListTitle') }, sBar, '☰ ' + AM.esc(AM.t('seqListTitle')));
-    lb.onclick = () => seqListShow(!sListOn);
-  }
-  const seg =AM.h('span', { class: 'seg', role: 'group', 'aria-label': 'level' }, sBar);
+  const seg = AM.h('span', { class: 'seg', role: 'group', 'aria-label': 'level' }, sBar);
   AM.t('lv').forEach((name, i) => {
     const b = AM.h('button', { 'aria-pressed': i === sLevel, 'data-l': i }, seg, AM.esc(name));
     b.onclick = () => seqSetLevel(i);
@@ -538,7 +538,7 @@ function seqBar() {
   }
   AM.h('span', { class: 'jv-tag', hidden: true }, sBar);
   AM.jv.paintTags();
-  AM.h('span', { class: 'hint' }, sBar, AM.esc(AM.t('seqZoomHint')));
+  seg.title = AM.t('seqZoomHint');
 }
 
 /* ---------- levels and zoom ---------- */
@@ -568,10 +568,10 @@ function seqScrollTo(i) {
 function seqSetLevel(l, focus, fromMap) {
   l = Math.max(0, Math.min(3, l));
   if (l === sLevel) return Promise.resolve();
-  const f = focus != null ? focus : sWrap && AM.state.view === 'sequence' ? seqFocusStep() : -1;
+  const f = focus != null ? focus : sShown() ? seqFocusStep() : -1;
   sLevel = l;
   if (sLink && !fromMap && AM.map.level !== l) AM.map.setLevel(l, seqFocusFid(f));
-  if (AM.state.view !== 'sequence') { sDirty = true; return Promise.resolve(); }
+  if (!sShown()) { sDirty = true; return Promise.resolve(); }
   seqRender(); seqSync(false); seqScrollTo(AM.state.step >= 0 ? AM.state.step : f);
   return Promise.resolve();
 }
@@ -586,7 +586,7 @@ function seqScale(z, e) {
   sWrap.scrollLeft = wx * z - px; sWrap.scrollTop = wy * z - py;
 }
 function seqWheel(e) {
-  if (AM.state.view !== 'sequence') return;
+  if (!sShown()) return;
   if (!AM.zoom.isZoomWheel(e)) return; // a plain wheel / two-finger scroll scrolls the diagram natively
   const focus = seqStepAt(e);
   AM.zoom.scaleWheel(e, {
@@ -594,45 +594,6 @@ function seqWheel(e) {
     in: sLevel < 3 ? () => seqSetLevel(sLevel + 1, focus) : null,
     out: sLevel > 0 ? () => seqSetLevel(sLevel - 1, focus) : null,
   });
-}
-
-/* ---------- side: module mini map ---------- */
-function seqSide() {
-  sSide.innerHTML = '';
-  const box = AM.h('div', { class: 'thumb' }, sSide);
-  const cap = AM.h('div', { class: 'cap' }, box, AM.esc(AM.t('seqMapCap')));
-  const mp = AM.map.modules;
-  sThumb = null;
-  if (mp && mp.pos && mp.extent && Object.keys(mp.pos).length) {
-    const ex = mp.extent;
-    const svg = AM.svg('svg', { viewBox: `${ex.x} ${ex.y} ${ex.w} ${ex.h}`, width: '100%', height: '100%', preserveAspectRatio: 'xMidYMid meet' }, box);
-    const nodes = {};
-    for (const id in mp.pos) {
-      const r = mp.pos[id], ly = AM.map.unitLayer(id);
-      nodes[id] = AM.svg('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, fill: ly ? AM.LCOLOR[ly] : 'var(--muted)', opacity: .28 }, svg);
-    }
-    sThumb = { svg, nodes, fx: AM.svg('g', {}, svg), cap, pos: mp.pos, sw: ex.w / 110 };
-  } else AM.h('div', { class: 'loc', style: 'padding:36px 12px 0' }, box, AM.esc(AM.t('seqNoMap')));
-  const lg = AM.h('div', { class: 'seqlegend' }, sSide);
-  lg.innerHTML = `<div><svg width="34" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="var(--text-2)" stroke-width="1.4" marker-end="url(#arrT)"/></svg>${AM.esc(AM.t('seqLegend'))}</div>` +
-    `<div><svg width="34" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrM)"/></svg>${AM.esc(AM.t('seqLegendReply'))}</div>` +
-    `<div><svg width="34" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="var(--text-2)" stroke-width="1.4" stroke-dasharray="2 3" marker-end="url(#arrO)"/></svg>${AM.esc(AM.t('seqLegendAsync'))}</div>`;
-  seqThumbSync();
-}
-function seqThumbSync() {
-  const th = sThumb; if (!th) return;
-  const s = AM.play.current();
-  Object.values(th.nodes).forEach((n) => { n.setAttribute('opacity', .28); n.removeAttribute('stroke'); });
-  th.fx.innerHTML = '';
-  th.cap.textContent = AM.t('seqMapCap');
-  if (!s) return;
-  const pk = (f) => AM.map.unitOf(D_().fns[f].module);
-  const a = s.prev ? pk(s.prev) : s.actor && th.pos[s.actor.id] ? s.actor.id : null, b = pk(s.fid);
-  [a, b].forEach((id) => { const n = id && th.nodes[id]; if (n) { n.setAttribute('opacity', 1); n.setAttribute('stroke', 'var(--accent)'); n.setAttribute('stroke-width', th.sw); } });
-  const ra = a && th.pos[a], rb = b && th.pos[b];
-  if (ra && rb && a !== b) AM.svg('path', { d: AM.curve(AM.clip(ra, AM.ctr(rb)), AM.clip(rb, AM.ctr(ra)), 0.12), fill: 'none', stroke: 'var(--accent)', 'stroke-width': th.sw * 1.1, 'marker-end': 'url(#arrA)' }, th.fx);
-  const nm = (id) => (id ? AM.short(id).replace('actor:', '') : '');
-  if (b) th.cap.textContent = AM.t('seqMapCap') + ': ' + [a, b].filter(Boolean).map(nm).join(' → ');
 }
 
 /* ---------- sync with the player ---------- */
@@ -657,23 +618,23 @@ function seqSync(keep) {
     if (last) { sAct.setAttribute('x', last.x - 5); sAct.setAttribute('y', last.y - 4); sAct.setAttribute('height', 26); }
     else { sAct.setAttribute('x', -100); sAct.setAttribute('height', 0); }
   }
-  seqThumbSync();
   if (keep) return;
-  if (last && AM.state.view === 'sequence') {
+  if (last && sShown()) {
     const top = sWrap.scrollTop, hh = sWrap.clientHeight, ly = last.y * sZ, lx = last.x * sZ;
     if (ly < top + HEAD_H * sZ + 30 || ly > top + hh - 70) sWrap.scrollTo({ top: Math.max(0, ly - hh / 2), behavior: AM.RM ? 'auto' : 'smooth' });
     // horizontally: the arrow as a whole when it fits, else its head
     const lft = sWrap.scrollLeft, wd = sWrap.clientWidth, x1 = Math.min(last.x, last.x0) * sZ, x2 = Math.max(last.x, last.x0) * sZ;
     if (x1 < lft + 40 || x2 > lft + wd - 40) sWrap.scrollTo({ left: Math.max(0, (x2 - x1 < wd - 120 ? (x1 + x2) / 2 : lx) - wd / 2), behavior: AM.RM ? 'auto' : 'smooth' });
-  } else if (!last && cur < 0 && AM.state.view === 'sequence') sWrap.scrollTop = 0;
+  } else if (!last && cur < 0 && sShown()) sWrap.scrollTop = 0;
 }
+// seqRefresh(force): the scenario or the size changed → redraw (when the dock is open, else on its next opening), then light the step
 function seqRefresh(force) {
   const sg = seqSig();
-  if (force || sg !== sSig) {
-    if (sg.split('|')[0] !== sSig.split('|')[0]) { sSub.clear(); sScope = null; } // another scenario: its frames are gone
-    sSig = sg;
-    if (AM.state.view === 'sequence') { seqRender(); } else { sDirty = true; return; }
-  }
+  const changed = sg !== sSig;
+  if (changed && sg.split('|')[0] !== sSig.split('|')[0]) { sSub.clear(); sScope = null; } // another scenario: its frames are gone
+  sSig = sg;
+  if (!sShown()) { if (changed || force) sDirty = true; return; }
+  if (force || changed || sDirty) seqRender();
   seqSync();
 }
 function seqSelect(sel) {
@@ -681,44 +642,43 @@ function seqSelect(sel) {
   sItems.forEach((it) => it.g.classList.toggle('sel', !!sel && sel.t === 'fn' && it.fid === sel.id && !!it.main));
 }
 
-/* ---------- left column: the scenarios ---------- */
-// search; "Main" on top, then groups by actor with counts, the auto ones, the general runs; the current one lit;
-// a click switches; ↑/↓ (outside inputs) take the neighbour; folds to a strip, slides out on a narrow screen
-let sList = null, sListQ = '', sListKeys = [];
-let sListOn = true;
-try { sListOn = localStorage.getItem('archmap.seqlist') !== '0'; } catch (e) { /* ignore */ }
-const seqNarrow = () => !!(sEl && sEl.clientWidth && sEl.clientWidth < 900); // the list slides over the diagram
-function seqListShow(on) {
-  sListOn = on;
-  try { localStorage.setItem('archmap.seqlist', on ? '1' : '0'); } catch (e) { /* ignore */ }
-  if (sEl) sEl.classList.toggle('list-on', on);
-  seqBar();
-  if (AM.state.view === 'sequence') { seqRender(); seqSync(true); }
-}
-function seqListMount() {
-  if (!sList) return;
-  sList.innerHTML = '';
-  const hd = AM.h('div', { class: 'sl-hd' }, sList);
-  AM.h('b', null, hd, AM.esc(AM.t('seqListTitle')));
-  const x = AM.h('button', { class: 'sl-x', title: AM.t('seqListHide'), 'aria-label': AM.t('seqListHide') }, hd, '«');
-  x.onclick = () => seqListShow(false);
-  const q = AM.h('input', { type: 'search', class: 'sl-q', placeholder: AM.t('flowSearch'), autocomplete: 'off', spellcheck: 'false' }, sList);
+
+/* ---------- the scenario combobox in the header of the dock ---------- */
+// search; paths, then scenarios ("Main" on top, groups by actor with counts, the auto ones, the general runs); the current
+// one lit; a click switches and closes; ↑/↓ in the field take the neighbour, Enter / Esc close
+let sPop = null, sCur = null, sListQ = '', sListKeys = [], sPopOpen = false;
+function sdPopMount() {
+  sPop.innerHTML = '';
+  const q = AM.h('input', { type: 'search', class: 'sl-q', placeholder: AM.t('flowSearch'), autocomplete: 'off', spellcheck: 'false', role: 'combobox', 'aria-controls': 'sdlist', 'aria-expanded': 'true' }, sPop);
   q.value = sListQ;
   let qt = null;
   q.oninput = () => { clearTimeout(qt); qt = setTimeout(() => { sListQ = q.value; seqListDraw(); }, 60); };
   q.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); seqListStep(e.key === 'ArrowDown' ? 1 : -1); }
-    else if (e.key === 'Escape') { q.value = ''; sListQ = ''; seqListDraw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); sdPop(false); }
+    else if (e.key === 'Escape') { e.preventDefault(); if (q.value) { q.value = ''; sListQ = ''; seqListDraw(); } else sdPop(false); }
   });
-  AM.h('div', { class: 'sl-body', role: 'listbox' }, sList).addEventListener('click', (e) => {
+  AM.h('div', { class: 'sl-body', id: 'sdlist', role: 'listbox' }, sPop).addEventListener('click', (e) => {
     const vt = e.target.closest('[data-vt]'); if (vt) { AM.jv.toggle(vt.dataset.vt); return; }
     const r = e.target.closest('.sl-row'); if (r) seqListPick(r.dataset.k);
   });
   seqListDraw();
 }
+function sdPop(on) {
+  if (!sPop || on === sPopOpen) return;
+  sPopOpen = on; sPop.hidden = !on;
+  sCur.setAttribute('aria-expanded', on);
+  if (!on) return;
+  // the list opens upwards from a bottom dock (over the map), else downwards; its height is what the stage leaves
+  const hr = sHost.getBoundingClientRect(), br = sCur.getBoundingClientRect();
+  const up = sDock.dataset.pos === 'bottom' && !sFull;
+  sPop.style.maxHeight = Math.max(160, Math.min(460, (up ? br.top - hr.top : hr.bottom - br.bottom) - 14)) + 'px';
+  seqListMark(true);
+  const q = sPop.querySelector('.sl-q'); if (q) { q.focus(); q.select(); }
+}
 function seqListDraw() {
-  const body = sList && sList.querySelector('.sl-body'); if (!body) return;
+  const body = sPop && sPop.querySelector('.sl-body'); if (!body) return;
   const D = D_(), q = sListQ.trim().toLowerCase();
   const key = (fl) => 'flow:' + fl.i;
   const row = (k, name, sub, extra) => `<div class="sl-row" role="option" data-k="${AM.esc(k)}" title="${AM.esc(name)}"><span class="nm">${AM.esc(name)}</span>${sub ? `<span class="sb">${AM.esc(sub)}</span>` : ''}${extra || ''}</div>`;
@@ -741,15 +701,15 @@ function seqListDraw() {
   seqListMark(false);
 }
 function seqListMark(scroll) {
-  if (!sList) return;
+  if (!sPop) return;
   const k = AM.state.run ? AM.state.run.key : '';
   let first = null;
-  sList.querySelectorAll('.sl-row').forEach((r) => { const on = r.dataset.k === k; r.classList.toggle('cur', on); r.setAttribute('aria-selected', on); if (on && !first) first = r; });
+  sPop.querySelectorAll('.sl-row').forEach((r) => { const on = r.dataset.k === k; r.classList.toggle('cur', on); r.setAttribute('aria-selected', on); if (on && !first) first = r; });
   if (scroll && first) { const b = first.parentElement, top = first.offsetTop - b.offsetTop; if (top < b.scrollTop + 30 || top > b.scrollTop + b.clientHeight - 30) b.scrollTop = top - b.clientHeight / 2; }
 }
 function seqListPick(k, fromKey) {
   if (k && (!AM.state.run || AM.state.run.key !== k)) AM.play.load(k);
-  if (!fromKey && seqNarrow() && sListOn) { sListOn = false; sEl.classList.remove('list-on'); seqBar(); } // the overlay closes after a pick
+  if (!fromKey) sdPop(false);
 }
 function seqListStep(d) {
   if (!sListKeys.length) return;
@@ -757,41 +717,199 @@ function seqListStep(d) {
   seqListPick(sListKeys[i < 0 ? 0 : Math.max(0, Math.min(sListKeys.length - 1, i + d))], true);
   seqListMark(true);
 }
-function seqListKey(e) {
-  if (AM.state.view !== 'sequence' || !sListOn || e.metaKey || e.ctrlKey || e.altKey) return;
-  const tg = e.target.tagName;
-  if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable) return;
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); seqListStep(e.key === 'ArrowDown' ? 1 : -1); }
+
+/* ---------- the dock: it appears with a scenario, sits at the bottom or on the right of the map ---------- */
+// Lives inside the map view (#v-map), over the map. Place (bottom / right), size (a share of the stage) and the
+// collapsed strip are kept in localStorage; the full-screen mode (the map is covered) is not. The map's cameras fit
+// into what the dock leaves free (Cam.insetBottom / insetRight, AM.map.setDock); the CSS variables --dock-b / --dock-r
+// move the map's own buttons. Esc leaves the full screen (AM.dock.esc, called by the key handler of main.js).
+const SD_KEY = 'archmap.seqdock', SD_STRIP = 38;
+const SD = { pos: 'bottom', bottom: 0.4, right: 0.45, min: false };
+try {
+  const o = JSON.parse(localStorage.getItem(SD_KEY) || '{}');
+  if (o.pos === 'right') SD.pos = 'right';
+  if (o.bottom >= 0.15 && o.bottom <= 0.75) SD.bottom = o.bottom;
+  if (o.right >= 0.2 && o.right <= 0.75) SD.right = o.right;
+  SD.min = o.min === true;
+} catch (e) { /* file:// without storage or a broken value */ }
+const sdSave = () => { try { localStorage.setItem(SD_KEY, JSON.stringify(SD)); } catch (e) { /* ignore */ } };
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+let sInitKey = null; // the run the page started with: it does not open the dock by itself
+let sDock = null, sHost = null, sGrip = null, sStrip = null, sFull = false, sUser = null, sRaf = 0;
+const sCtl = {};
+const ICON = {
+  bottom: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M2 9h12" /><rect x="3" y="9.4" width="10" height="3.4" fill="currentColor" stroke="none"/></svg>',
+  right: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M9 2.5v11"/><rect x="9.4" y="3.5" width="3.6" height="9" fill="currentColor" stroke="none"/></svg>',
+  min: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6l5 5 5-5"/></svg>',
+  full: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10"/></svg>',
+  unfull: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6H6V2.5M13.5 6H10V2.5M2.5 10H6v3.5M13.5 10H10v3.5"/></svg>',
+  close: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  expand: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 10l5-5 5 5"/></svg>',
+};
+
+// shown: the dock is on screen and open (not the strip) on the map tab — only then the diagram is drawn
+const sShown = () => !!sDock && !sDock.hidden && (!SD.min || sFull) && AM.state.view === 'map';
+// wanted: a scenario, path or variant is chosen or plays (the start-up run waits for a step); the user's choice for this run wins
+function sdWanted() {
+  const r = AM.state.run;
+  if (!r || !AM.play.list().length) return false;
+  if (sUser && sUser.key === r.key) return sUser.on;
+  return (r.key !== sInitKey && /^(flow|journey|variant|fn):/.test(r.key)) || AM.state.step >= 0;
+}
+function sdProgress() {
+  const r = AM.state.run; if (!r) return '';
+  if (r.fixed) return AM.jv.progress();
+  return AM.t('jvStepOf', Math.max(0, AM.state.step + 1), AM.play.list().length);
+}
+// the labels that follow the player: the combobox button, the collapsed strip, the toggle on the map
+function sdNames() {
+  if (!sDock) return;
+  const r = AM.state.run, name = r ? r.name : '';
+  sCur.innerHTML = `<span class="nm">${AM.esc(name)}</span><span class="car" aria-hidden="true">▾</span>`;
+  sCur.title = name;
+  const pr = sdProgress();
+  sStrip.innerHTML = `${ICON.expand}<span class="nm">${AM.esc(name)}</span><span class="pr">${AM.esc(pr)}</span>`;
+  sStrip.title = AM.t('dockRestore');
+  const tg = document.getElementById('btnSeq');
+  if (tg) { tg.setAttribute('aria-pressed', !sDock.hidden); tg.disabled = !r || !AM.play.list().length; }
+}
+function sdTitles() {
+  sCtl.bottom.title = AM.t('dockBottom'); sCtl.right.title = AM.t('dockRight');
+  sCtl.min.title = AM.t('dockMin'); sCtl.close.title = AM.t('dockClose');
+  sCtl.full.title = AM.t(sFull ? 'dockUnfull' : 'dockFull'); sCtl.full.innerHTML = sFull ? ICON.unfull : ICON.full;
+  sCtl.bottom.setAttribute('aria-pressed', SD.pos === 'bottom'); sCtl.right.setAttribute('aria-pressed', SD.pos === 'right');
+  sGrip.title = AM.t('dockGrip');
+  sGrip.setAttribute('aria-orientation', SD.pos === 'bottom' ? 'horizontal' : 'vertical');
+  const tg = document.getElementById('btnSeq'); if (tg) tg.title = AM.t('dockToggle');
+}
+// place and size; tells the map how much it lost. dur — the camera's animation (0 while dragging)
+function sdLayout(dur) {
+  if (!sDock) return;
+  const vis = sdWanted();
+  if (!vis) sFull = false;
+  sDock.hidden = !vis;
+  const W = sHost.clientWidth || 1000, H = sHost.clientHeight || 600, st = sDock.style;
+  let b = 0, r = 0;
+  if (vis) {
+    if (SD.min) b = SD_STRIP;
+    else if (SD.pos === 'bottom') b = Math.round(clampN(H * SD.bottom, 140, H * 0.7));
+    else r = Math.round(clampN(W * SD.right, 340, W * 0.7));
+  }
+  sDock.dataset.pos = SD.pos;
+  sDock.classList.toggle('min', SD.min && !sFull);
+  sDock.classList.toggle('full', sFull);
+  st.top = st.left = st.right = st.bottom = st.width = st.height = '';
+  if (sFull) { st.top = st.left = st.right = st.bottom = '0'; }
+  else if (SD.min) { st.left = st.right = st.bottom = '0'; st.height = SD_STRIP + 'px'; }
+  else if (SD.pos === 'bottom') { st.left = st.right = st.bottom = '0'; st.height = b + 'px'; }
+  else { st.top = st.right = st.bottom = '0'; st.width = r + 'px'; }
+  sHost.style.setProperty('--dock-b', b + 'px'); sHost.style.setProperty('--dock-r', r + 'px');
+  sHost.dataset.dock = r ? 'r' : b ? 'b' : '';
+  const box = [vis, b, r, sFull, W, H, SD.pos].join();
+  if (box !== sBox) { sBox = box; sDirty = true; } // another size: the diagram is laid out for the width it has
+  sdTitles();
+  if (AM.map.setDock) AM.map.setDock(b, r, dur);
+}
+// one place that brings everything in line: visibility, layout, labels, the diagram
+function sdSync(force, dur) {
+  if (!sdBuild()) return;
+  const was = sShown();
+  sdLayout(dur);
+  if (sDock.hidden && sPopOpen) sdPop(false);
+  sdNames();
+  seqRefresh(force || was !== sShown());
+}
+function sdRender() {
+  if (sRaf) return;
+  sRaf = requestAnimationFrame(() => { sRaf = 0; if (sShown()) { seqRender(); seqSync(true); } });
+}
+function sdUser(on) { const r = AM.state.run; if (!r) return; sUser = { key: r.key, on }; sdSync(true); }
+function sdFull(on) {
+  if (!sDock || on === sFull) return;
+  sFull = on; sdPop(false);
+  sdSync(true, 0);
+  if (on && sCtl.full) sCtl.full.focus({ preventScroll: true });
+}
+function sdSet(patch) { Object.assign(SD, patch); sdSave(); sdPop(false); sdSync(true); }
+function sdBuild() {
+  if (sDock) return true;
+  sHost = document.getElementById('v-map'); if (!sHost) return false;
+  sInitKey = AM.state.run ? AM.state.run.key : null;
+  sDock = AM.h('section', { class: 'seqdock', hidden: true, 'aria-label': AM.t('seqTitle') }, sHost);
+  sGrip = AM.h('div', { class: 'sd-grip', role: 'separator', tabindex: 0 }, sDock);
+  const hd = AM.h('div', { class: 'sd-hd' }, sDock);
+  sStrip = AM.h('button', { class: 'sd-strip' }, hd);
+  const cbx = AM.h('div', { class: 'sd-cbx' }, hd);
+  sCur = AM.h('button', { class: 'sd-cur', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' }, cbx);
+  sPop = AM.h('div', { class: 'sd-pop', hidden: true }, cbx);
+  sBar = AM.h('div', { class: 'seq-bar' }, hd);
+  const ctl = AM.h('div', { class: 'sd-ctl' }, hd);
+  const pos = AM.h('span', { class: 'seg', role: 'group' }, ctl);
+  sCtl.bottom = AM.h('button', null, pos, ICON.bottom); sCtl.right = AM.h('button', null, pos, ICON.right);
+  sCtl.min = AM.h('button', { class: 'iconbtn sd-minb' }, ctl, ICON.min);
+  sCtl.full = AM.h('button', { class: 'iconbtn' }, ctl, ICON.full);
+  sCtl.close = AM.h('button', { class: 'iconbtn' }, ctl, ICON.close);
+  sWrap = AM.h('div', { class: 'seq-wrap' }, AM.h('div', { class: 'sd-body' }, sDock));
+  sLevel = sLink ? AM.map.level : 1;
+
+  sCur.onclick = () => sdPop(!sPopOpen);
+  sStrip.onclick = () => sdSet({ min: false });
+  sCtl.bottom.onclick = () => sdSet({ pos: 'bottom' });
+  sCtl.right.onclick = () => sdSet({ pos: 'right' });
+  sCtl.min.onclick = () => sdSet({ min: true });
+  sCtl.full.onclick = () => sdFull(!sFull);
+  sCtl.close.onclick = () => sdUser(false);
+  document.addEventListener('pointerdown', (e) => { if (sPopOpen && !e.target.closest('.sd-cbx')) sdPop(false); });
+  sWrap.addEventListener('wheel', seqWheel, { passive: false });
+  AM.zoom.onGesture(sWrap, seqWheel);
+
+  // the separator: drag to resize, arrows to nudge, double-click for the default
+  sGrip.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || SD.min || sFull) return;
+    e.preventDefault(); try { sGrip.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ } sDock.classList.add('drag');
+    const move = (ev) => {
+      const r = sHost.getBoundingClientRect();
+      if (SD.pos === 'bottom') SD.bottom = clampN((r.bottom - ev.clientY) / r.height, 0.15, 0.7);
+      else SD.right = clampN((r.right - ev.clientX) / r.width, 0.2, 0.7);
+      sdLayout(0); sdRender();
+    };
+    const end = () => { sGrip.removeEventListener('pointermove', move); sGrip.removeEventListener('pointerup', end); sGrip.removeEventListener('pointercancel', end); sDock.classList.remove('drag'); sdSave(); };
+    sGrip.addEventListener('pointermove', move); sGrip.addEventListener('pointerup', end); sGrip.addEventListener('pointercancel', end);
+  });
+  sGrip.addEventListener('dblclick', () => { SD.bottom = 0.4; SD.right = 0.45; sdSave(); sdLayout(); sdRender(); });
+  sGrip.addEventListener('keydown', (e) => {
+    const k = e.key, bot = SD.pos === 'bottom';
+    const d = bot ? (k === 'ArrowUp' ? 1 : k === 'ArrowDown' ? -1 : 0) : (k === 'ArrowLeft' ? 1 : k === 'ArrowRight' ? -1 : 0);
+    if (!d) return;
+    e.preventDefault(); e.stopPropagation();
+    if (bot) SD.bottom = clampN(SD.bottom + d * 0.03, 0.15, 0.7); else SD.right = clampN(SD.right + d * 0.03, 0.2, 0.7);
+    sdSave(); sdLayout(0); sdRender();
+  });
+  const tg = document.getElementById('btnSeq'); if (tg) tg.onclick = () => AM.dock.toggle();
+  sdPopMount();
+  return true;
 }
 
-AM.registerView({
-  id: 'sequence',
-  order: 10,
-  title: () => AM.t('seqTitle'),
-  mount(el) {
-    sEl = AM.h('div', { class: 'seqv' + (sListOn ? ' list-on' : '') }, el);
-    sList = AM.h('nav', { class: 'seq-list', 'aria-label': AM.t('seqListTitle') }, sEl);
-    seqListMount();
-    if (sListOn && seqNarrow()) { sListOn = false; sEl.classList.remove('list-on'); } // narrow: the list waits for ☰
-    const main = AM.h('div', { class: 'seq-main' }, sEl);
-    sBar = AM.h('div', { class: 'seq-bar' }, main);
-    sWrap = AM.h('div', { class: 'seq-wrap' }, main);
-    sSide = AM.h('aside', { class: 'seq-side' }, sEl);
-    sWrap.addEventListener('wheel', seqWheel, { passive: false });
-    AM.zoom.onGesture(sWrap, seqWheel);
-    sLevel = sLink ? AM.map.level : 1;
-    AM.bus.on('flow', () => { seqRefresh(false); seqListMark(true); });
-    AM.bus.on('jv', () => seqListDraw());
-    window.addEventListener('keydown', seqListKey);
-    AM.bus.on('level', (l) => { if (sLink && l !== sLevel) seqSetLevel(l, -1, true); });
-  },
-  show() {
-    if (sDirty || sSig !== seqSig()) { sSig = seqSig(); seqRender(); }
-    seqSync(); seqListMark(true);
-  },
-  onStep() { seqRefresh(false); },
-  onSelect(sel) { seqSelect(sel); },
-  onLang() { seqListMount(); sSig = seqSig(); if (AM.state.view === 'sequence') { seqRender(); seqSync(); } else sDirty = true; },
-  onData() { seqListDraw(); sSig = seqSig(); if (AM.state.view === 'sequence') { seqRender(); seqSync(); } else sDirty = true; },
-});
-AM.bus.on('resize', () => { if (sWrap && AM.state.view === 'sequence') { seqRender(); seqSync(); } else sDirty = true; });
+// Esc: close the open list, then leave the full screen; true when it took the key
+function sdEsc() {
+  if (sPopOpen) { sdPop(false); return true; }
+  if (sFull) { sdFull(false); return true; }
+  return false;
+}
+AM.dock = {
+  toggle() { const r = AM.state.run; if (!r) return; if (sdBuild()) sdUser(!sdWanted()); },
+  // open(full): show the dock for the current run (full screen when asked)
+  open(full) { const r = AM.state.run; if (!r || !sdBuild()) return; sUser = { key: r.key, on: true }; if (full) sFull = true; sdSync(true, 0); },
+  esc: sdEsc,
+  get shown() { return sShown(); },
+};
+
+AM.bus.on('flow', () => { sdSync(false); seqListMark(true); });
+AM.bus.on('step', () => sdSync(false));
+AM.bus.on('jv', () => seqListDraw());
+AM.bus.on('select', (sel) => seqSelect(sel));
+AM.bus.on('level', (l) => { if (sDock && sLink && l !== sLevel) seqSetLevel(l, -1, true); });
+AM.bus.on('view', () => { if (sDock) sdSync(false, 0); });
+AM.bus.on('lang', () => { if (!sDock) return; sdPopMount(); sdTitles(); sSig = seqSig(); sdNames(); if (sShown()) { seqRender(); seqSync(); } else sDirty = true; });
+AM.bus.on('live', () => { if (!sDock) return; seqListDraw(); sdSync(true); });
+AM.bus.on('resize', () => { if (sDock) sdSync(true, 0); });

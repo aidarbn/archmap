@@ -319,7 +319,7 @@ function applyFlash() {
   if (state.level === 3 && state.fn && f(state.fn)) mark($('#sc3 .src'), isF(state.fn));
   $$('#lists .lrow').forEach((e) => { const fn = e.dataset.k === 'fn' && e.dataset.id, mo = e.dataset.k === 'mod' && e.dataset.id; if ((fn && f(fn)) || (mo && m(mo))) mark(e, (fn && isF(fn)) || (mo && isM(mo))); });
   // views
-  $$('.seqv .msg:not(.reply)[data-fid]').forEach((g) => { const id = g.dataset.fid; if (id && f(id)) mark(g, isF(id)); });
+  $$('.seqdock .msg:not(.reply)[data-fid]').forEach((g) => { const id = g.dataset.fid; if (id && f(id)) mark(g, isF(id)); });
   const eps = D.endpoints || [];
   $$('.api-row[data-i]').forEach((e) => { const ep = eps[+e.dataset.i]; if (ep && ep.fid && reachesSes(ep.fid)) mark(e, reachesFresh(ep.fid)); });
   $$('.matrix tr[data-i]').forEach((e) => { const ep = eps[+e.dataset.i]; if (ep && ep.fid && reachesSes(ep.fid)) mark(e, reachesFresh(ep.fid)); });
