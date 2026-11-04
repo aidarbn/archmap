@@ -42,6 +42,9 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 		for _, p := range res.Problems {
 			fmt.Fprintln(stdout, p)
 		}
+		for _, p := range res.Warnings {
+			fmt.Fprintln(stdout, "warning:", p)
+		}
 		if len(res.Problems) == 0 {
 			fmt.Fprintf(stdout, "archmap lint: ok (%d flows, %d annotated functions)\n", res.Flows, res.Annotated)
 		}

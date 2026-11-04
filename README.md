@@ -271,6 +271,49 @@ Declared scenarios come first in the map (kind `declared`, with `id`, `actor`,
 the same entry point; the rest follow as before. Each function also carries the
 parsed markup as `arch` in `facts.json`.
 
+### Journeys and variants
+
+There are more scenarios than entry points, in two directions.
+
+**Journeys** are paths over several flows: what a client does from the first call to the
+last. The backend shows only part of it (a payment starts a queue job that confirms the order),
+the rest is the client's order of calls (create the order, then ask for a QR, then confirm),
+which only you know. Write it on the entry point of the first flow:
+
+```go
+// arch:flow order-create "Create an order"
+// arch:actor Tablet
+// arch:journey guest-pay "Guest pays by QR"
+// arch:actor Guest
+// arch:exit "the order is in the kitchen"
+func (s *Server) CreateOrder(...) {
+
+// arch:flow qr-request "Request a QR"
+// arch:then guest-pay qr-request
+func (s *Server) RequestQR(...) {
+```
+
+- `arch:journey <id> "Name"` starts a journey; its first flow is the nearest `arch:flow` of the
+  same comment. `arch:actor` and `arch:exit` below it belong to the journey (above it, to the
+  flow). Without them the journey takes the actor of its first and the exit of its last flow.
+- `arch:then <journey-id> <flow-id> [> <flow-id> ...]` appends flows, on any function; the order
+  is the source order (file, line) of the `then` lines.
+- List form on one line: `arch:journey <id> "Name": flowA > flowB > flowC`.
+
+Links between neighbouring flows come from the code when it has them (`arch:on … -> flow`, or
+a queue: a step puts a job whose handler is another flow's entry point) and are `declared`
+otherwise. `archmap lint` warns about such a gap; it is fine when the client calls the flows in turn.
+
+Automatic journeys are built too: from every flow that a person starts (actor is not
+cron/queue/system) a walk over the `on` and queue links, at least two flows, no cycles; paths
+with a shared prefix are one journey with a branch. Declared journeys come first.
+
+**Variants** are the paths through the forks of one flow. Each `arch:on` is a fork at its step
+and ends its variant, either in another flow or with the text outcome; the main variant runs
+through all the steps. The name is built from the condition (`paid → to the cash desk`). A flow
+has at most 12 variants (outcomes with the same end are folded together first). A flow without
+`arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
+
 ### Lint
 
 ```sh
@@ -280,7 +323,10 @@ archmap lint [--root DIR] [--format text|json] [--tests]
 Checks the markup and exits with 1 when something is wrong, so it fits CI:
 syntax errors (with the line); a `step` or `on -> …` that names a flow that is
 not declared; a flow id declared twice; a step that cannot be reached by calls
-from the flow's entry point; `ext` and `state` of a wrong shape.
+from the flow's entry point; `ext` and `state` of a wrong shape; a journey that names a
+flow that is not declared, a `then` of an unknown journey, a journey id declared twice. A gap
+in a journey (two neighbouring flows with no link in the code) is a warning and does not change
+the exit code.
 
 ## serve: live map while you code
 

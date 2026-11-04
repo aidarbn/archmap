@@ -94,3 +94,68 @@ func TestBlockLineNumbers(t *testing.T) {
 		t.Fatal(ls)
 	}
 }
+
+func TestParseJourney(t *testing.T) {
+	text := `arch:flow order "Create order"
+arch:actor Tablet
+arch:journey guest "Guest pays by QR"
+arch:actor Guest
+arch:exit "order is in the kitchen"
+arch:then guest qr > confirm
+arch:then guest send
+arch:journey quick “Quick”: order > qr>confirm`
+	n, errs := ParseText(text, 1)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	if n.Flows[0].Actor != "Tablet" {
+		t.Errorf("actor before the journey belongs to the flow: %+v", n.Flows)
+	}
+	want := []facts.JourneyDecl{
+		{ID: "guest", Name: "Guest pays by QR", Actor: "Guest", Exit: "order is in the kitchen", Flows: []string{"order"}},
+		{ID: "quick", Name: "Quick", Flows: []string{"order", "qr", "confirm"}},
+	}
+	if !reflect.DeepEqual(n.Journeys, want) {
+		t.Fatalf("got %+v", n.Journeys)
+	}
+	wantThen := []facts.ThenNote{{Journey: "guest", Flows: []string{"qr", "confirm"}}, {Journey: "guest", Flows: []string{"send"}}}
+	if !reflect.DeepEqual(n.Then, wantThen) {
+		t.Fatalf("then %+v", n.Then)
+	}
+}
+
+func TestParseJourneyFirstFlow(t *testing.T) {
+	// the nearest flow above wins; a flow below is the fallback
+	n, errs := ParseText("arch:flow a \"A\"\narch:flow b \"B\"\narch:journey j \"J\"", 1)
+	if len(errs) != 0 || n.Journeys[0].Flows[0] != "b" {
+		t.Fatalf("%+v %v", n, errs)
+	}
+	n, errs = ParseText("arch:journey j \"J\"\narch:flow a \"A\"", 1)
+	if len(errs) != 0 || n.Journeys[0].Flows[0] != "a" {
+		t.Fatalf("%+v %v", n, errs)
+	}
+}
+
+func TestParseJourneyErrors(t *testing.T) {
+	text := `arch:journey
+arch:journey j
+arch:journey bad:id "N"
+arch:journey j "unterminated
+arch:journey j "N": a > > b
+arch:journey j "N" trailing
+arch:journey j "N"
+arch:then
+arch:then j
+arch:then j bad!id`
+	n, errs := ParseText(text, 1)
+	var lines []int
+	for _, e := range errs {
+		lines = append(lines, e.Line)
+	}
+	if !reflect.DeepEqual(lines, []int{1, 2, 3, 4, 5, 6, 8, 9, 10, 7}) { // line 7 is reported last: it waits for a flow
+		t.Fatalf("lines %v: %v", lines, errs)
+	}
+	if n != nil {
+		t.Fatalf("nothing valid expected: %+v", n)
+	}
+}

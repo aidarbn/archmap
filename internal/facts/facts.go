@@ -80,6 +80,27 @@ type ArchNote struct {
 	Ext   []string    `json:"ext,omitempty"`
 	On    []OnNote    `json:"on,omitempty"`
 	State []StateNote `json:"state,omitempty"`
+	// Journeys declare end-to-end paths over several flows; Then appends flows
+	// to a journey declared elsewhere.
+	Journeys []JourneyDecl `json:"journeys,omitempty"`
+	Then     []ThenNote    `json:"then,omitempty"`
+}
+
+// JourneyDecl declares a journey (`arch:journey`). Flows holds the flows named
+// right in the declaration: the nearest `arch:flow` of the same comment (block
+// form) or the whole `a > b > c` list (list form).
+type JourneyDecl struct {
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Actor string   `json:"actor,omitempty"`
+	Exit  string   `json:"exit,omitempty"`
+	Flows []string `json:"flows,omitempty"`
+}
+
+// ThenNote appends flows to journey Journey (`arch:then`).
+type ThenNote struct {
+	Journey string   `json:"journey"`
+	Flows   []string `json:"flows"`
 }
 
 // FlowDecl declares a scenario that starts at the annotated function.
@@ -112,7 +133,7 @@ type StateNote struct {
 
 // Empty reports a note with no content.
 func (a *ArchNote) Empty() bool {
-	return a == nil || len(a.Flows)+len(a.Steps)+len(a.Ext)+len(a.On)+len(a.State) == 0
+	return a == nil || len(a.Flows)+len(a.Steps)+len(a.Ext)+len(a.On)+len(a.State)+len(a.Journeys)+len(a.Then) == 0
 }
 
 // Entry marks a function as an entry point.

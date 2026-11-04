@@ -96,7 +96,7 @@ func isHelper(fn facts.Function) bool {
 
 // Flow is a scenario: a path through the call graph from an entry point.
 type Flow struct {
-	ID    string   `json:"id,omitempty"` // declared flows only
+	ID    string   `json:"id"` // declared: the arch id; automatic: "auto:" + fid of the entry point. Unique, stable
 	Name  string   `json:"name"`
 	Desc  string   `json:"desc,omitempty"`
 	Kind  string   `json:"kind,omitempty"` // entry-point kind: http | task | main | lifecycle | ui; "declared" for arch:flow
@@ -110,6 +110,10 @@ type Flow struct {
 	// Effects: step fid -> what the function itself changes ("orders.status ←
 	// paid", "INSERT kaspi_payments"); declared and automatic flows alike.
 	Effects map[string][]string `json:"effects,omitempty"`
+	// Variants (declared flows with arch:on only): the main path and one variant
+	// per outcome of a fork, at most MaxVariants; VariantsMore counts the cut ones.
+	Variants     []Variant `json:"variants,omitempty"`
+	VariantsMore int       `json:"variantsMore,omitempty"`
 }
 
 type graph struct {
@@ -488,7 +492,7 @@ func buildFlows(g *graph) []Flow {
 			layers[g.layer[m]] = true
 		}
 		c := &cand{
-			flow:  Flow{Name: flowName(fn), Desc: desc, Kind: fn.Entry.Kind, Steps: steps},
+			flow:  Flow{ID: "auto:" + fid, Name: flowName(fn), Desc: desc, Kind: fn.Entry.Kind, Steps: steps},
 			mods:  len(mods),
 			score: g.flowScore(fn.Entry.Kind, g.reach(fid), len(steps), len(layers)),
 		}

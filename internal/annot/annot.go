@@ -12,6 +12,11 @@
 //	arch:on <cond> -> <flow-id>    branch: the scenario continues in another flow
 //	arch:on <cond> "text"          outcome of the step
 //	arch:state <entity>: <from> -> <to>  state transition
+//	arch:journey <id> "Name"       end-to-end path over several flows; the first
+//	                               flow is the nearest arch:flow of the comment;
+//	                               arch:actor / arch:exit below it apply to it
+//	arch:journey <id> "Name": a > b > c  the same, flows listed in one line
+//	arch:then <journey-id> <flow> [> <flow>...]  appends flows to a journey
 package annot
 
 import (
@@ -61,6 +66,11 @@ func Parse(lines []Line) (*facts.ArchNote, []Error) {
 		n    facts.ArchNote
 		errs []Error
 		seen bool
+		// what arch:actor / arch:exit apply to: the last flow or journey
+		last = ""
+		// block journeys that still need their first flow: index in n.Journeys,
+		// line, and how many flows were declared above them
+		pend []pendingJourney
 	)
 	for _, l := range lines {
 		t := strings.TrimSpace(l.Text)
@@ -86,7 +96,30 @@ func Parse(lines []Line) (*facts.ArchNote, []Error) {
 				bad("arch:flow: bad id %q", tk[0])
 			default:
 				n.Flows = append(n.Flows, facts.FlowDecl{ID: tk[0], Name: tk[1]})
+				last = "flow"
 			}
+		case "journey":
+			j, err := parseJourney(rest)
+			if err != nil {
+				bad("arch:journey: %v", err)
+				continue
+			}
+			if len(j.Flows) == 0 {
+				pend = append(pend, pendingJourney{len(n.Journeys), l.N, len(n.Flows)})
+			}
+			n.Journeys = append(n.Journeys, j)
+			last = "journey"
+		case "then":
+			tk := strings.Fields(strings.ReplaceAll(rest, ">", " "))
+			ok := len(tk) >= 2 && IDRe.MatchString(tk[0])
+			for i := 1; ok && i < len(tk); i++ {
+				ok = IDRe.MatchString(tk[i])
+			}
+			if !ok {
+				bad("arch:then: want <journey-id> <flow-id> [> <flow-id>...]")
+				continue
+			}
+			n.Then = append(n.Then, facts.ThenNote{Journey: tk[0], Flows: tk[1:]})
 		case "actor", "exit":
 			v, err := unquote(rest)
 			switch {
@@ -94,8 +127,12 @@ func Parse(lines []Line) (*facts.ArchNote, []Error) {
 				bad("arch:%s: %v", verb, err)
 			case v == "":
 				bad("arch:%s: empty value", verb)
-			case len(n.Flows) == 0:
-				bad("arch:%s: no arch:flow above it", verb)
+			case last == "":
+				bad("arch:%s: no arch:flow or arch:journey above it", verb)
+			case last == "journey" && verb == "actor":
+				n.Journeys[len(n.Journeys)-1].Actor = v
+			case last == "journey":
+				n.Journeys[len(n.Journeys)-1].Exit = v
 			case verb == "actor":
 				n.Flows[len(n.Flows)-1].Actor = v
 			default:
@@ -157,10 +194,75 @@ func Parse(lines []Line) (*facts.ArchNote, []Error) {
 			bad("unknown directive arch:%s", verb)
 		}
 	}
+	// the first flow of a block journey: the nearest arch:flow above it, else
+	// the first one below it
+	var drop []int
+	for _, p := range pend {
+		switch {
+		case p.flowsAbove > 0:
+			n.Journeys[p.idx].Flows = []string{n.Flows[p.flowsAbove-1].ID}
+		case len(n.Flows) > 0:
+			n.Journeys[p.idx].Flows = []string{n.Flows[0].ID}
+		default:
+			errs = append(errs, Error{p.line, `arch:journey: no arch:flow in this comment (put it on the entry point of the first flow, or use the list form: arch:journey <id> "Name": a > b)`})
+			drop = append(drop, p.idx)
+		}
+	}
+	for i := len(drop) - 1; i >= 0; i-- {
+		n.Journeys = append(n.Journeys[:drop[i]], n.Journeys[drop[i]+1:]...)
+	}
 	if !seen || n.Empty() {
 		return nil, errs
 	}
 	return &n, errs
+}
+
+type pendingJourney struct{ idx, line, flowsAbove int }
+
+// parseJourney parses `<id> "Name"` (block form: the first flow is the nearest
+// arch:flow) or `<id> "Name": a > b > c` (list form).
+func parseJourney(rest string) (facts.JourneyDecl, error) {
+	want := fmt.Errorf(`want <id> "Name" or <id> "Name": <flow> > <flow>`)
+	i := strings.IndexAny(rest, " \t")
+	if i < 0 {
+		return facts.JourneyDecl{}, want
+	}
+	id, tail := rest[:i], strings.TrimSpace(rest[i+1:])
+	if !IDRe.MatchString(id) {
+		return facts.JourneyDecl{}, fmt.Errorf("bad id %q", id)
+	}
+	if tail == "" || (tail[0] != '"' && !strings.HasPrefix(tail, "“")) {
+		return facts.JourneyDecl{}, want
+	}
+	end := closer([]rune(tail)[0])
+	rs := []rune(tail)
+	j := 1
+	for j < len(rs) && rs[j] != end && (end != '”' || rs[j] != '"') {
+		j++
+	}
+	if j >= len(rs) {
+		return facts.JourneyDecl{}, fmt.Errorf("unterminated quote")
+	}
+	name := string(rs[1:j])
+	after := strings.TrimSpace(string(rs[j+1:]))
+	d := facts.JourneyDecl{ID: id, Name: name}
+	if name == "" {
+		return d, want
+	}
+	if after == "" {
+		return d, nil
+	}
+	if after[0] != ':' {
+		return d, want
+	}
+	for _, f := range strings.Split(after[1:], ">") {
+		f = strings.TrimSpace(f)
+		if !IDRe.MatchString(f) {
+			return d, fmt.Errorf("bad flow id %q in the list", f)
+		}
+		d.Flows = append(d.Flows, f)
+	}
+	return d, nil
 }
 
 func parseOn(rest string) (facts.OnNote, error) {

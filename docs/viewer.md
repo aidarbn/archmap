@@ -114,6 +114,44 @@ Selection kinds of the core: `null`, `{t:'svc'}`, `{t:'actor', id}`, `{t:'ext', 
 `{t:'mod', id}`, `{t:'group', id}`, `{t:'fn', id}`, `{t:'step'}`. Views add their own kinds
 (`ep`, `table`, `status`, …) with `registerPanel`.
 
+## Model data: flow ids, journeys, variants
+
+`DATA.model.flows[]` (see `autosem.Flow`). New or changed fields:
+
+- `id` — **always present and unique**: the arch id for `kind:"declared"`, `"auto:" + <fid of the
+  entry point>` for automatic flows. (It used to exist for declared flows only; use `kind` to
+  tell them apart.)
+- `variants` — only declared flows that have `arch:on`; absent otherwise (no forks = no variants,
+  the flow is its own only path). `variantsMore` — how many were cut by the limit (12).
+  Variant: `{id: "<flow id>#<n>", name, main?, any?, choices: [{at: fid, cond}], steps: [fid],
+  end: {kind: "flow"|"exit"|"text", flow?, text?}}`. `#0` is the main variant (`main:true`,
+  `choices: []`, all steps, `end.kind:"exit"`, `end.text` = the flow's `exit`; its `name` is the
+  constant `"main path"`, localize it). Every other variant is one `arch:on` outcome: `steps` is
+  the flow's steps up to and including the step with the fork (`choices[0].at`); the variant ends
+  there — in another flow (`end.kind:"flow"`, `end.flow` = flow id, `end.text` = the caption if
+  any), or with a text outcome (`end.kind:"text"`). `name` is `"<cond> → <caption or target flow
+  name>"`. When a flow has more than 12 outcomes, variants with the same `end` are folded into
+  one with `any:true` (`choices` are then alternatives, `name` = conds joined with `" | "`),
+  then the list is cut to 12.
+
+`DATA.model.journeys[]` — paths over several flows, declared ones first, `[]` when none:
+
+```
+{id, name, desc, actor, exit, declared: bool, top: bool,
+ flows: [flow id],            // unique; flows[0] is where it starts
+ links: [{from: flow id, to: flow id, via: "on"|"queue"|"declared", cond?}]}
+```
+
+`links` is a graph (a tree with joins) over `flows`, never a cycle. `via:"on"` — `arch:on` with a
+condition (`cond`); `"queue"` — a step puts a job on a queue whose handler is the entry point of
+`to`; `"declared"` — the order was written by hand and the code shows no link (draw it dashed).
+A declared journey lists its flows in the written order and has one link per neighbouring pair
+(several when both an `on` and a queue connect them); automatic ones (`declared:false`, id
+`"j:" + <first flow id>`) are branching walks from every flow that a person starts (actor not
+cron/queue/system; without an actor: entry kind http/ui), at least 2 flows, at most 16, journeys
+that are only a part of a longer one are dropped. `top` is true for the first 8.
+Markup syntax: README, "Journeys".
+
 ## Layout (`layered`)
 
 `layered(nodes, edges, opt)` puts equal cards into horizontal bands (`node.layer`), wraps a wide
