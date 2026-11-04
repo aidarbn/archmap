@@ -20,6 +20,8 @@ type Facts struct {
 	Functions map[string]Function `json:"functions"`
 	Deleted   []Deleted           `json:"deleted"`
 	Project   *Project            `json:"project,omitempty"`
+	Endpoints []Endpoint          `json:"endpoints,omitempty"`
+	Data      *DataModel          `json:"data,omitempty"`
 }
 
 // Project describes the analysed repository as a whole.
@@ -58,6 +60,7 @@ type Function struct {
 	Uncommitted  *bool    `json:"uncommitted,omitempty"` // set together with Status
 	Decorators   []string `json:"decorators,omitempty"`
 	Bases        []string `json:"bases,omitempty"`
+	Data         []Access `json:"data,omitempty"`
 }
 
 // Entry marks a function as an entry point.
