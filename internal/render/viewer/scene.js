@@ -4,7 +4,7 @@
 // new Cam(svg, onChange): drag to pan, wheel to zoom; set/fit/animTo work in world coordinates.
 class Cam {
   constructor(svg, onChange) {
-    this.svg = svg; this.vb = { x: 0, y: 0, w: 100, h: 100 }; this.onChange = onChange; this.maxW = 1e5; this.minW = 120;
+    this.svg = svg; this.vb = { x: 0, y: 0, w: 100, h: 100 }; this.onChange = onChange; this.maxW = 1e5; this.minW = 120; this.insetTop = 0; // px; the map scenes set it to clear their overlays
     let drag = null;
     svg.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; drag = { x: e.clientX, y: e.clientY, vb: { ...this.vb }, moved: false }; });
     window.addEventListener('pointermove', (e) => {
@@ -23,6 +23,12 @@ class Cam {
     }, { passive: false });
   }
   aspect() { const p = this.svg.parentElement; return (p.offsetWidth || 1000) / (p.offsetHeight || 700); }
+  // the strip at the top of the scene covered by the crumbs and level buttons: content is fitted below it
+  insetPx() { const H = this.svg.parentElement.offsetHeight || 700; return Math.min(this.insetTop, H * 0.25); }
+  // aspect of the free area below the inset
+  freeAspect() { const p = this.svg.parentElement, H = p.offsetHeight || 700; return (p.offsetWidth || 1000) / (H - this.insetPx()); }
+  // view box of width w whose free area (below the inset) is h tall and starts at world y0
+  boxBelow(x, y0, w, h) { const k = (this.svg.parentElement.offsetHeight || 700) / ((this.svg.parentElement.offsetHeight || 700) - this.insetPx()), fh = h * k; return { x, y: y0 - (fh - h), w, h: fh }; }
   set(vb) {
     this.vb = vb;
     this.svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
@@ -33,21 +39,22 @@ class Cam {
     this.set({ x: v.x + (v.w - w) * px, y: v.y + (v.h - h) * py, w, h });
   }
   rectFor(r, pad = 40, minW = 0) {
-    const a = this.aspect();
+    const a = this.freeAspect();
     let w = Math.max(r.w + pad * 2, minW), h = r.h + pad * 2;
     if (w / h > a) h = w / a; else w = h * a;
-    return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h / 2 - h / 2, w, h };
+    return this.boxBelow(r.x + r.w / 2 - w / 2, r.y + r.h / 2 - h / 2, w, h);
   }
   fit(r, pad, minW) { this.set(this.rectFor(r, pad, minW)); }
   // fitWidth: tall content — fit by width, top-aligned (scroll by panning)
   fitTop(r, pad = 20, maxScaleW = 0) {
-    const a = this.aspect();
+    const a = this.freeAspect();
     let w = Math.max(r.w + pad * 2, maxScaleW), h = w / a;
     if (h >= r.h + pad * 2) return this.fit(r, pad, maxScaleW);
-    this.set({ x: r.x + r.w / 2 - w / 2, y: r.y - pad, w, h });
+    this.set(this.boxBelow(r.x + r.w / 2 - w / 2, r.y - pad, w, h));
   }
-  // contains(r): the rect is fully visible
-  contains(r, m = 0) { const v = this.vb; return r.x >= v.x + m && r.y >= v.y + m && r.x + r.w <= v.x + v.w - m && r.y + r.h <= v.y + v.h - m; }
+  // contains(r): the rect is fully visible (below the inset)
+  contains(r, m = 0) { const v = this.vb, top = v.y + this.insetWorld(v.w); return r.x >= v.x + m && r.y >= top + m && r.x + r.w <= v.x + v.w - m && r.y + r.h <= v.y + v.h - m; }
+  insetWorld(w) { return this.insetPx() * w / (this.svg.parentElement.offsetWidth || 1000); }
   animTo(r, pad = 40, minW = 0, dur = DUR) { return this.animToVB(this.rectFor(r, pad, minW), dur); }
   animToVB(to, dur = DUR) {
     const from = { ...this.vb };

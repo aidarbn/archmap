@@ -38,7 +38,7 @@ var viewerFS embed.FS
 // cannot clash with another view; main.js (start-up) goes last.
 var (
 	coreCSS = []string{"viewer.css"}
-	coreJS  = []string{"core.js", "scene.js", "layout.js", "map.js", "playback.js", "panel.js"}
+	coreJS  = []string{"core.js", "scene.js", "layout.js", "map.js", "playback.js", "panel.js", "nav.js"}
 	lastJS  = "main.js"
 )
 

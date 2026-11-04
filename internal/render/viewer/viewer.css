@@ -332,3 +332,53 @@ aside { background: var(--surface); border-left: 1px solid var(--line); overflow
 .st .tr.hot path { stroke: var(--accent); stroke-width: 2.5; }
 @media (max-width: 1500px) { main { grid-template-columns: 1fr 340px; } .split { grid-template-columns: 320px 1fr; } }
 @media (max-width: 1200px) { .brand .meta, .chg .lbl { display: none; } }
+
+/* search and lists (nav.js) */
+.search { position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 300px; min-width: 130px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); color: var(--muted); }
+.search:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent); }
+.search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); padding: 0; -webkit-appearance: none; appearance: none; }
+.search input::-webkit-search-cancel-button { display: none; }
+.search kbd { font: 10.5px var(--mono); color: var(--muted); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 5px; }
+.search:focus-within kbd { display: none; }
+.qpop { position: absolute; top: calc(100% + 6px); left: 0; width: min(560px, 80vw); max-height: 70vh; overflow: auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-2); z-index: 60; padding: 4px 0 0; color: var(--text); }
+.qpop[hidden], .lists[hidden] { display: none; }
+.qpop .gh, .lists .gh { padding: 8px 12px 3px; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.qi, .lrow { display: flex; align-items: baseline; gap: 8px; padding: 5px 12px; cursor: pointer; min-width: 0; }
+.qi.act, .qi:hover, .lrow:hover { background: var(--accent-soft); }
+.qi .ico { width: 14px; flex: none; text-align: center; color: var(--muted); font-weight: 500; }
+.qi .nm, .lrow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; min-width: 0; }
+.qi .nm { font-family: var(--mono); font-size: 12.5px; }
+.qi .sb, .lrow .sb { margin-left: auto; padding-left: 10px; color: var(--muted); font-size: 11px; white-space: nowrap; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.qpop .none, .qpop .hint, .lists .none, .lists .more { padding: 8px 12px; color: var(--muted); font-size: 12px; }
+.qpop .hint { border-top: 1px solid var(--line); margin-top: 4px; font-size: 11px; }
+#listBtn[aria-expanded="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+.lists { position: absolute; left: 16px; top: 64px; bottom: 16px; width: 360px; max-width: calc(100% - 32px); z-index: 9; display: flex; flex-direction: column; background: color-mix(in oklab, var(--surface) 96%, transparent); backdrop-filter: blur(10px); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow-2); overflow: hidden; }
+.lhead { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 10px; border-bottom: 1px solid var(--line); }
+.ltabs { display: flex; gap: 2px; padding: 3px; background: var(--surface-2); border-radius: 8px; flex: 1; }
+.ltabs button { flex: 1; border: 0; background: none; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--text-2); font-weight: 500; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ltabs button small { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.ltabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
+.lhead .x { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--muted); padding: 0 6px; }
+.lhead .x:hover { color: var(--text); }
+.lists .lq { margin: 8px 10px 2px; padding: 6px 10px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-2); outline: 0; }
+.lists .lq:focus { border-color: var(--accent); }
+.lbody { overflow: auto; flex: 1; padding: 2px 0 8px; }
+.lrow { font-size: 12.5px; padding: 4px 12px; }
+.lrow.cur { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.lrow .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; align-self: center; }
+.lists .gh .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.lists .gh.lnk { cursor: pointer; } .lists .gh.lnk:hover { color: var(--text); }
+.lrow .chgt { font: 600 10.5px var(--mono); color: var(--mod); }
+.lrow.del { cursor: default; opacity: .75; } .lrow.del:hover { background: none; }
+
+/* what a live update changed */
+:root { --hl: #f2b705; }
+:root[data-theme="dark"] { --hl: #e3b341; }
+.n.lflash .card { animation: lflashn 2.6s ease-out 1; }
+@keyframes lflashn { 0% { stroke: var(--hl); stroke-width: 7; } 60% { stroke: var(--hl); stroke-width: 4; } 100% { stroke-width: 1; } }
+.lrow.lflash, #pane.lflash, .src.lflash { animation: lflashr 2.6s ease-out 1; }
+@keyframes lflashr { 0% { background: color-mix(in srgb, var(--hl) 55%, transparent); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  .n.lflash .card { animation: none; stroke: var(--hl); stroke-width: 3; }
+  .lrow.lflash, #pane.lflash, .src.lflash { animation: none; background: color-mix(in srgb, var(--hl) 25%, transparent); }
+}
