@@ -92,7 +92,7 @@ function renderPanel() {
   else if (s.t === 'fn') {
     const sec = fnSection(s.id, null, { codeId: 'pcode' }); loading = sec.loading; fids = [s.id];
     h = (s.why ? `<div class="kicker">${esc(t('where'))}: ${esc(s.why)}</div>` : '') + sec.h;
-    h += `<div class="btnrow"><button class="pbtn" data-act="code">${esc(t('into'))} · ${esc(t('lv')[3])}</button>${D.fns[s.id] && fnInfo(s.id).out.length ? `<button class="pbtn" data-act="playfn">${esc(t('playFromFn'))}</button>` : ''}</div>`;
+    h += `<div class="btnrow"><button class="pbtn" data-act="code">${esc(t('into'))} · ${esc(t('lv')[3])}</button>${D.fns[s.id] && fnInfo(s.id).out.length ? `<button class="pbtn" data-act="playfn">${esc(t('playFromFn'))}</button>` : ''}${AM.walk ? `<button class="pbtn primary" data-act="walk">${esc(t('wkFrom'))}</button>` : ''}</div>`;
   } else if (s.t === 'mod') {
     const m = s.id, c = D.modChg[m], imps = ((D.mods[m] || {}).imports || []).filter((x) => D.mods[x]), by = D.importedBy[m] || [];
     const inRun = runList().map((x, i) => [x, i]).filter(([x]) => D.fns[x.fid].module === m);
@@ -156,6 +156,7 @@ function wirePanel(p, s) {
   const act = (a, f) => { const b = p.querySelector(`[data-act="${a}"]`); if (b) b.onclick = f; };
   act('code', () => jumpToFn(s.id, 3));
   act('playfn', () => playFrom(s.id));
+  act('walk', () => AM.walk.start(s.id));
   act('intomod', () => goModule(s.id));
   p.querySelectorAll('[data-vt]').forEach((e) => e.addEventListener('click', (ev) => { ev.stopPropagation(); AM.jv.toggle(e.dataset.vt); }));
   p.querySelectorAll('[data-k="journey"],[data-k="variant"]').forEach((e) => e.addEventListener('click', () => playRunKey(e.dataset.k + ':' + e.dataset.id)));
