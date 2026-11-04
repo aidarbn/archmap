@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Rewrites Formula/archmap.rb in a homebrew-tap checkout from a release's checksums.txt.
-# Usage: scripts/update-tap.sh v0.1.0 [path/to/homebrew-tap]
+# Usage: scripts/update-tap.sh v0.1.0 [path/to/homebrew-tap]  (default: brew --repo aidarbn/tap)
 set -euo pipefail
 
 tag="${1:?usage: update-tap.sh <tag> [tap-dir]}"
-tap="${2:-../homebrew-tap}"
+tap="${2:-$(brew --repo aidarbn/tap)}"
 repo="aidarbn/archmap"
 ver="${tag#v}"
 base="https://github.com/${repo}/releases/download/${tag}"

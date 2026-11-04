@@ -21,8 +21,9 @@ tabs show. How the viewer is built and how to add a view:
 
 ## Views
 
-The header has five tabs; a scenario that is playing stays in sync across all of
-them (the player bar at the bottom is shared).
+The header has four tabs (Map, API, Data, Statuses); a scenario that is playing
+stays in sync across all of them (the player bar at the bottom is shared). The
+sequence diagram of the scenario is not a tab but a panel of the Map (see below).
 
 Gestures work as in Figma or maps in every view with a camera: a two-finger
 scroll (or the mouse wheel, Shift+wheel for sideways) pans; a pinch or
@@ -35,12 +36,20 @@ Lists and the scenario scroll normally.
   in, Esc, "Back" or the breadcrumbs go up. A scenario plays through all four
   levels, so you can follow a request from the outside system down to the lines
   that run.
-- **Scenario** shows the same scenario as a sequence diagram: lifelines for the
+  The **sequence panel** docks on the map when a scenario, path or variant is
+  chosen or plays (the diagram button in the top right of the map opens it by
+  hand): it shows the same scenario as a sequence diagram, with lifelines for the
   actor, the service, modules or functions, the queue and external systems,
   `alt` blocks for the branches (`arch:on`), a pause where a step goes through a
   queue, and the effects and status changes of every step. It is nested like the
-  map (see below). The list of scenarios on the left (search, groups by actor,
-  "Main" on top, ↑/↓ for the neighbour) switches between them.
+  map (see below). The panel sits at the bottom (default, 40% of the height) or
+  on the right; drag the separator to resize it (double-click resets), fold it
+  into a strip with the scenario name and progress, or open it full screen
+  (the map is hidden; Esc brings it back). The place, size and fold are
+  remembered. The map fits the current step into the part the panel leaves free.
+  The header of the panel has a combobox with search to switch the scenario
+  (paths, scenarios by actor, "Main" on top; the same list is in
+  "Scenarios (N)"). `?view=sequence` opens the map with the panel full screen.
 - **API** lists every endpoint (HTTP, gRPC, WebSocket, tasks, CLI) grouped by
   service, with filters by kind and access and a search. The card shows the
   request and response types, the function, the scenario to play and the tables
@@ -62,15 +71,15 @@ drop-down holds modules by layer, all functions and the branch changes.
 ![Data view on spring-petclinic](docs/img/data-petclinic.png)
 *Data: the schema of spring-petclinic with the selected table and its links.*
 
-![Scenario view on django-oscar](docs/img/sequence-oscar.png)
-*Scenario: a flow written with `arch:` lines (see below), on [django-oscar](https://github.com/django-oscar/django-oscar); the markup was added to a temporary copy, not to the project.*
+![Sequence panel on the map of ripgrep](docs/img/sequence-dock-ripgrep.png)
+*The sequence panel at the bottom of the map of [ripgrep](https://github.com/BurntSushi/ripgrep): the map and the diagram show the same step.*
 
 ![Statuses view on django-oscar](docs/img/status-oscar.png)
 *Statuses: a state machine from `arch:state` lines on the same copy.*
 
 ### Nested scenario
 
-The sequence diagram has the same four levels as the map, and by default follows
+The sequence panel has the same four levels as the map, and by default follows
 the map's level ("link with the map"; switching either one moves the other):
 
 - **System**: the actor, the service as one participant, the queue and external
@@ -96,8 +105,8 @@ current step is lit on every level (on the system level, the message that holds
 it); branches and queue pauses are drawn on every level. Works the same for
 annotated flows and for automatic scenarios.
 
-![Nested scenario on ripgrep](docs/img/sequence-nested-ripgrep.png)
-*A scenario of [ripgrep](https://github.com/BurntSushi/ripgrep) on the system level with a message opened into modules, functions and code.*
+![Nested scenario on ripgrep](docs/img/sequence-full-ripgrep.png)
+*A scenario of [ripgrep](https://github.com/BurntSushi/ripgrep) in the full-screen panel, function level, with a message opened into a frame.*
 
 Endpoints are found from routers (Go: gin, chi, echo and the like), decorators
 (FastAPI, Flask, Express-style), Django/DRF urls, NestJS, Spring annotations,
@@ -212,7 +221,7 @@ The automatic scenarios follow the call graph. To tell the story yourself, mark
 functions with `arch:` lines in the comment right above them (a decorator or
 annotation line between the comment and the declaration is fine). It works in
 every supported language; the comment style is the language's own. The markup
-feeds the Scenario view (flows, steps, branches) and the Statuses view
+feeds the scenarios and the sequence panel (flows, steps, branches) and the Statuses view
 (`arch:state`); `archmap lint` checks it. The screenshots above of django-oscar
 come from a temporary copy with exactly this kind of markup, for example:
 
@@ -319,15 +328,15 @@ through all the steps. The name is built from the condition (`paid → to the ca
 has at most 12 variants (outcomes with the same end are folded together first). A flow without
 `arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
 
-**In the viewer** the scenario list (the "Scenarios (N)" button, the left column of the Scenario
-tab, the system panel) has three levels: "Through paths" (name, actor, the chain of flows with
+**In the viewer** the scenario list (the "Scenarios (N)" button, the combobox in the header of the
+sequence panel, the system panel) has three levels: "Through paths" (name, actor, the chain of flows with
 an icon for each transition: condition, queue, written by hand), "Scenarios" (grouped by actor
 as before), and under a scenario its foldable "Variants" (the main path first, `one of: …` for
 folded outcomes, "…N more"). Search looks through all three.
 
 - Playing a path runs its flows one after another; between two flows a plate says how the next
   one starts ("→ through the queue", "→ on condition …", "next the client calls …"), and the map
-  and the Scenario tab show the overall progress ("flow 2/5 · step 3/7") and a label with the
+  and the sequence panel show the overall progress ("flow 2/5 · step 3/7") and a label with the
   name of the path.
 - Playing a variant takes its forks by itself. At the end a plate shows the outcome, or offers
   "Go to the scenario" when the variant ends in another flow.
@@ -372,8 +381,9 @@ viewer as `map`, but it follows the repo:
   changed functions), rebuilding, or the error text; it reconnects by itself.
   Function code is read from `/src` on demand (not embedded); the code of a
   changed function is re-read.
-- All five tabs follow the update (the endpoint list, the ER diagram and the
-  state machines are rebuilt from the new facts).
+- All four tabs and the sequence panel follow the update (the endpoint list, the ER
+  diagram, the state machines and the diagram are rebuilt from the new facts; the
+  panel keeps its place, size and the open frames of the diagram).
 - Search (`/` or Ctrl/Cmd+K) finds functions, modules and files; Enter opens the
   function on the map, Shift+Enter in its code. The Lists drop-down holds
   modules by layer, all functions with a filter, and the branch changes.

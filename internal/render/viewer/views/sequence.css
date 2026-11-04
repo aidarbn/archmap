@@ -1,40 +1,88 @@
-/* views/sequence.css — layout and extras of the Scenario tab (the base .seq styles are in viewer.css) */
-.seqv { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) 288px; }
-.seqv.list-on { grid-template-columns: 260px minmax(0, 1fr) 288px; }
-.seqv.noside { grid-template-columns: minmax(0, 1fr); }
-.seqv.noside.list-on { grid-template-columns: 260px minmax(0, 1fr); }
-.seqv.noside .seq-side { display: none; }
-.seqv:not(.list-on):not(.narrow) .seq-list { display: none; }
-.seq-list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--surface); }
-.seq-list .sl-hd { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 6px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.seq-list .sl-x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 4px; border-radius: 5px; }
-.seq-list .sl-x:hover { color: var(--accent); background: var(--surface-2); }
-.seq-list .sl-q { margin: 0 12px 8px; height: 28px; padding: 0 9px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-2); color: var(--text); font: 12.5px var(--font); outline: 0; }
-.seq-list .sl-q:focus { border-color: var(--accent); background: var(--surface); }
-.seq-list .sl-body { flex: 1; overflow: auto; padding-bottom: 12px; }
-.seq-list .sl-gh { position: sticky; top: 0; z-index: 1; padding: 8px 14px 4px; background: var(--surface); font: 600 11px var(--font); color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; }
-.seq-list .sl-gh span { color: var(--muted); font-weight: 500; margin-left: 4px; }
-.seq-list .sl-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 12px 5px 14px; font-size: 12.5px; color: var(--text); cursor: pointer; border-left: 3px solid transparent; }
-.seq-list .sl-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.seq-list .sl-row .sb { flex: none; color: var(--muted); font: 11px var(--mono); }
-.seq-list .sl-row:hover { background: var(--surface-2); }
-.seq-list .sl-row.cur { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
-.seq-list .sl-none { padding: 18px 14px; color: var(--muted); font-size: 12.5px; }
-.seqv.narrow { grid-template-columns: minmax(0, 1fr); }
-.seqv.narrow .seq-side { display: none; }
-.seqv.narrow .seq-list { position: absolute; top: 0; bottom: 0; left: 0; width: 280px; z-index: 6; box-shadow: 0 10px 30px rgba(0, 0, 0, .18); transform: translateX(-104%); visibility: hidden; transition: transform var(--t), visibility 0s linear var(--t); }
-.seqv.narrow.list-on .seq-list { transform: none; visibility: visible; transition: transform var(--t); }
-.seq-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.seqv .seq-wrap { position: relative; inset: auto; overflow: auto; min-width: 0; min-height: 0; flex: 1; }
-.seq-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--text-2); }
-.seq-bar .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
-.seq-bar .seg button { border: 0; background: transparent; color: var(--text-2); font: 600 12px var(--font); padding: 5px 11px; cursor: pointer; }
-.seq-bar .seg button + button { border-left: 1px solid var(--line-2); }
-.seq-bar .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+/* views/sequence.css — the sequence diagram dock over the map (the base .seq styles are in viewer.css) */
+.seqdock { position: absolute; z-index: 7; display: flex; flex-direction: column; background: var(--surface); border: 0 solid var(--line); box-shadow: var(--shadow-2); }
+.seqdock[hidden] { display: none; }
+.seqdock[data-pos="bottom"] { border-top-width: 1px; }
+.seqdock[data-pos="right"] { border-left-width: 1px; }
+.seqdock.full { border-width: 0; box-shadow: none; }
+.seqdock.min { border-top-width: 1px; }
+.seqdock .sd-grip { position: absolute; z-index: 3; background: transparent; touch-action: none; }
+.seqdock[data-pos="bottom"] .sd-grip { left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; }
+.seqdock[data-pos="right"] .sd-grip { top: 0; bottom: 0; left: -4px; width: 8px; cursor: ew-resize; }
+.seqdock .sd-grip::after { content: ""; position: absolute; border-radius: 2px; background: var(--line-2); opacity: 0; transition: opacity var(--t); }
+.seqdock[data-pos="bottom"] .sd-grip::after { left: 50%; top: 3px; width: 44px; height: 3px; margin-left: -22px; }
+.seqdock[data-pos="right"] .sd-grip::after { top: 50%; left: 3px; height: 44px; width: 3px; margin-top: -22px; }
+.seqdock .sd-grip:hover::after, .seqdock .sd-grip:focus-visible::after, .seqdock.drag .sd-grip::after { opacity: 1; background: var(--accent); }
+.seqdock .sd-grip:focus-visible { outline: none; }
+.seqdock.min .sd-grip, .seqdock.full .sd-grip { display: none; }
+.seqdock.drag { user-select: none; }
+.seqdock.drag .seq-wrap { pointer-events: none; }
+.sd-hd { position: relative; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--text-2); flex: none; }
+.seqdock.min .sd-hd { height: 100%; flex-wrap: nowrap; border-bottom: 0; padding-top: 0; padding-bottom: 0; }
+.sd-body { position: relative; flex: 1; min-height: 0; min-width: 0; }
+.seqdock .seq-wrap { position: absolute; inset: 0; overflow: auto; }
+.sd-hd .seq-bar { display: contents; }
+.seqdock.min .seq-bar, .seqdock.min .sd-cbx, .seqdock.min .sd-body, .seqdock.min .sd-ctl .seg, .seqdock.min .sd-ctl .sd-minb { display: none; }
+.sd-strip { display: none; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); font: 600 12.5px var(--font); cursor: pointer; padding: 4px 6px; border-radius: 6px; min-width: 0; flex: 1 1 auto; text-align: left; }
+.sd-strip:hover { background: var(--surface-2); }
+.sd-strip svg { flex: none; color: var(--accent); }
+.sd-strip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sd-strip .pr { margin-left: auto; flex: none; color: var(--text-2); font: 500 11.5px var(--mono); }
+.seqdock.min .sd-strip { display: flex; }
+.sd-ctl { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: none; }
+.sd-ctl .seg, .seq-bar .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.sd-ctl .seg button, .seq-bar .seg button { border: 0; background: transparent; color: var(--text-2); font: 600 12px var(--font); padding: 5px 11px; cursor: pointer; display: inline-flex; align-items: center; }
+.sd-ctl .seg button { padding: 5px 8px; }
+.sd-ctl .seg button + button, .seq-bar .seg button + button { border-left: 1px solid var(--line-2); }
+.sd-ctl .seg button[aria-pressed="true"], .seq-bar .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.sd-ctl .iconbtn { height: 26px; min-width: 26px; padding: 0 6px; }
 .seq-bar .lnk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .seq-bar .chip-btn { border: 1px solid var(--line-2); background: var(--surface); color: var(--text-2); border-radius: 12px; padding: 3px 10px; font: 12px var(--font); cursor: pointer; }
 .seq-bar .chip-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-.seq-bar .hint { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.seq-bar .jv-tag { flex: 0 1 auto; margin-left: 0; padding: 2px 8px; }
+.sd-hd .jv-tag .nm, .sd-hd .jv-tag .fl { display: none; } /* the name is in the combobox; only the kind and the progress stay */
+/* the scenario combobox */
+.sd-cbx { position: relative; flex: 0 1 240px; min-width: 150px; }
+.sd-cur { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 9px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); color: var(--text); font: 600 12.5px var(--font); cursor: pointer; text-align: left; }
+.sd-cur:hover, .sd-cur[aria-expanded="true"] { border-color: var(--accent); }
+.sd-cur:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sd-cur .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-cur .car { color: var(--muted); font-size: 11px; flex: none; }
+.sd-pop { position: absolute; left: 0; z-index: 9; width: min(380px, calc(100vw - 24px)); display: flex; flex-direction: column; min-height: 0; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-2); padding-top: 8px; overflow: hidden; }
+.sd-pop[hidden] { display: none; }
+.seqdock[data-pos="bottom"]:not(.full) .sd-pop { bottom: calc(100% + 6px); }
+.seqdock:not([data-pos="bottom"]) .sd-pop, .seqdock.full .sd-pop { top: calc(100% + 6px); }
+.sd-pop .sl-q { margin: 0 10px 6px; height: 28px; padding: 0 9px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-2); color: var(--text); font: 12.5px var(--font); outline: 0; flex: none; }
+.sd-pop .sl-q:focus { border-color: var(--accent); background: var(--surface); }
+.sd-pop .sl-body { flex: 1; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.sd-pop .sl-gh { position: sticky; top: 0; z-index: 1; padding: 8px 14px 4px; background: var(--surface); font: 600 11px var(--font); color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; }
+.sd-pop .sl-gh span { color: var(--muted); font-weight: 500; margin-left: 4px; }
+.sd-pop .sl-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 12px 5px 14px; font-size: 12.5px; color: var(--text); cursor: pointer; border-left: 3px solid transparent; }
+.sd-pop .sl-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-pop .sl-row .sb { flex: none; color: var(--muted); font: 11px var(--mono); }
+.sd-pop .sl-row:hover { background: var(--surface-2); }
+.sd-pop .sl-row.cur { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
+.sd-pop .sl-none { padding: 18px 14px; color: var(--muted); font-size: 12.5px; }
+.sd-pop .sl-row.jv-j { align-items: baseline; }
+.sd-pop .sl-row.jv-v { font-size: 12px; }
+.sd-pop .sl-row .jv-chain { padding-top: 1px; }
+.sd-pop .sl-row.cur .jv-chain { color: var(--text-2); font-weight: 400; }
+.sd-pop .jv-tog { margin-left: 6px; }
+.sd-pop .sl-row.jv-j .nm { flex: 1 1 100%; white-space: normal; }
+.sd-pop .sl-row.jv-j .sb { flex: 1 1 100%; font: 11px var(--font); }
+.jv-jump rect { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 5 3; }
+.jv-jump text { font: 12px var(--font); fill: var(--text); }
+.seq-empty { padding: 48px; color: var(--muted); text-align: center; }
+/* the map under the dock: its own buttons keep clear of it */
+#v-map { --dock-b: 0px; --dock-r: 0px; }
+#v-map .zoomctl { bottom: calc(16px + var(--dock-b)); right: calc(16px + var(--dock-r)); }
+#v-map .minimap { bottom: calc(16px + var(--dock-b)); }
+#v-map .legend { bottom: calc(16px + var(--dock-b)); max-width: calc(100% - 330px - var(--dock-r)); }
+#v-map .levelbar { right: calc(16px + var(--dock-r)); }
+#v-map[data-dock="r"] .levelbar { gap: 4px; }
+#v-map[data-dock="r"] .levelbar .iconbtn { padding: 0 6px; font-size: 12px; }
+#v-map[data-dock="r"] .crumbs .lvl { padding-right: 6px; }
+#v-map #sc3 { bottom: var(--dock-b); right: var(--dock-r); }
+#v-map #btnSeq[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
 .seq .head.svc rect:first-of-type { fill: color-mix(in oklab, var(--accent) 7%, var(--surface)); }
 .seq .msg .enter { opacity: 0; transition: opacity var(--t); }
 .seq .msg:hover .enter, .seq .msg:focus-within .enter, .seq .msg.cur .enter, .seq .msg .enter.on { opacity: 1; }
@@ -49,11 +97,6 @@
 .seq .code .src { fill: var(--text); }
 .seq .code.future { opacity: .45; }
 .seq .code.cur rect { stroke: var(--accent); }
-.seq-side { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; padding-bottom: 16px; }
-.seq-side .thumb { margin: 16px 14px 0; height: 190px; box-shadow: none; }
-.seqlegend { margin: 14px 18px 0; display: grid; gap: 6px; font-size: 11.5px; color: var(--text-2); }
-.seqlegend svg { vertical-align: middle; margin-right: 8px; overflow: visible; }
-.seq-empty { padding: 48px; color: var(--muted); text-align: center; }
 .seq .head { cursor: pointer; }
 .seq .head:hover rect { stroke: var(--accent); }
 .seq .msg.sel text { fill: var(--accent); }
@@ -75,14 +118,3 @@
 .seq .sbtn text { font-size: 11px; fill: var(--text-2); }
 .seq .head.ext rect:first-of-type { fill: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) { .seq * { transition: none !important; } }
-@media (max-width: 900px) { .seqv { grid-template-columns: minmax(0, 1fr); } .seq-side { display: none; } }
-.seq-bar .jv-tag { flex: 0 1 auto; margin-left: 8px; }
-.seq-list .sl-row.jv-j { align-items: baseline; }
-.seq-list .sl-row.jv-v { font-size: 12px; }
-.seq-list .sl-row .jv-chain { padding-top: 1px; }
-.seq-list .sl-row.cur .jv-chain { color: var(--text-2); font-weight: 400; }
-.seq-list .jv-tog { margin-left: 6px; }
-.jv-jump rect { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 5 3; }
-.jv-jump text { font: 12px var(--font); fill: var(--text); }
-.seq-list .sl-row.jv-j .nm { flex: 1 1 100%; white-space: normal; }
-.seq-list .sl-row.jv-j .sb { flex: 1 1 100%; font: 11px var(--font); }
