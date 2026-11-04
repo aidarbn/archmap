@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -113,6 +114,8 @@ func isIdent(s string, star bool) bool {
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-', r == '.':
+		case r > 127 && (unicode.IsLetter(r) || unicode.IsDigit(r)):
+			// ids are latin by convention, but states in real code are not always
 		default:
 			return false
 		}
@@ -143,6 +146,15 @@ type parser struct {
 	st *States
 	fl *Flow
 	jn *Journey
+
+	pending []string // comment lines waiting for the next header
+}
+
+// takeComment returns the comment lines collected since the last block.
+func (p *parser) takeComment() []string {
+	c := p.pending
+	p.pending = nil
+	return c
 }
 
 func (p *parser) errAt(line, col int, format string, a ...any) {
@@ -156,6 +168,10 @@ func Parse(file, text string) (*Doc, []Error) {
 	for i, raw := range strings.Split(text, "\n") {
 		n := i + 1
 		raw = strings.TrimRight(raw, "\r")
+		if strings.HasPrefix(raw, "#") {
+			p.pending = append(p.pending, strings.TrimRight(strings.TrimPrefix(strings.TrimPrefix(raw, "#"), " "), " \t"))
+			continue
+		}
 		ts, e := tokenize(raw)
 		if e != nil {
 			p.errAt(n, e.col, "%s", e.msg)
@@ -171,6 +187,7 @@ func Parse(file, text string) (*Doc, []Error) {
 		}
 		p.body(n, ts)
 	}
+	p.doc.Tail = p.takeComment()
 	return p.doc, p.errs
 }
 
@@ -183,14 +200,14 @@ func (p *parser) header(n int, ts []tok) {
 			p.errAt(n, kw.col, "expected `states <Entity>`")
 			return
 		}
-		p.st = &States{Entity: ts[1].s, Line: n}
+		p.st = &States{Entity: ts[1].s, Line: n, Comment: p.takeComment()}
 		p.doc.States = append(p.doc.States, p.st)
 	case "flow":
 		if len(ts) < 2 || len(ts) > 3 || ts[1].quoted || !isIdent(ts[1].s, false) || (len(ts) == 3 && !ts[2].quoted) {
 			p.errAt(n, kw.col, "expected `flow <id> [\"name\"]`")
 			return
 		}
-		p.fl = &Flow{ID: ts[1].s, Line: n}
+		p.fl = &Flow{ID: ts[1].s, Line: n, Comment: p.takeComment()}
 		if len(ts) == 3 {
 			p.fl.Name = ts[2].s
 		}
@@ -248,7 +265,7 @@ func (p *parser) journey(n int, ts []tok) {
 		}
 		flows = append(flows, f)
 	}
-	p.jn = &Journey{ID: id, Name: name, Flows: flows, Line: n}
+	p.jn = &Journey{ID: id, Name: name, Flows: flows, Line: n, Comment: p.takeComment()}
 	p.doc.Journeys = append(p.doc.Journeys, p.jn)
 }
 

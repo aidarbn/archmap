@@ -606,3 +606,50 @@ states Brand
 		t.Error("no spec must return the same facts")
 	}
 }
+
+func TestFormatGolden(t *testing.T) {
+	want := `states OrderStatus
+  state draft
+  validated -> payment_requested   on kaspi-pay      "запрошен QR"
+  payment_requested -> accepted    on payment.paid
+  * -> cancelled                   on cancel-order
+  final created, rejected, cancelled
+
+flow kaspi-pay "Оплата заказа через Kaspi QR"
+  actor Планшет
+  step TabletsServer.RequestKaspiQRForOrder               "Гость запросил QR"
+  step Service.requestQR                      ext Kaspi   "Создаём QR в Kaspi"
+  step plan                                               "Проверить лимит платежей"
+  state Order: validated -> payment_requested
+  alt processed -> confirm-order
+  alt expired "QR истёк"
+  exit "Заказ оплачен"
+
+journey guest-kaspi "Гость платит Kaspi": create-order > kaspi-pay > confirm-order
+`
+	if got := Format(mustParse(t, sample)); got != want {
+		t.Fatalf("got:\n%s", got)
+	}
+	if got := Format(&Doc{}); got != "" {
+		t.Fatalf("empty doc: %q", got)
+	}
+}
+
+func TestCommentsSurviveRewrite(t *testing.T) {
+	src := "# file note\n\n# about S\n#\n#   indented\nstates S   # trailing is dropped\n  a -> b\n\nflow f\n  step x.Y\n\n# the end\n"
+	s := setOf(t, map[string]string{"arch/c.arch": src})
+	if _, err := s.Apply([]Op{{Op: "add_transition", Entity: "S", From: "b", To: "c"}}); err != nil {
+		t.Fatal(err)
+	}
+	want := "# file note\n# about S\n#\n#   indented\nstates S\n  a -> b\n  b -> c\n\nflow f\n  step x.Y\n\n# the end\n"
+	got := Format(s.File("arch/c.arch").Doc)
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if c := s.Model().States[0].Comment; len(c) != 4 || c[3] != "  indented" {
+		t.Fatalf("model comment: %q", c)
+	}
+	if !sameDoc(mustParse(t, got), s.File("arch/c.arch").Doc) {
+		t.Fatal("round trip")
+	}
+}

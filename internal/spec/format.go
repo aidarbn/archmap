@@ -76,15 +76,30 @@ func rows(table [][]string) []string {
 func Format(d *Doc) string {
 	var blocks []string
 	for _, st := range d.States {
-		blocks = append(blocks, formatStates(st))
+		blocks = append(blocks, comment(st.Comment)+formatStates(st))
 	}
 	for _, fl := range d.Flows {
-		blocks = append(blocks, formatFlow(fl))
+		blocks = append(blocks, comment(fl.Comment)+formatFlow(fl))
 	}
 	for _, j := range d.Journeys {
-		blocks = append(blocks, formatJourney(j))
+		blocks = append(blocks, comment(j.Comment)+formatJourney(j))
+	}
+	if len(d.Tail) > 0 {
+		blocks = append(blocks, comment(d.Tail))
 	}
 	return strings.Join(blocks, "\n")
+}
+
+func comment(lines []string) string {
+	var sb strings.Builder
+	for _, l := range lines {
+		if l == "" {
+			sb.WriteString("#\n")
+		} else {
+			sb.WriteString("# " + l + "\n")
+		}
+	}
+	return sb.String()
 }
 
 func formatStates(st *States) string {

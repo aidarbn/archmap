@@ -129,7 +129,7 @@ func (s *Set) findJourney(id string) (*File, *Journey) {
 
 func ident(what, v string, star bool) error {
 	if !isIdent(v, star) {
-		return bad("%s %q: use latin letters, digits, _ - . only", what, v)
+		return bad("%s %q: use letters (latin preferred), digits and _ - . only, no spaces", what, v)
 	}
 	return nil
 }

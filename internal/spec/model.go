@@ -49,6 +49,7 @@ type States struct {
 	States      []string     `json:"states"`
 	Transitions []Transition `json:"transitions"`
 	Final       []string     `json:"final"`
+	Comment     []string     `json:"comment,omitempty"` // `#` lines right above the block, kept when the file is rewritten
 	File        string       `json:"file,omitempty"`
 	Line        int          `json:"line,omitempty"`
 	Code        string       `json:"code,omitempty"` // enrich: key of the matching machine in facts.states
@@ -91,8 +92,10 @@ type Flow struct {
 	States []StateRef `json:"states"`
 	Alts   []Alt      `json:"alts"`
 	Exit   string     `json:"exit,omitempty"`
-	File   string     `json:"file,omitempty"`
-	Line   int        `json:"line,omitempty"`
+	// Comment: `#` lines right above the block, kept when the file is rewritten.
+	Comment []string `json:"comment,omitempty"`
+	File    string   `json:"file,omitempty"`
+	Line    int      `json:"line,omitempty"`
 	// enrich:
 	Code    bool `json:"code,omitempty"`    // the code declares a flow with this id (arch:flow)
 	Planned int  `json:"planned,omitempty"` // number of planned steps
@@ -103,8 +106,10 @@ type Journey struct {
 	ID    string   `json:"id"`
 	Name  string   `json:"name,omitempty"`
 	Flows []string `json:"flows"`
-	File  string   `json:"file,omitempty"`
-	Line  int      `json:"line,omitempty"`
+	// Comment: `#` lines right above the block, kept when the file is rewritten.
+	Comment []string `json:"comment,omitempty"`
+	File    string   `json:"file,omitempty"`
+	Line    int      `json:"line,omitempty"`
 	// enrich:
 	Code    bool     `json:"code,omitempty"`    // the code declares a journey with this id
 	Missing []string `json:"missing,omitempty"` // flow ids that exist nowhere
@@ -112,10 +117,15 @@ type Journey struct {
 
 // Doc is the content of one .arch file. Kinds are kept apart; Format writes
 // states, then flows, then journeys.
+//
+// Comments: a `#` line at column 0 belongs to the next block (Comment); those
+// after the last block are Tail. Comments at the end of a line and indented
+// comment lines are dropped when archmap rewrites the file.
 type Doc struct {
 	States   []*States  `json:"states"`
 	Flows    []*Flow    `json:"flows"`
 	Journeys []*Journey `json:"journeys"`
+	Tail     []string   `json:"tail,omitempty"`
 }
 
 // Model is everything the spec files declare (all files, in file order).
