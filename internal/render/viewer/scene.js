@@ -1,5 +1,27 @@
 /* scene.js — camera over an SVG viewBox, moving dot, pulses, geometry, level transitions. */
 
+/* ---------- wheel gestures (Figma / maps style) ---------- */
+// Zoom: pinch (macOS sends wheel with ctrlKey), Cmd/Ctrl+wheel, Safari gesture events. Everything else
+// (two-finger scroll, mouse wheel, Shift+wheel) moves the content and never changes the scale or the level.
+const isZoomWheel = (e) => !!(e.ctrlKey || e.metaKey);
+const isPinch = (e) => e.ctrlKey && !e.metaKey && e.deltaMode === 0;
+const zoomRate = (e) => (isPinch(e) ? 0.01 : 0.003); // per pixel: pinch deltas are small, Cmd+wheel ones are steps
+// wheel delta in pixels (deltaMode 1 — lines of a mouse wheel, 2 — pages)
+function wheelPx(e) {
+  const m = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 600 : 1;
+  return { x: e.deltaX * m, y: e.deltaY * m };
+}
+// Safari: gesturestart/gesturechange carry a cumulative scale; hand fn a wheel-like pinch event per change
+function onGesture(el, fn) {
+  let last = 1;
+  el.addEventListener('gesturestart', (e) => { e.preventDefault(); last = 1; });
+  el.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    const f = e.scale / last; last = e.scale;
+    fn({ ctrlKey: true, metaKey: false, shiftKey: false, deltaMode: 0, deltaX: 0, deltaY: -Math.log(f) / 0.01, clientX: e.clientX, clientY: e.clientY, preventDefault() {} });
+  });
+}
+
 /* ---------- camera ---------- */
 // new Cam(svg, onChange): drag to pan, wheel to zoom; set/fit/animTo work in world coordinates.
 class Cam {
@@ -16,13 +38,21 @@ class Cam {
       this.set({ ...drag.vb, x: drag.vb.x - dx * k, y: drag.vb.y - dy * k });
     });
     window.addEventListener('pointerup', () => { if (drag && drag.moved) { this.justDragged = true; setTimeout(() => (this.justDragged = false), 0); } drag = null; svg.style.cursor = ''; });
-    svg.addEventListener('wheel', (e) => {
+    const onWheel = (e) => {
       e.preventDefault();
-      const r = svg.getBoundingClientRect();
       if (autoBusy()) return; // a level transition is running: the wheel does not move the camera under it
-      this.zoomAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, Math.exp(e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
-      semanticZoom(this, e); // zoom.js: dive into / out of a level when the zoom crosses a threshold
-    }, { passive: false });
+      const r = svg.getBoundingClientRect();
+      if (isZoomWheel(e)) { // pinch / Cmd+wheel / Ctrl+wheel: zoom to the cursor, may dive
+        this.zoomAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, Math.exp(wheelPx(e).y * zoomRate(e)));
+        semanticZoom(this, e); // zoom.js: dive into / out of a level when the zoom crosses a threshold
+      } else { // two-finger scroll / wheel: pan only, never zooms or changes the level
+        const d = wheelPx(e), k = this.vb.w / (r.width || 1);
+        const sx = e.shiftKey && !d.x ? d.y : d.x, sy = e.shiftKey && !d.x ? 0 : d.y; // Shift+wheel — sideways
+        this.set({ ...this.vb, x: this.vb.x + sx * k, y: this.vb.y + sy * k });
+      }
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    onGesture(svg, onWheel); // Safari pinch
   }
   // view box in which rect r (world) takes `ratio` of the free area (by its larger side), centred
   rectForRatio(r, ratio) {

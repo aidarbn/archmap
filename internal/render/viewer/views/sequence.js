@@ -24,7 +24,7 @@ AM.addI18n({
     seqEnter: '⤵ войти', seqLeave: '⤴ выйти', seqEnterTip: 'Раскрыть сообщение в рамку под-сценария (двойной клик, +)',
     seqFoldAll: 'свернуть рамки', seqScopeAll: 'функции: весь сценарий', seqScopeMod: (m) => 'функции модуля ' + m,
     seqScopeTip: 'Функции всего сценария или только одного модуля (остальные — модулями)',
-    seqZoomHint: 'Ctrl+колесо / щипок — уровень', seqNoSrc: 'исходник недоступен', seqCallLine: 'строка вызова',
+    seqZoomHint: 'щипок / ⌘/Ctrl+колесо — масштаб и уровень', seqNoSrc: 'исходник недоступен', seqCallLine: 'строка вызова',
     seqListTitle: 'Сценарии', seqListHide: 'Свернуть список сценариев',
   },
   en: {
@@ -37,7 +37,7 @@ AM.addI18n({
     seqEnter: '⤵ enter', seqLeave: '⤴ leave', seqEnterTip: 'Open the message in a frame of its sub-scenario (double-click, +)',
     seqFoldAll: 'fold frames', seqScopeAll: 'functions: whole scenario', seqScopeMod: (m) => 'functions of ' + m,
     seqScopeTip: 'Functions of the whole scenario or of one module only (the rest as modules)',
-    seqZoomHint: 'Ctrl+wheel / pinch — level', seqNoSrc: 'source unavailable', seqCallLine: 'call line',
+    seqZoomHint: 'pinch / ⌘/Ctrl+wheel — zoom and level', seqNoSrc: 'source unavailable', seqCallLine: 'call line',
     seqListTitle: 'Scenarios', seqListHide: 'Fold the scenario list',
   },
 });
@@ -587,7 +587,7 @@ function seqScale(z, e) {
 }
 function seqWheel(e) {
   if (AM.state.view !== 'sequence') return;
-  if (!e.ctrlKey && sWrap.scrollHeight > sWrap.clientHeight + 2) return; // a plain wheel scrolls a long diagram
+  if (!AM.zoom.isZoomWheel(e)) return; // a plain wheel / two-finger scroll scrolls the diagram natively
   const focus = seqStepAt(e);
   AM.zoom.scaleWheel(e, {
     z: sZ, set: (z) => seqScale(z, e),
@@ -778,6 +778,7 @@ AM.registerView({
     sWrap = AM.h('div', { class: 'seq-wrap' }, main);
     sSide = AM.h('aside', { class: 'seq-side' }, sEl);
     sWrap.addEventListener('wheel', seqWheel, { passive: false });
+    AM.zoom.onGesture(sWrap, seqWheel);
     sLevel = sLink ? AM.map.level : 1;
     AM.bus.on('flow', () => { seqRefresh(false); seqListMark(true); });
     AM.bus.on('jv', () => seqListDraw());
