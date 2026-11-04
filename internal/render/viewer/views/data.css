@@ -1,0 +1,57 @@
+/* views/data.css — Data tab: ER schema, endpoints × tables matrix */
+#v-data.dv { display: flex; flex-direction: column; }
+.dv-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px; flex-wrap: wrap; position: relative; z-index: 3; }
+.dv-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dv-in { height: 30px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); color: var(--text); padding: 0 10px; min-width: 0; }
+.dv-in[type="search"] { width: 190px; }
+.dv-ctl .pbtn { height: 30px; }
+.dv-ctl .pbtn[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+.dv-info { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.dv-badge { display: flex; gap: 6px; margin-left: auto; min-width: 0; }
+.dv-er-box { position: relative; flex: 1; min-height: 0; }
+.dv-er-box svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; user-select: none; }
+.dv-er .gbox { fill: color-mix(in oklab, var(--surface-2) 55%, transparent); stroke: var(--line-2); stroke-dasharray: 6 5; }
+.dv-er .gname { font: 600 13px var(--font); fill: var(--text-2); letter-spacing: .04em; text-transform: uppercase; }
+.dv-er .tb { cursor: pointer; transition: opacity var(--t); }
+.dv-er .tb .fn { fill: var(--text); }
+.dv-er .tb .ft { fill: var(--muted); font-size: 10.5px; }
+.dv-er .tb .fm { font-size: 9.5px; fill: var(--muted); font-weight: 600; }
+.dv-er .tb .opb { fill: var(--accent); font: 700 11px var(--mono); }
+.dv-er.lod-lo .fld { display: none; }
+.dv-er.lod-lo .tb .nm { font-size: 17px; }
+.dv-er.lod-lo .gname { font-size: 38px; fill: var(--text); }
+.dv-er.lod-lo .tb .opb { font-size: 16px; }
+.dv-er .tb.sel .card { stroke: var(--accent); stroke-width: 2.5; }
+.dv-er .tb.nb .card { stroke: var(--accent); }
+.dv-er.has-sel .tb:not(.sel):not(.nb) { opacity: .45; }
+.dv-er .tb.dim { opacity: .18 !important; }
+.dv-er .tb.hit .card { stroke: var(--accent); stroke-width: 2; }
+.dv-er .tb.seen .card { stroke: color-mix(in oklab, var(--accent) 50%, var(--line-2)); stroke-width: 1.6; }
+.dv-er .tb.hot .card { stroke: var(--accent); stroke-width: 3; }
+.dv-er .tb.hot .hd { fill: var(--accent-soft); }
+.dv-er .rel { opacity: .5; }
+.dv-er .rel.x { stroke-dasharray: 4 4; opacity: .35; }
+.dv-er .rel.hov, .dv-er .rel.on { opacity: 1; stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; }
+.dv-mx-wrap { flex: 1; min-height: 0; overflow: auto; padding: 0 28px 28px; }
+.dv-mx { overflow: visible; }
+.dv-legend { margin: 0 0 6px; }
+.dv .matrix thead th { position: sticky; top: 0; z-index: 2; background: var(--bg); height: 140px; cursor: pointer; }
+.dv .matrix thead th.corner { left: 0; z-index: 3; cursor: default; }
+.dv .matrix thead th:hover, .dv .matrix thead th.hovc { color: var(--accent); }
+.dv .matrix thead th.selc { color: var(--accent); font-weight: 600; }
+.dv .matrix thead th.stepc { color: var(--accent); }
+.dv .matrix tbody th.rh { position: sticky; left: 0; z-index: 1; background: var(--bg); max-width: 380px; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.dv .matrix td { width: 26px; min-width: 26px; height: 26px; cursor: default; }
+.dv .matrix td.R, .dv .matrix td.W, .dv .matrix td.RW { cursor: pointer; }
+.dv .matrix td.selc { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dv .matrix td.stepc { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dv .matrix tr.hot th.rh { color: var(--accent); font-weight: 600; }
+.dv-more { margin-top: 12px; }
+.dv-link { cursor: pointer; }
+.dv-link:hover { border-color: var(--accent); color: var(--accent); }
+.dv-mod { margin: 12px 0 4px; }
+.touch .op-b + .op-b { margin-left: 2px; }
+.op-b.UP { color: var(--ad); }
+.dv-fields td { padding: 3px 6px; word-break: break-all; }
+.dv-fields td:last-child { white-space: nowrap; text-align: right; word-break: normal; }
+.dv-fields .chip { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
