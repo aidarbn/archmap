@@ -145,7 +145,7 @@ function rowMod(m) {
 const flowActor = (fl) => { if (fl.actor) return fl.actor; const a = fl.steps && fl.steps.length ? actorOfFn(fl.steps[0]) : null; return a ? actorName(a) : ''; };
 function flowGroups(q, subset) {
   q = lc(q).trim();
-  const ok = (fl) => !q || lc(fl.name).includes(q) || lc(flowActor(fl)).includes(q);
+  const ok = (fl) => !q || lc(fl.name).includes(q) || lc(flowActor(fl)).includes(q) || AM.jv.flowHit(fl, q);
   const by = new Map(), auto = [];
   (subset || D.flows).filter(ok).forEach((fl) => {
     if (fl.kind === 'declared') { const k = flowActor(fl) || t('noActor'); if (!by.has(k)) by.set(k, []); by.get(k).push(fl); } else auto.push(fl);
@@ -155,7 +155,19 @@ function flowGroups(q, subset) {
   if (auto.length) gs.push({ name: by.size ? t('grpAuto') : t('grpFlows'), items: topFirst(auto), auto: true });
   return gs;
 }
-const flowRow = (fl, cls = 'lrow') => `<div class="${cls}${state.run && state.run.key === 'flow:' + fl.i ? ' cur' : ''}" data-k="flow" data-id="${fl.i}" title="${esc(fl.name)}"><span class="nm">${esc(fl.name)}</span><span class="sb">${esc(t('flowSteps', fl.steps.length))}</span></div>`;
+// rows of the journeys and variants share the builders in journeys.js; cfg tells them the classes of this list
+const jvCfg = (cls) => ({ row: cls, head: (title, n) => (cls === 'sc' ? `<div class="scen-grp">${esc(title)}<small>${n}</small></div>` : `<div class="gh">${esc(title)} · ${n}</div>`), attr: (k, id) => `data-k="${k}" data-id="${esc(id)}"` });
+const flowRow = (fl, cls = 'lrow', q = '') => `<div class="${cls}${state.run && state.run.key === 'flow:' + fl.i ? ' cur' : ''}" data-k="flow" data-id="${fl.i}" title="${esc(fl.name)}"><span class="nm">${esc(fl.name)}</span><span class="sb">${esc(t('flowSteps', fl.steps.length))}</span>${AM.jv.tog(fl)}</div>` + AM.jv.variantRows(fl, q, jvCfg(cls));
+function playRunKey(key) {
+  if (state.view !== 'map') setView('map');
+  loadRun(key); auto();
+}
+// click on a row of a journey / variant / the fold button of a flow; true when it was one of them
+function jvClick(e) {
+  const vt = e.target.closest('[data-vt]'); if (vt) { e.stopPropagation(); AM.jv.toggle(vt.dataset.vt); return 'vt'; }
+  const r = e.target.closest('[data-k="journey"],[data-k="variant"]'); if (!r) return false;
+  playRunKey(r.dataset.k + ':' + r.dataset.id); return r.dataset.k;
+}
 function playFlowIdx(i) {
   if (state.view !== 'map') setView('map');
   loadRun('flow:' + i); auto();
@@ -172,7 +184,8 @@ function listBody() {
   const q = lc(LS.q).trim(); let h = '';
   if (LS.tab === 'flows') {
     const gs = flowGroups(LS.q);
-    h = gs.map((g) => `<div class="gh">${esc(g.name)} · ${g.items.length}</div>` + g.items.map((fl) => flowRow(fl)).join('')).join('') || `<div class="none">${esc(t('flowNone'))}</div>`;
+    h = AM.jv.journeyRows(LS.q, jvCfg('lrow')) + gs.map((g) => `<div class="gh">${esc(g.name)} · ${g.items.length}</div>` + g.items.map((fl) => flowRow(fl, 'lrow', LS.q)).join('')).join('');
+    if (!h) h = `<div class="none">${esc(t('flowNone'))}</div>`;
   } else if (LS.tab === 'mods') {
     LAYERS.forEach((l) => {
       const ms = D.allMods.filter((m) => layerOf(m) === l && (!state.only || hasChg(D.modChg[m])));
@@ -225,6 +238,7 @@ function setupLists() {
   box.addEventListener('click', (e) => {
     if (e.target.closest('[data-close]')) return toggleLists(false);
     const tb = e.target.closest('[data-tab]'); if (tb) { if (LS.tab !== tb.dataset.tab) LS.q = ''; LS.tab = tb.dataset.tab; drawLists(); return; }
+    const jk = jvClick(e); if (jk === 'vt') return; if (jk) { toggleLists(false); return; }
     const r = e.target.closest('[data-k]'); if (!r) return;
     const k = r.dataset.k, id = r.dataset.id;
     if (k === 'flow') { toggleLists(false); playFlowIdx(+id); return; }
@@ -234,6 +248,7 @@ function setupLists() {
     if (e.key === 'Escape' && LS.open && !e.target.closest('#search') && !PK.open) { e.stopImmediatePropagation(); toggleLists(false); }
   });
   bus.on('select', () => { if (LS.open) markCur(); });
+  bus.on('jv', () => { if (LS.open && LS.tab === 'flows') drawLists(); });
 }
 // highlight the current function / module in the open list without redrawing it
 function markCur() {

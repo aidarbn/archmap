@@ -314,6 +314,19 @@ through all the steps. The name is built from the condition (`paid → to the ca
 has at most 12 variants (outcomes with the same end are folded together first). A flow without
 `arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
 
+**In the viewer** the scenario list (the "Scenarios (N)" button, the left column of the Scenario
+tab, the system panel) has three levels: "Through paths" (name, actor, the chain of flows with
+an icon for each transition: condition, queue, written by hand), "Scenarios" (grouped by actor
+as before), and under a scenario its foldable "Variants" (the main path first, `one of: …` for
+folded outcomes, "…N more"). Search looks through all three.
+
+- Playing a path runs its flows one after another; between two flows a plate says how the next
+  one starts ("→ through the queue", "→ on condition …", "next the client calls …"), and the map
+  and the Scenario tab show the overall progress ("flow 2/5 · step 3/7") and a label with the
+  name of the path.
+- Playing a variant takes its forks by itself. At the end a plate shows the outcome, or offers
+  "Go to the scenario" when the variant ends in another flow.
+
 ### Lint
 
 ```sh
