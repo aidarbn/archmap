@@ -502,6 +502,8 @@ function seqRender() {
     });
     sItems.push({ g, steps: r.pv ? [] : (r.steps || []), main: r.main, sub: r.sub, ext: r.ext, y: o.y + 20, x: b, x0: a, fid: r.fid, pv: r.pv, key: r.key });
   });
+  // the editor (views/editor.js) adds the planned steps of a described scenario below the diagram
+  if (AM.spec && AM.spec.seqPlanned) { const add = AM.spec.seqPlanned({ svg, parts, X, W, Ht, sZ }); if (add) sDim = { W, Ht: Ht + add }; }
   sAct = AM.svg('rect', { class: 'act cur', width: 10, rx: 2, x: -100, y: -100, height: 0 }, gl);
   sWrap.scrollTop = top; sWrap.scrollLeft = left;
   if (need.length) {
@@ -901,6 +903,7 @@ AM.dock = {
   // open(full): show the dock for the current run (full screen when asked)
   open(full) { const r = AM.state.run; if (!r || !sdBuild()) return; sUser = { key: r.key, on: true }; if (full) sFull = true; sdSync(true, 0); },
   esc: sdEsc,
+  refresh() { if (sDock) seqRefresh(true); },
   get shown() { return sShown(); },
 };
 
