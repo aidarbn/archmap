@@ -626,7 +626,7 @@ function drawGhosts() {
       c.addEventListener('click', (e) => { e.stopPropagation(); SP.curFlow = flow.id; setTab('flows'); });
     });
   };
-  const bbox = (n) => { const e = n && (n.el || n); try { return e && e.getBBox ? e.getBBox() : null; } catch (er) { return null; } };
+  const bbox = (n) => { const e = n && (n.el || n); try { const b = e && e.getBBox ? e.getBBox() : null; return b && { x: b.x, y: b.y, w: b.width, h: b.height }; } catch (er) { return null; } };
   const ext = (sc) => (sc && sc.extent ? { x: sc.extent.x, y: sc.extent.y + sc.extent.h - 52, w: sc.extent.w, h: 22 } : null);
   place(AM.map.system, () => (AM.map.system && AM.map.system.nodes.svc ? bbox(AM.map.system.nodes.svc) : null), () => ext(AM.map.system));
   place(AM.map.modules, (s) => {

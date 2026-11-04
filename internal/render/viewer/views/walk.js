@@ -66,7 +66,9 @@ function deviation() {
 function refreshOpts(keepSel) {
   W.opts = optionsOf(cur()).sort((a, b) => (a.kind === 'ext') - (b.kind === 'ext'));
   const gd = guided();
-  W.opts.forEach((o) => { o.guided = !!gd && o.fid === gd; o.seen = !!o.fid && (W.seen.has(o.fid) || W.steps.includes(o.fid)); });
+  // the scenario's next step is often a few calls away: the arrow that leads there is marked too (the nearest one)
+  const direct = W.opts.some((o) => o.fid === gd), via = !direct && gd ? W.opts.filter((o) => o.fid && AM.callPath(o.fid, gd, 6)).sort((a, b) => AM.callPath(a.fid, gd, 6).length - AM.callPath(b.fid, gd, 6).length)[0] : null;
+  W.opts.forEach((o) => { o.guided = !!gd && (o.fid === gd || o === via); o.seen = !!o.fid && (W.seen.has(o.fid) || W.steps.includes(o.fid)); });
   const list = shown();
   let i = list.findIndex((o) => o.guided);
   if (i < 0) i = list.findIndex((o) => !o.seen && o.kind !== 'ext');
@@ -245,7 +247,8 @@ AM.registerPanel('walk', (sel, ctx) => {
       if (q('save')) q('save').onclick = () => { W.form = { kind: 'save' }; renderCard(); };
       if (q('savevar')) q('savevar').onclick = () => { W.form = { kind: 'var' }; renderCard(); };
       wireForm(p);
-      const hl = p.querySelector('#pcode .hl'); if (hl) hl.scrollIntoView({ block: 'nearest' });
+      const hl = p.querySelector('#pcode .hl'), as = document.getElementById('panel');
+      if (hl && as) { const r = hl.getBoundingClientRect(), a = as.getBoundingClientRect(); if (r.bottom > a.bottom - 20 || r.top < a.top + 40) as.scrollTop += r.top - a.top - a.height / 2; }
       if (c.loading || (!c.has && AM.srcOf(fid) == null)) AM.loadSrc(fid).then(() => { if (W.on && cur() === fid && state.sel && state.sel.t === 'walk') AM.renderPanel(); });
     },
   };
