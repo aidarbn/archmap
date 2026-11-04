@@ -193,7 +193,7 @@ func TestFilesNoSrcDropsBodies(t *testing.T) {
 // A live edit must be visible: the flash lasts at least 1.5 s, a marker stays until reload, and
 // prefers-reduced-motion keeps the marker without the animation.
 func TestLiveFlashVisibleAndPersistent(t *testing.T) {
-	v := Viewer()
+	v := strings.ReplaceAll(Viewer(), "\r\n", "\n")
 	for _, s := range []string{"const FLASH_MS = 3200", "const SES = ", ".ldot", "g.tb[data-id]", ".api-row[data-i]", "li[data-fn]"} {
 		if !strings.Contains(v, s) {
 			t.Errorf("viewer lacks %q", s)
