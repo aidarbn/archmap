@@ -7,6 +7,11 @@
  *    data: [{table, op, fields}], states: [{entity, from, to, fid}], exts: [external], actor, mod}
  */
 
+addI18n({
+  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль' },
+  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module' },
+});
+
 /* ---------- runs ---------- */
 const LAYER_DEPTH = { entry: 0, ui: 1, domain: 2, other: 2, adapter: 3, infra: 4, test: 4 };
 // autoPath(start): a scenario without a model — follow callees, prefer another module and a deeper layer
@@ -50,7 +55,7 @@ function buildRun(key) {
   if (key.startsWith('flow:')) {
     const fl = D.flows.find((x) => x.i === +key.slice(5));
     if (!fl) return null;
-    return { key, name: fl.name, desc: fl.desc || '', segs: [{ flow: fl, steps: fl.steps.filter((s) => D.fns[s]) }] };
+    return { key, name: fl.name, desc: fl.desc || '', segs: [{ flow: fl, steps: flowSteps(fl) }] };
   }
   if (key.startsWith('journey:')) return jvBuildJourney(key);
   if (key.startsWith('variant:')) return jvBuildVariant(key);
@@ -88,16 +93,22 @@ function statesOf(fid) {
 function stepAt(i) {
   const L_ = runList(); const it = L_[i]; if (!it) return null;
   const sg = state.run.segs[it.seg], fl = sg.flow;
+  // the previous step with a function: planned steps (no code) in between are skipped
+  let j = i - 1;
+  while (j >= 0 && L_[j].seg === it.seg && isPlan(L_[j].fid)) j--;
   // the first step of a further flow of a path: a new entry (a queue hand-off keeps its caller)
-  const first = i > 0 && it.seg > 0 && L_[i - 1].seg !== it.seg, viaQ = first && sg.via && sg.via.via === 'queue';
-  const prev = i > 0 && (!first || viaQ) ? L_[i - 1].fid : null, next = L_[i + 1] ? L_[i + 1].fid : null, f = D.fns[it.fid];
+  const first = j >= 0 && L_[j].seg !== it.seg, viaQ = first && sg.via && sg.via.via === 'queue';
+  const prev = j >= 0 && (!first || viaQ) && !isPlan(L_[j].fid) ? L_[j].fid : null, next = L_[i + 1] ? L_[i + 1].fid : null;
+  const plan = isPlan(it.fid), f = D.fns[it.fid] || {};
+  const extName = plan && fl && fl.ext && fl.ext[it.fid], planExt = extName ? D.externals.filter((x) => x.name === extName) : [];
   return {
-    i, fid: it.fid, prev, next, seg: it.seg, flow: fl,
-    kind: !prev ? 'entry' : viaQ || isAsync(prev, it.fid) ? 'async' : isCall(prev, it.fid) ? 'call' : 'next',
-    label: (fl && fl.labels && fl.labels[it.fid]) || fnInfo(it.fid).name,
+    i, fid: it.fid, prev, next, seg: it.seg, flow: fl, planned: plan,
+    kind: plan ? 'plan' : !prev ? 'entry' : viaQ || isAsync(prev, it.fid) ? 'async' : isCall(prev, it.fid) ? 'call' : 'next',
+    label: (fl && fl.labels && fl.labels[it.fid]) || (plan ? t('planStep') : fnInfo(it.fid).name),
     effects: (fl && fl.effects && fl.effects[it.fid]) || [],
-    data: f.data || [], states: statesOf(it.fid), exts: extsOfFn(it.fid),
-    actor: i === 0 ? runActor() : first && !prev ? actorOfFn(it.fid) : null, mod: f.module,
+    data: f.data || [], states: plan ? [] : statesOf(it.fid), exts: plan ? planExt : extsOfFn(it.fid),
+    actor: i === 0 ? runActor() : first && !prev ? actorOfFn(it.fid) : null,
+    mod: plan ? (fl && fl.planMod && fl.planMod[it.fid]) || null : f.module,
   };
 }
 const curStep = () => (state.step >= 0 ? stepAt(state.step) : null);
@@ -106,6 +117,7 @@ function framesUpTo(i) {
   const L_ = runList(), out = [];
   for (let j = 0; j <= i && j < L_.length; j++) {
     const s = L_[j].fid, p = j ? L_[j - 1].fid : null;
+    if (isPlan(s)) continue; // a planned step has no frame
     if (p && isAsync(p, s)) { out.length = 0; out.push(s); continue; }
     let k = -1;
     for (let q = out.length - 1; q >= 0 && k < 0; q--) if (isCall(out[q], s)) k = q;
@@ -177,12 +189,23 @@ async function fnHop(s) {
   const xm = s.exts.map((x) => (x.modules || []).find((m) => fv.ports['out:' + m])).filter(Boolean)[0];
   if (xm) { const p = fv.ports['out:' + xm]; p.el.classList.add('hot'); await runDot(fv.fx, hop(at.r, p.r, .06)); }
 }
+// a planned step: no function to show — light the module it is meant for (or the service) where it is, the level and
+// the camera stay
+function planHop(s) {
+  if (state.level === 0 && sys) { startPlay(sys.svg, sys.fx); hotOn(sys.nodes, 'svc'); if (sys.nodes.svc) pulse(sys.fx, sys.nodes.svc.r); }
+  else if (state.level === 1 && map) {
+    startPlay(map.svg, map.fx);
+    const u = s.mod && unitFor(s.mod);
+    if (u && map.pos[u]) { hotOn(map.nodes, u); pulse(map.fx, map.pos[u]); }
+  } else if (state.level === 2 && fv) startPlay(fv.svg, fv.fx);
+}
 async function showStep() {
   const s = curStep(); if (!s) return;
   state.played = true;
   renderPlayer(); setSel({ t: 'step' });
   bus.emit('step', s);
   if (state.view !== 'map') return;
+  if (s.planned) return planHop(s);
   if (state.level === 0) await sysHop(s);
   else if (state.level === 1) await mapHop(s);
   else if (state.level === 2) {
@@ -224,6 +247,7 @@ async function stepIn() {
   if (state.view !== 'map') setView('map');
   if (state.step < 0) { await doStep(1); return; }
   const s = curStep(); if (!s) return;
+  if (s.planned) return doStep(1); // nothing to enter: no code yet
   if (state.level === 0) { await drill(1, { from: sys.nodes.svc.el, focus: s.mod }); return replay(); }
   if (state.level === 1) { revealMod(s.mod); const u = unitFor(s.mod); if (!u) return; await drill(2, { from: map.nodes[u].el, mod: u }); return replay(); }
   if (state.level === 2) return drill(3, { from: fv.nodes[s.fid] ? fv.nodes[s.fid].el : null, fn: s.fid, target: s.next, frames: framesUpTo(state.step) });
@@ -256,7 +280,7 @@ function takeBranch(b) {
   showChoice(false);
   const target = b.flow && D.flowById[b.flow];
   if (target) {
-    state.run.segs.push({ flow: target, steps: target.steps.filter((s) => D.fns[s]), via: b });
+    state.run.segs.push({ flow: target, steps: flowSteps(target), via: b });
     doStep(1).then(() => { if (state.resume) { state.resume = false; auto(); } });
   } else {
     state.exitText = b.text || b.cond; state.resume = false;

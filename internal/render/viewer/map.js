@@ -793,7 +793,9 @@ function setLevel(lvl, fid) {
   if (state.busy || lvl < 0 || lvl > 3) return;
   LVL_QUIET = true;
   const s = curStep();
-  if (!fid || !D.fns[fid]) fid = s ? s.fid : state.fn && D.fns[state.fn] ? state.fn : null;
+  // a planned step has no function: its caller stands for it
+  const sf = s ? (D.fns[s.fid] ? s.fid : D.fns[s.prev] ? s.prev : null) : null;
+  if (!fid || !D.fns[fid]) fid = sf || (state.fn && D.fns[state.fn] ? state.fn : null);
   if (!fid && lvl >= 2) { const m = state.mod && D.byMod[state.mod] ? state.mod : null; fid = m ? D.byMod[m][0] : D.entries[0] || D.fids[0] || null; }
   const m = fid ? D.fns[fid].module : null;
   if (lvl >= 2 && !m) lvl = 1;

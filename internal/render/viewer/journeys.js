@@ -106,7 +106,7 @@ function jvBuildJourney(key) {
   const j = jvJourney(key.slice(8)); if (!j) return null;
   const segs = [];
   jvOrder(j).forEach((o) => {
-    const steps = o.flow.steps.filter((s) => D.fns[s]);
+    const steps = flowSteps(o.flow);
     if (steps.length) segs.push({ flow: o.flow, steps, via: o.via, from: o.via && D.flowById[o.via.from] });
   });
   if (!segs.length) return null;
@@ -115,7 +115,7 @@ function jvBuildJourney(key) {
 function jvBuildVariant(key) {
   const r = jvVariant(key.slice(8)); if (!r) return null;
   const { fl, v } = r;
-  const steps = (v.main ? fl.steps : v.steps).filter((s) => D.fns[s]);
+  const steps = (v.main ? fl.steps : v.steps).filter((s) => D.fns[s] || (fl.planned && fl.planned[s]));
   if (!steps.length) return null;
   return { key, name: fl.name + ' · ' + jvVLabel(v), desc: fl.desc || '', kind: 'variant', fixed: true, variant: v, baseFlow: fl, segs: [{ flow: fl, steps, variant: v }] };
 }
@@ -156,7 +156,7 @@ async function jvJump() {
   const r = state.run; if (!r || !r.fixed || state.busy) return;
   const e = jvEnd(); if (!e || !e.jump) return;
   const sg = r.segs[r.segs.length - 1], last = runList().length - 1;
-  r.segs.push({ flow: e.jump, steps: e.jump.steps.filter((s) => D.fns[s]), via: { via: 'variant', cond: (sg.variant && sg.variant.choices && sg.variant.choices[0] && sg.variant.choices[0].cond) || '' }, extra: true });
+  r.segs.push({ flow: e.jump, steps: flowSteps(e.jump), via: { via: 'variant', cond: (sg.variant && sg.variant.choices && sg.variant.choices[0] && sg.variant.choices[0].cond) || '' }, extra: true });
   state.step = last;
   await doStep(1);
 }

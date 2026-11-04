@@ -116,12 +116,14 @@ function exit() {
   if (!W.on) return;
   W.on = false; document.body.classList.remove('walking'); paintBtn(); drawOverlay();
   AM.select({ t: 'step' });
+  AM.bus.emit('walk', { kind: 'exit' });
 }
 function afterStep() {
   if (!W.on) return;
   refreshOpts(false);
   AM.select({ t: 'walk' });
   drawOverlay();
+  AM.bus.emit('walk', { kind: 'step' }); // the scenario sheet redraws the fan of arrows
 }
 
 /* ---------- map overlay (level "functions of a module") ---------- */
@@ -195,6 +197,7 @@ function paintSel() {
   if (fv && fv.svg) fv.svg.querySelectorAll('.walkfx .wk-opt').forEach((g, i) => g.classList.toggle('sel', i === W.sel));
   Array.from(document.querySelectorAll('#pane .wk-opts li')).forEach((li) => li.classList.toggle('sel', +li.dataset.k === W.sel));
   drawOverlay(); renderCard();
+  AM.bus.emit('walk', { kind: 'sel' });
 }
 
 /* ---------- the right card ---------- */
@@ -238,7 +241,7 @@ AM.registerPanel('walk', (sel, ctx) => {
     after(p) {
       const q = (a) => p.querySelector(`[data-w="${a}"]`);
       q('back').onclick = back; q('exit').onclick = exit;
-      if (q('helpers')) q('helpers').onclick = () => { W.helpers = !W.helpers; refreshOpts(false); drawOverlay(); renderCard(); };
+      if (q('helpers')) q('helpers').onclick = () => { W.helpers = !W.helpers; refreshOpts(false); drawOverlay(); renderCard(); AM.bus.emit('walk', { kind: 'step' }); };
       p.querySelectorAll('.wk-opts li').forEach((li) => { li.onclick = () => { W.sel = +li.dataset.k; take(shown()[W.sel]); }; });
       p.querySelectorAll('[data-fn]').forEach((e) => e.addEventListener('click', () => AM.openFn(e.getAttribute('data-fn'))));
       p.querySelectorAll('input[data-cap]').forEach((i) => { i.onkeydown = (e) => e.stopPropagation(); i.oninput = () => { W.caps[+i.dataset.cap] = i.value; }; });
@@ -288,7 +291,8 @@ function stepOps(flow, from, to) {
     if (W.caps[i]) s.text = W.caps[i].trim();
     if (W.exts[i]) s.ext = W.exts[i];
     ops.push(s);
-    (W.plans[i] || []).forEach((p) => ops.push({ op: 'add_step', flow, planned: true, text: p }));
+    // a planned step noted at a step of the walk is meant for that step's module (editable later)
+    (W.plans[i] || []).forEach((p) => ops.push(Object.assign({ op: 'add_step', flow, planned: true, text: p }, D.fns[W.steps[i]] ? { module: D.fns[W.steps[i]].module } : {})));
   }
   return ops;
 }
@@ -344,5 +348,10 @@ AM.bus.on('lang', () => { paintBtn(); renderCard(); });
 AM.bus.on('live', () => { if (W.on) { W.steps = W.steps.filter((x) => D.fns[x]); if (!W.steps.length) exit(); else { refreshOpts(true); drawOverlay(); renderCard(); } } });
 AM.bus.on('spec', () => { if (W.on && W.form) return; renderCard(); });
 AM.bus.on('edit', () => renderCard());
-AM.walk = { start, exit, startDefault, get on() { return W.on; }, get state() { return W; } };
+// options() — the arrows shown at the current step (the sheet draws them as a fan); select(k) / take(o) / back() — as the keys
+AM.walk = {
+  start, exit, startDefault, take, back, options: () => (W.on ? shown() : []),
+  select(k) { if (W.on && k !== W.sel && k >= 0 && k < shown().length) { W.sel = k; paintSel(); } },
+  get on() { return W.on; }, get state() { return W; }, get sel() { return W.sel; },
+};
 paintBtn();

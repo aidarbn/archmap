@@ -50,6 +50,8 @@ Lists and the scenario scroll normally.
   The header of the panel has a combobox with search to switch the scenario
   (paths, scenarios by actor, "Main" on top; the same list is in
   "Scenarios (N)"). `?view=sequence` opens the map with the panel full screen.
+  The panel has two views, **Sheet** (the default) and **Sequence**; the choice
+  is remembered (see "Scenario sheet" below).
 - **API** lists every endpoint (HTTP, gRPC, WebSocket, tasks, CLI) grouped by
   service, with filters by kind and access and a search. The card shows the
   request and response types, the function, the scenario to play and the tables
@@ -76,6 +78,43 @@ drop-down holds modules by layer, all functions and the branch changes.
 
 ![Statuses view on django-oscar](docs/img/status-oscar.png)
 *Statuses: a state machine from `arch:state` lines on the same copy.*
+
+### Scenario sheet
+
+The whole scenario on one sheet, a flowchart from left to right: columns are
+the layers (actor and outcome -> entry points -> logic -> adapters -> external
+systems: databases, the queue, outside APIs), the functions of the steps sit in
+frames of their modules, and every step is an arrow numbered in the order of the
+run. A function visited again keeps one node and gets one more numbered arrow; a
+hand-off through the queue is two dashed arrows ("enqueue ..." / "from the
+queue"); the effect of a step (`Order -> payment_requested`, `UPDATE orders`)
+is written on its arrow; branches (`arch:on`, `alt`) leave the fork node as
+`5a`, `5b` with their condition, towards an outcome or another scenario.
+Planned steps (`step plan "..." in <module>`) are dashed nodes in the frame of
+their module and play like the others.
+
+- **Levels**, in step with the map: functions (full), modules (a frame folds into
+  a node, arrows list their steps: `3–5`), system (actor, service, external
+  systems). A level change redraws the sheet in place: nodes move from where
+  they were.
+- **Playing** moves nothing: the current arrow and node are lit, a dot runs
+  along the arrow, past steps stay bright, future ones are dimmed. A path shows
+  its flows one after another on the same sheet; the strip above lists them
+  (`1–3 Book a visit ▸ 4–5 Remind the owner`), a click jumps to a flow.
+- **Walk** builds the sheet from the trace and fans out every outgoing arrow of
+  the current function (calls, queue, external systems) with its number; a click
+  takes it, the sheet grows by a node without jumping, `←` steps back.
+- The sheet is fitted to the panel (never below a readable size; then drag or
+  scroll it); pinch or Cmd/Ctrl+wheel zooms it and changes the level.
+
+Columns, frames and arrows are laid out by archmap itself (no libraries): items
+are ordered by the median of their neighbours over several sweeps keeping the
+order with the fewest crossings, arrows are orthogonal, turn in the gaps between
+columns on separate tracks and cross other columns only between frames; numbers
+and labels are placed where they cover nothing.
+
+![Scenario sheet on spring-petclinic](docs/img/sheet-petclinic.png)
+*A path of [spring-petclinic](https://github.com/spring-projects/spring-petclinic) on the sheet: three coded steps, then two planned ones (dashed), the fourth playing.*
 
 ### Nested scenario
 
@@ -377,7 +416,7 @@ flow kaspi-pay "Pay for an order with Kaspi QR"
   actor Tablet
   step TabletsServer.RequestKaspiQRForOrder   "The guest asks for a QR"
   step Service.requestQR  ext Kaspi           "Create the QR at Kaspi"
-  step plan "Check the payment limit"         # planned: no code yet
+  step plan "Check the payment limit" in services/kaspi   # planned: no code yet
   state Order: validated -> payment_requested
   alt processed -> confirm-order
   alt expired "the QR is out of date"
@@ -388,7 +427,8 @@ journey guest-kaspi "The guest pays with Kaspi": create-order > kaspi-pay > conf
 
 - A step names a function as `Type.Method`, `Func`, or a `path::fid` suffix; an
   ambiguous name is an error that lists the candidates. `step plan "..."` is a step
-  that has no code yet.
+  that has no code yet; `in <module>` puts it into the module it will live in
+  (the map, the sequence and the sheet draw it there; it plays like any step).
 - A spec flow with the id of an `arch:flow` in the code is merged with it (the
   spec wins on captions and order, code steps the spec does not list are marked).
   A spec-only flow is a declared scenario with planned steps. Spec states are

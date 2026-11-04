@@ -118,9 +118,11 @@ type Flow struct {
 	// Spec marks a flow the spec declares (alone or together with arch:flow);
 	// Planned lists the steps that have no code yet (ids from PlannedID);
 	// Unspecified lists steps found in the code that the spec flow does not list;
-	// Ext names the external system of a step (step id -> system).
+	// Ext names the external system of a step (step id -> system);
+	// PlanMod the module a planned step is meant for (`step plan "…" in <module>`).
 	Spec        bool              `json:"spec,omitempty"`
 	Planned     map[string]bool   `json:"planned,omitempty"`
+	PlanMod     map[string]string `json:"planMod,omitempty"`
 	Unspecified map[string]bool   `json:"unspecified,omitempty"`
 	Ext         map[string]string `json:"ext,omitempty"`
 }

@@ -22,8 +22,8 @@ import (
 //	set_name           flow | journey, name
 //	set_actor          flow, actor
 //	set_exit           flow, exit
-//	add_step           flow, (ref | planned), [text, ext, index]   index -1 or absent: at the end
-//	set_step           flow, index, ref, planned, text, ext        (replaces the step)
+//	add_step           flow, (ref | planned [, module]), [text, ext, index]   index -1 or absent: at the end
+//	set_step           flow, index, ref, planned, module, text, ext           (replaces the step)
 //	remove_step        flow, index
 //	move_step          flow, index, to_index
 //	add_alt            flow, cond [, target, text]
@@ -50,6 +50,7 @@ type Op struct {
 	Ext    string   `json:"ext,omitempty"`
 	Text   string   `json:"text,omitempty"`
 	Plan   bool     `json:"planned,omitempty"`
+	Module string   `json:"module,omitempty"`
 	Index  *int     `json:"index,omitempty"`
 	ToIdx  *int     `json:"to_index,omitempty"`
 	Cond   string   `json:"cond,omitempty"`
@@ -430,7 +431,7 @@ func (s *Set) apply(op Op) ([]string, error) {
 		if fl == nil {
 			return nil, bad("no flow %q", op.Flow)
 		}
-		st := Step{Ref: op.Ref, Planned: op.Plan, Ext: op.Ext, Text: op.Text}
+		st := Step{Ref: op.Ref, Planned: op.Plan, Module: op.Module, Ext: op.Ext, Text: op.Text}
 		if err := freeText("text", st.Text); err != nil {
 			return nil, err
 		}
@@ -439,7 +440,13 @@ func (s *Set) apply(op Op) ([]string, error) {
 			if st.Text == "" {
 				return nil, bad("a planned step needs text")
 			}
+			if st.Module != "" && !isModule(st.Module) {
+				return nil, bad("module %q: one word without spaces, quotes, # or ->", st.Module)
+			}
 		} else {
+			if st.Module != "" {
+				return nil, bad("only a planned step takes a module")
+			}
 			if !isRef(st.Ref) || st.Ref == "plan" {
 				return nil, bad("ref %q is not a function reference", st.Ref)
 			}

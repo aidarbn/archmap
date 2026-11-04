@@ -120,7 +120,7 @@ function setData(d, flashIds) {
     run = buildRun(f0 ? (nf ? 'flow:' + nf.i : null) : old.key);
     if (run && f0) oldFlows.slice(1).forEach((fl, i) => {
       const nx = fl && sameFlow(fl); if (!nx) return;
-      run.segs.push({ flow: nx, steps: nx.steps.filter((x) => D.fns[x]), via: old.segs[i + 1].via });
+      run.segs.push({ flow: nx, steps: flowSteps(nx), via: old.segs[i + 1].via });
     });
   }
   state.run = run; state.playing = false;

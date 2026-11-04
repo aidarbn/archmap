@@ -35,6 +35,7 @@ func mergeSpec(m *Model, sm spec.Model) {
 		var steps []string
 		labels := map[string]string{}
 		planned := map[string]bool{}
+		planMod := map[string]string{}
 		ext := map[string]string{}
 		seen := map[string]bool{}
 		last := ""
@@ -44,6 +45,9 @@ func mergeSpec(m *Model, sm spec.Model) {
 			case st.Planned:
 				id = PlannedID(sf.ID, k)
 				planned[id] = true
+				if st.Module != "" {
+					planMod[id] = st.Module
+				}
 			case st.Fid != "" && !seen[st.Fid]:
 				id = st.Fid
 				last = id
@@ -118,6 +122,7 @@ func mergeSpec(m *Model, sm spec.Model) {
 		if len(planned) > 0 {
 			fl.Planned = planned
 		}
+		fl.PlanMod = nilIfEmpty(planMod)
 		fl.Ext = nilIfEmpty(ext)
 		for _, a := range sf.Alts {
 			dup := false

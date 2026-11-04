@@ -189,8 +189,8 @@ function indexData(data) {
   D.transByFid = {};
   Object.keys(D.states).forEach((ent) => (D.states[ent].transitions || []).forEach((tr) => (D.transByFid[tr.fid] = D.transByFid[tr.fid] || []).push(Object.assign({ entity: ent }, tr))));
   D.tables = (F.data && F.data.tables) || {};
-  // flows: only those with at least one known step
-  D.flows = (M.flows || []).map((fl, i) => Object.assign({ i }, fl)).filter((fl) => (fl.steps || []).some((s) => D.fns[s]));
+  // flows: only those with at least one known step (or a planned one: a scenario described before its code)
+  D.flows = (M.flows || []).map((fl, i) => Object.assign({ i }, fl)).filter((fl) => (fl.steps || []).some((s) => D.fns[s] || (fl.planned && fl.planned[s])));
   D.flowById = {}; D.flows.forEach((fl) => { if (fl.id) D.flowById[fl.id] = fl; });
   D.actors = computeActors();
   PATHS.clear();
@@ -208,6 +208,10 @@ function fnInfo(id) {
   const nm = String(id).split('::').pop();
   return { id, name: nm, short: nm.split('.').pop(), mod: '', out: [], in: [], data: [], full: false };
 }
+// planned steps of a spec flow (`step plan "…"`): ids "plan:<flow>:<n>", no function behind them
+const isPlan = (id) => !D.fns[id] && /^plan:/.test(String(id));
+// the playable steps of a flow: known functions and its planned steps, in order
+const flowSteps = (fl) => (fl && fl.steps ? fl.steps.filter((s) => D.fns[s] || (fl.planned && fl.planned[s])) : []);
 const isAsync = (from, to) => !!D.fns[from] && (D.fns[from].async_callees || []).includes(to) && !(D.fns[from].callees || []).includes(to);
 const isCall = (from, to) => !!D.fns[from] && (D.fns[from].callees || []).includes(to);
 const modLabel = (m) => (m === '.' || m === '' ? t('root') : m);
@@ -471,6 +475,6 @@ function registerPanel(kind, fn) { PANELS[kind] = fn; }
 const AM = window.AM = {
   version: 3, D, state, bus, t, L, addI18n, plural, registerView, registerPanel,
   h: H, svg: S_, esc, cut, cutL, fnInfo, fname, short, modLabel, layerOf, modRole, modDesc, LAYERS, LCOLOR,
-  isAsync, isCall, extsOfFn, actorName, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath,
+  isAsync, isCall, extsOfFn, actorName, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath, isPlan, flowSteps,
   get lang() { return LANG; }, get RM() { return RM; }, get DUR() { return DUR; },
 };

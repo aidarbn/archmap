@@ -55,10 +55,11 @@ type States struct {
 	Code        string       `json:"code,omitempty"` // enrich: key of the matching machine in facts.states
 }
 
-// Step is `step <ref> [ext System] ["caption"]` or `step plan "caption"`.
+// Step is `step <ref> [ext System] ["caption"]` or `step plan "caption" [in module]`.
 type Step struct {
 	Ref     string `json:"ref,omitempty"` // Type.Method | Func | path::fid; empty for a planned step
 	Planned bool   `json:"planned,omitempty"`
+	Module  string `json:"module,omitempty"` // planned steps only: the module the step will live in (`in services/kaspi`)
 	Ext     string `json:"ext,omitempty"`
 	Text    string `json:"text,omitempty"`
 	Line    int    `json:"line,omitempty"`

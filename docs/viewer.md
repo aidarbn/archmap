@@ -19,7 +19,7 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `panel.js` | Right card for the selection (`setSel`). |
 | `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), the scale zoom of content without a camera (`AM.zoom.scaleWheel`: code text, the sequence panel — past ×1.57 it dives, below ×0.65 it leaves, with the same gate), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
 | `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
-| `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. `views/sequence.js` is the exception: no tab, it builds the **sequence panel** (a dock over `#v-map`, see below) and exports `AM.dock`. |
+| `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. `views/sequence.js` is the exception: no tab, it builds the **sequence panel** (a dock over `#v-map`, see below) and exports `AM.dock`; `views/sheet.js` draws the **scenario sheet** inside that dock (`AM.sheet`, see below). |
 | `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. `fitHeader()` keeps the project name at least ~120px wide: when the header runs out of room the branch counters and "changed only" fold into the ⋯ menu, then the labels of the live badge and the Lists button go. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
@@ -85,6 +85,25 @@ logged and do not break the page.
   holds `{pos, bottom, right, min}` (shares of the stage); `archmap.seqlink` the "with map" switch. CSS
   variables `--dock-b` / `--dock-r` on `#v-map` (and `data-dock="b|r"`) move the map's own buttons; the code
   scene `#sc3` is shrunk by them. `?view=sequence` opens the map with the panel full screen.
+  The header switch "Sheet | Sequence" (`AM.dock.mode`, `AM.dock.setMode('sheet'|'seq')`, `localStorage`
+  `archmap.seqmode`, the sheet by default) picks what the panel draws; in the sheet mode the level switch has no
+  "Code" (functions stand for it) and the scope / frame chips are hidden.
+- **Scenario sheet** `AM.sheet` (`views/sheet.js`): `render(host, {level, setLevel})` (the dock's scroll box),
+  `sync(keep)` (lights the current step; `keep` = no running dot), `select(sel)`, `wheel(e, level, setLevel)`
+  (pinch / Cmd+wheel: `AM.zoom.scaleWheel`, past the thresholds a level), `clear()`; `model`, `layout`, `scale`.
+  The model: nodes (`f:<fid>` functions in frames `F:<module>`, `m:<module>`, `svc`, `a:<actor>`, `x:<external id>`,
+  `p:<plan id>` planned steps, `o:t:<text>` outcomes, `o:f:<flow>` scenarios a branch leads to), edges keyed
+  `from>to>kind` with `kind` `entry call self plan enq deq ext branch opt` and the run indexes in `steps` (one edge
+  per pair and kind: numbers `3–5`). Columns `act in dom ad ext` (`act svc ext` on the system level) by
+  `layerOf` (entry/ui → in, domain/other/test → dom, adapter/infra → ad). Layout: items stacked per column, ordered
+  by the median y of their neighbours (8 sweeps, the order with the fewest crossings), pulled toward their
+  neighbours; ports spread over the node sides; orthogonal routes with the vertical runs on tracks in the gaps and
+  horizontal runs across other columns only in free corridors; number pills and tags placed by the least overlap
+  with nodes, frame titles and other labels (a leader line when far). Fit: `min(width, height)` of the box,
+  clamped to 0.75…1.2 (then it scrolls; a drag on the background pans). A level change or a walk step re-renders
+  and animates every node and frame from its old screen box (or from the frame / module / service it folded into)
+  with the Web Animations API; a walk never zooms in. Bus event `walk` (`{kind: 'step'|'sel'|'exit'}`, from
+  `views/walk.js`) redraws the fan of the walk; `AM.walk.options()`, `take(o)`, `select(k)`, `sel` feed it.
 - **Cross-view events** (API ↔ Data), both emitted after `AM.setView(…)` of the target tab:
   - `api:open-table` `{table, op, ep, fid, via}` — from the API view (a table in the endpoint card);
     `op` is `R`/`W`/`RW`, `ep` the endpoint object, `via` the first function of the call closure that
@@ -205,8 +224,14 @@ Statuses (`views/status.js`): transitions get `st` = `both` (described and in co
 or `spec` (`drift: not_implemented`, dashed grey); in edit mode: double click empty space adds a status, double click a node
 renames, drag node to node draws a transition (inline `event` or `event "label"`), Del removes a status or the selected
 transition, double click an orange edge adds it to the spec. Planned steps (`planned: true`) are dashed chips on the map
-(system / module level) and dashed rows under the sequence diagram (`AM.spec.seqPlanned`, called by `views/sequence.js`);
-they read `model.spec` from the data, so they also show in a static HTML.
+(system / module level, in their module when `module` is set; they read `model.spec` from the data, so they also show
+in a static HTML). They are steps of the run too: `flowSteps(fl)` (core) keeps the `plan:<flow>:<n>` ids of
+`fl.planned`, `AM.isPlan(id)`; `stepAt` gives them `planned: true`, `kind: 'plan'`, `mod` from `fl.planMod`, no
+data / statuses, `prev` = the last step with a function (later steps skip them too). The map lights the module (or
+the service) without moving, the sequence draws a dashed message to the module, the sheet a dashed node, the card
+says "no code yet". A flow with planned steps only is playable. In edit mode the scenario card sets the module of a
+planned step (`set_step` with `module`); a walk saves its planned steps with the module of the step they follow.
+The Drift tab lists each drift once.
 
 **Walk** (`#walkBtn`, "▶ Walk from here" in a function card, `AM.walk.start(fid, guide?)`): a run with key `walk` whose steps
 are the chosen path. On the level "functions of a module" every outgoing arrow of the current function is drawn

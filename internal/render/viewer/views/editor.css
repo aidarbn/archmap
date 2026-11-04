@@ -90,5 +90,6 @@ body.ed-wide main { grid-template-columns: 1fr 560px; }
 .ghosts .ghost rect { fill: var(--surface); stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 5 3; }
 .ghosts .ghost text { font: 11.5px var(--mono); fill: var(--text-2); font-style: italic; pointer-events: none; }
 .ghosts .ghost:hover rect, .ghosts .ghost:focus-visible rect { stroke: var(--accent); }
-.seq-planned .pl-line { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
-.seq-planned .pl-lab { font: italic 12px var(--mono); fill: var(--text-2); }
+/* planned steps in the sequence: a dashed message with an italic label */
+.seq .msg.plan line, .seq .msg.plan path:not(.hit) { stroke-dasharray: 6 4; stroke: var(--muted); }
+.seq .msg.plan text { font-style: italic; }

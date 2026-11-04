@@ -29,6 +29,7 @@ AM.addI18n({
     edDriftNone: 'Расхождений нет.', edDriftTitle: 'Расхождения описания с кодом', edOnMap: 'на карте', edInText: 'в тексте', edAccept: 'добавить в описание',
     edDCode: 'есть в коде, нет в описании', edDSpec: 'описан, но не найден в коде', edDRef: 'функции нет в коде', edDOther: 'расхождение',
     edRefMissing: 'нет в коде', edDrift_missing: 'нет в коде', edDrift_ambiguous: 'неоднозначно', edDrift_unreachable: 'недостижим', edPlanTag: 'план', edPlanned1: 'запланировано', edLoadFail: 'Не удалось прочитать /spec',
+    edPlanMod: 'Модуль шага (путь, например services/kaspi; пусто — без модуля)', edPlanModAdd: '+ модуль',
   },
   en: {
     edBtn: 'Edit', edBtnTip: 'Edit mode: draw statuses and scenarios, saved to the text arch/*.arch',
@@ -47,6 +48,7 @@ AM.addI18n({
     edDriftNone: 'No drift.', edDriftTitle: 'Where the description and the code differ', edOnMap: 'on the map', edInText: 'in the text', edAccept: 'add to the description',
     edDCode: 'in code, not described', edDSpec: 'described, not found in code', edDRef: 'function is not in the code', edDOther: 'drift',
     edRefMissing: 'not in code', edDrift_missing: 'not in code', edDrift_ambiguous: 'ambiguous', edDrift_unreachable: 'unreachable', edPlanTag: 'plan', edPlanned1: 'planned', edLoadFail: 'Could not read /spec',
+    edPlanMod: 'Module of the step (a path such as services/kaspi; empty — none)', edPlanModAdd: '+ module',
   },
 });
 
@@ -59,7 +61,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 const SP = (AM.spec = {
   avail: false, on: false, files: [], model: null, errors: [], findings: [],
   save: 'saved', saveMsg: '', undo: [], redo: [], tab: 'card', curFlow: null,
-  mergeMachines: (base) => base, seqPlanned: () => 0,
+  mergeMachines: (base) => base,
 });
 let busy = Promise.resolve(), dirtyText = false, tabEls = null;
 
@@ -138,7 +140,7 @@ async function redo() {
 }
 
 // inverse(op, model) -> ops that take the op back (computed before the op is applied)
-const stepOp = (flow, s, index) => Object.assign({ op: 'add_step', flow, index }, s.planned ? { planned: true } : { ref: s.ref }, s.text ? { text: s.text } : {}, s.ext ? { ext: s.ext } : {});
+const stepOp = (flow, s, index) => Object.assign({ op: 'add_step', flow, index }, s.planned ? Object.assign({ planned: true }, s.module ? { module: s.module } : {}) : { ref: s.ref }, s.text ? { text: s.text } : {}, s.ext ? { ext: s.ext } : {});
 function inverse(o, m) {
   const st = (m.states || []).find((s) => s.entity === o.entity), tr = st ? st.transitions || [] : [];
   const fl = (m.flows || []).find((f) => f.id === o.flow);
@@ -168,6 +170,7 @@ function inverse(o, m) {
     }
     case 'add_step': return [{ op: 'remove_step', flow: o.flow, index: o.index != null && o.index >= 0 ? o.index : fl ? fl.steps.length : 0 }];
     case 'remove_step': return fl && fl.steps[o.index] ? [stepOp(o.flow, fl.steps[o.index], o.index)] : [];
+    case 'set_step': return fl && fl.steps[o.index] ? [Object.assign(stepOp(o.flow, fl.steps[o.index], o.index), { op: 'set_step' })] : [];
     case 'move_step': return [{ op: 'move_step', flow: o.flow, index: o.to_index, to_index: o.index }];
     case 'add_alt': return [{ op: 'remove_alt', flow: o.flow, index: fl ? (fl.alts || []).length : 0 }];
     case 'remove_alt': {
@@ -277,7 +280,12 @@ function driftList() {
     if (s.drift) out.push({ kind: s.drift, flow: f.id, index: i, message: (f.name || f.id) + ': ' + (s.ref || s.text || '?'), loc: s.line ? { path: f.file, line: s.line } : null });
   }));
   (SP.model.journeys || []).forEach((j) => (j.missing || []).forEach((id) => out.push({ kind: 'journey_missing', journey: j.id, message: (j.name || j.id) + ': ' + id, loc: j.line ? { path: j.file, line: j.line } : null })));
-  return out;
+  // one row per drift: a transition found in several functions (or "*" written both as "" and "*") is listed once
+  const seen = new Set();
+  return out.filter((d) => {
+    const k = [d.kind, d.entity || '', d.flow || '', d.journey || '', d.index != null ? d.index : '', d.message].join('\0');
+    return seen.has(k) ? false : seen.add(k);
+  });
 }
 
 /* ---------- header: toggle, undo/redo, indicator ---------- */
@@ -381,6 +389,16 @@ function flowCard(p, f) {
     const li = AM.h('li', { class: 'ed-step' + (s.planned ? ' planned' : '') + (bad ? ' bad' : ''), draggable: 'true', 'data-i': i, title: T('edDragTip') }, ol,
       `<span class="grip" aria-hidden="true">⋮⋮</span><span class="nm">${esc(stepName(s))}</span>` +
       (s.planned ? `<span class="q">${esc(T('edPlanTag'))}</span>` : '') + (s.ext ? `<span class="q">${esc(s.ext)}</span>` : '') + (bad ? `<span class="q w">${esc(T('edRefMissing'))}</span>` : ''));
+    if (s.planned) {
+      // the module the planned step is meant for (`in <module>`): shown on the sheet, the map and the sequence
+      const mq = AM.h('button', { class: 'q mod', type: 'button', title: T('edPlanMod') }, li, esc(s.module ? AM.short(s.module) : T('edPlanModAdd')));
+      mq.onclick = (e) => {
+        e.stopPropagation();
+        ask(c, e.clientX, e.clientY, s.module || (AM.state.mod || ''), T('edPlanMod'), (v) => {
+          if (v !== (s.module || '')) send({ op: 'set_step', flow: f.id, index: i, planned: true, text: s.text || T('edPlanned1'), module: v });
+        });
+      };
+    }
     const x = AM.h('button', { class: 'xbtn', type: 'button', title: T('edDel'), 'aria-label': T('edDel') }, li, '×');
     x.onclick = (e) => { e.stopPropagation(); send({ op: 'remove_step', flow: f.id, index: i }); };
     if (fidOf(s)) li.querySelector('.nm').onclick = () => AM.select({ t: 'fn', id: fidOf(s) });
@@ -635,27 +653,6 @@ function drawGhosts() {
     return bbox(nd);
   }, () => ext(AM.map.modules));
 }
-// called by views/sequence.js after the diagram body was drawn; returns the added height
-SP.seqPlanned = (c) => {
-  if (!viewModel()) return 0;
-  const run = AM.state.run, rid = run && run.segs && run.segs[0] && run.segs[0].flow && run.segs[0].flow.id;
-  const f = rid && flowOf(rid); if (!f) return 0;
-  const pl = (f.steps || []).filter((s) => s.planned); if (!pl.length) return 0;
-  const parts = c.parts, a = parts[0], base = parts.find((p) => p.kind === 'svc') || parts[1] || a;
-  const g = AM.svg('g', { class: 'seq-planned' }, c.svg);
-  let y = c.Ht;
-  pl.forEach((s) => {
-    const tgt = (s.module && parts.find((p) => p.key === s.module || p.key === 'mod:' + s.module || String(p.key).endsWith(s.module))) || base;
-    const x1 = c.X[a.key], x2 = c.X[tgt.key] === x1 ? x1 + 60 : c.X[tgt.key];
-    AM.svg('line', { x1, y1: y + 20, x2, y2: y + 20, class: 'pl-line', 'marker-end': 'url(#arrM)' }, g);
-    const lab = AM.svg('text', { x: (x1 + x2) / 2, y: y + 14, 'text-anchor': 'middle', class: 'pl-lab' }, g, AM.cut('⌁ ' + (s.text || T('edPlanned1')) + (s.ext ? ' · ' + s.ext : ''), 44));
-    AM.svg('title', null, lab, f.name || f.id);
-    y += 34;
-  });
-  const H2 = y + 14;
-  c.svg.setAttribute('viewBox', `0 0 ${c.W} ${H2}`); c.svg.setAttribute('height', H2 * c.sZ);
-  return H2 - c.Ht;
-};
 
 /* ---------- start ---------- */
 function mount() {
