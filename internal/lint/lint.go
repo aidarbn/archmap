@@ -12,6 +12,7 @@ import (
 	"github.com/aidarbn/archmap/internal/annot"
 	"github.com/aidarbn/archmap/internal/autosem"
 	"github.com/aidarbn/archmap/internal/facts"
+	"github.com/aidarbn/archmap/internal/spec"
 )
 
 // Problem is one finding.
@@ -26,15 +27,34 @@ func (p Problem) String() string { return fmt.Sprintf("%s:%d: %s", p.File, p.Lin
 // Result is the outcome of a lint run.
 type Result struct {
 	Problems  []Problem `json:"problems"`
-	Warnings  []Problem `json:"warnings"`  // do not fail the run (journey gaps)
+	Warnings  []Problem `json:"warnings"`  // do not fail the run, except with --strict (journey gaps, spec not implemented)
+	Info      []Problem `json:"info"`      // planned steps of the spec: not a problem, counted
 	Annotated int       `json:"annotated"` // functions with arch: markup
 	Flows     int       `json:"flows"`     // distinct declared flow ids
+	// The .arch specification (arch/*.arch):
+	Spec      bool `json:"spec"`       // spec files declare something
+	SpecFlows int  `json:"spec_flows"` // flows declared in the spec
+	Planned   int  `json:"planned"`    // planned steps (no code yet)
 }
 
-// Run checks the markup of the functions in f; root is the repository root the
-// file paths of f are relative to.
+// Run checks the markup of the functions in f and the specification in
+// <root>/arch/*.arch against the code; root is the repository root the file
+// paths of f are relative to.
 func Run(root string, f *facts.Facts) Result {
+	set, err := spec.Load(root)
+	if err != nil {
+		set = &spec.Set{}
+		res := RunWith(root, f, set)
+		res.Problems = append(res.Problems, Problem{File: spec.Dir, Msg: "reading the spec: " + err.Error()})
+		return res
+	}
+	return RunWith(root, f, set)
+}
+
+// RunWith is Run with an already loaded spec.
+func RunWith(root string, f *facts.Facts, set *spec.Set) Result {
 	var res Result
+	specFlows := set.FlowIDs()
 	add := func(file string, line int, format string, a ...any) {
 		res.Problems = append(res.Problems, Problem{file, line, fmt.Sprintf(format, a...)})
 	}
@@ -118,6 +138,9 @@ func Run(root string, f *facts.Facts) Result {
 		for _, s := range a.Steps {
 			entry, ok := entryOf[s.Flow]
 			if !ok {
+				if specFlows[s.Flow] {
+					continue // a flow declared only in arch/*.arch has no entry point to walk from
+				}
 				add(fn.File, at(fid, "arch:step", " "+s.Flow), "arch:step refers to flow %q, which has no arch:flow (no entry point)", s.Flow)
 				continue
 			}
@@ -133,7 +156,7 @@ func Run(root string, f *facts.Facts) Result {
 		}
 		for _, o := range a.On {
 			if o.Flow != "" {
-				if _, ok := entryOf[o.Flow]; !ok {
+				if _, ok := entryOf[o.Flow]; !ok && !specFlows[o.Flow] {
 					add(fn.File, at(fid, "arch:on", o.Cond), "arch:on -> %q: no such flow", o.Flow)
 				}
 			}
@@ -165,7 +188,7 @@ func Run(root string, f *facts.Facts) Result {
 			}
 			journeyAt[j.ID] = site{fn.File, ln}
 			for _, id := range j.Flows {
-				if _, ok := entryOf[id]; !ok {
+				if _, ok := entryOf[id]; !ok && !specFlows[id] {
 					add(fn.File, ln, "journey %q: no such flow %q", j.ID, id)
 				}
 			}
@@ -180,7 +203,7 @@ func Run(root string, f *facts.Facts) Result {
 				continue
 			}
 			for _, id := range t.Flows {
-				if _, ok := entryOf[id]; !ok {
+				if _, ok := entryOf[id]; !ok && !specFlows[id] {
 					add(fn.File, ln, "arch:then %s: no such flow %q", t.Journey, id)
 				}
 			}
@@ -197,6 +220,32 @@ func Run(root string, f *facts.Facts) Result {
 			}
 		}
 	}
+	// the specification: syntax, references to code, drift
+	if !set.Empty() || len(set.Errors) > 0 {
+		reachFn := func(entry string) map[string]bool {
+			if reach[entry] == nil {
+				reach[entry] = autosem.Reachable(f, entry)
+			}
+			return reach[entry]
+		}
+		m, findings := spec.Check(set, f, reachFn)
+		res.Spec = true
+		res.SpecFlows = len(m.Flows)
+		for _, x := range findings {
+			p := Problem{File: x.File, Line: x.Line, Msg: x.Msg}
+			switch x.Severity {
+			case spec.SevError:
+				res.Problems = append(res.Problems, p)
+			case spec.SevWarning:
+				res.Warnings = append(res.Warnings, p)
+			default:
+				res.Info = append(res.Info, p)
+				if x.Code == spec.CodePlanned {
+					res.Planned++
+				}
+			}
+		}
+	}
 	byPos := func(ps []Problem) {
 		sort.SliceStable(ps, func(i, j int) bool {
 			a, b := ps[i], ps[j]
@@ -208,6 +257,10 @@ func Run(root string, f *facts.Facts) Result {
 	}
 	byPos(res.Problems)
 	byPos(res.Warnings)
+	byPos(res.Info)
+	if res.Info == nil {
+		res.Info = []Problem{}
+	}
 	if res.Problems == nil {
 		res.Problems = []Problem{}
 	}
