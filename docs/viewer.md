@@ -90,16 +90,31 @@ logged and do not break the page.
   "Code" (functions stand for it) and the scope / frame chips are hidden.
 - **Scenario sheet** `AM.sheet` (`views/sheet.js`): `render(host, {level, setLevel})` (the dock's scroll box),
   `sync(keep)` (lights the current step; `keep` = no running dot), `select(sel)`, `wheel(e, level, setLevel)`
-  (pinch / Cmd+wheel: `AM.zoom.scaleWheel`, past the thresholds a level), `clear()`; `model`, `layout`, `scale`.
+  (pinch / Cmd+wheel: `AM.zoom.scaleWheel`, past the thresholds a level), `clear()`; `model`, `layout`, `scale`;
+  `crossings()` (the real crossings of the routed arrows now; `window.shCrossings()` with `?debug=1`) and
+  `toggle(key | "5b")` (unfold / fold a branch).
   The model: nodes (`f:<fid>` functions in frames `F:<module>`, `m:<module>`, `svc`, `a:<actor>`, `x:<external id>`,
-  `p:<plan id>` planned steps, `o:t:<text>` outcomes, `o:f:<flow>` scenarios a branch leads to), edges keyed
-  `from>to>kind` with `kind` `entry call self plan enq deq ext branch opt` and the run indexes in `steps` (one edge
-  per pair and kind: numbers `3–5`). Columns `act in dom ad ext` (`act svc ext` on the system level) by
-  `layerOf` (entry/ui → in, domain/other/test → dom, adapter/infra → ad). Layout: items stacked per column, ordered
-  by the median y of their neighbours (8 sweeps, the order with the fewest crossings), pulled toward their
-  neighbours; ports spread over the node sides; orthogonal routes with the vertical runs on tracks in the gaps and
-  horizontal runs across other columns only in free corridors; number pills and tags placed by the least overlap
-  with nodes, frame titles and other labels (a leader line when far). Fit: `min(width, height)` of the box,
+  `p:<plan id>` planned steps, `o:t:<key>` outcomes, `o:f:<flow>` scenarios a branch leads to, `o:exit` the outcome
+  of the run), edges keyed `from>to>kind` with `kind` `entry call self plan enq deq ext branch exit opt` and the run
+  indexes in `steps` (one edge per pair and kind: numbers `3–5`). The steps of the run are the **main path**
+  (`main` on edges and nodes: bold, ending in `o:exit`); calls of external systems are secondary (thin, muted), two
+  or more of them into one system from the left share a **bus** (`bus`: one port, one trunk in the gap, the DB
+  effects on the branches). **Branches** are folded by default: `node.stubs` (`{key, no, cond, text, flow, tone,
+  open, taken}`) drawn under the fork as pills "5b · QR истёк ✕" / "5a · оплачен → … ↪", three at most and then
+  "ещё N" (`SH.more`); a click unfolds one (`SH.open`, kept while the run key is the same): its outcome joins the
+  outcome column with a dashed `branch` edge. The branch a variant ends in (or the outcome picked at the end of a
+  run) is unfolded and `taken`; a fork past the end of the run is not drawn. Columns `act in dom ad ext out`
+  (`act svc ext out` on the system level) by `layerOf` (entry/ui → in, domain/other/test → dom, adapter/infra →
+  ad). Layout: items stacked per column, ordered by the median y of their neighbours (8 sweeps), nodes inside a
+  frame in the order of the run; then a local search on the real routes (swap neighbouring items, nodes of a frame
+  off the main path, the side of a loop inside a column; two starts — the sweeps and the order of the run) scored by
+  crossings ×10 + jogs of the main path ×3, time-boxed; items pulled toward their neighbours (main-path ones by
+  their main-path neighbours, a bus system up to its topmost branch); ports spread over the node sides (a loop
+  inside the column nearest its target, a corridor route by the corridor's y), a main arrow a few pixels off
+  straight is straightened; orthogonal routes with the vertical runs on tracks in the gaps (the order of the tracks
+  swapped while it crosses less) and horizontal runs across other columns only in free corridors; number pills
+  and tags (two short lines, the whole text in the tooltip) placed by the least overlap, then pushed apart and,
+  if still on another label, moved to the nearest free place (a leader line when far). Fit: `min(width, height)` of the box,
   clamped to 0.75…1.2 (then it scrolls; a drag on the background pans). A level change or a walk step re-renders
   and animates every node and frame from its old screen box (or from the frame / module / service it folded into)
   with the Web Animations API; a walk never zooms in. Bus event `walk` (`{kind: 'step'|'sel'|'exit'}`, from

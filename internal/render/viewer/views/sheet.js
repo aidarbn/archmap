@@ -2,20 +2,27 @@
  * left to right. Not a tab: the sequence dock (views/sequence.js) shows it in place of the sequence diagram when its
  * mode is "Sheet" (the default) and calls AM.sheet.render / sync / wheel / select / clear.
  *
- * Columns are layers: actor (and the outcomes) → entry points → logic (domain modules) → adapters → external systems
- * (databases, the queue, outside APIs). On the "functions" level the functions of the steps sit in frames of their
- * modules; "modules" folds a frame into one node (arrows between modules list their step numbers "3–5"); "system" is the
- * actor, the service and the external systems. Each step is an arrow from its caller to its function, numbered in the
- * order of the run; a node visited again keeps one vertex and gets one more numbered arrow; a hand-off through the queue
- * is two dashed arrows ("enqueue" / "from the queue"); a planned step (`step plan`) is a dashed node in the frame of
- * its module; branches leave the fork node with "Na/Nb" and their condition towards an outcome or another scenario.
+ * Columns are layers: actor → entry points → logic (domain modules) → adapters → external systems (databases, the
+ * queue, outside APIs) → outcome. On the "functions" level the functions of the steps sit in frames of their modules
+ * (in the order of the run); "modules" folds a frame into one node (arrows between modules list their step numbers
+ * "3–5"); "system" is the actor, the service and the external systems. Each step is an arrow from its caller to its
+ * function, numbered in the order of the run; a node visited again keeps one vertex and gets one more numbered arrow; a
+ * hand-off through the queue is two dashed arrows ("enqueue" / "from the queue"); a planned step (`step plan`) is a
+ * dashed node in the frame of its module. The steps of the run are the main path: bold arrows, ending in the outcome of
+ * the run; calls of external systems are thin and muted, and many of them into one system share a bus (one entry, the
+ * effects on the branches).
+ *
+ * Branches are folded by default: a short stub under the fork node, "5b · QR expired ✕" / "5a · paid → Send ↪" (three
+ * at most, then "N more"). A click unfolds one: its outcome joins the outcome column with a dashed arrow "Na/Nb" from the
+ * fork; another click folds it. Playing a variant unfolds (and takes) the branch it ends in.
  *
  * Layout (no libraries): items (frames and free nodes) are stacked per column, ordered by the median of their
- * neighbours (first by step numbers, then by the y of the neighbours, several sweeps, the order with the fewest
- * crossings wins), then pulled toward their neighbours. Arrows are orthogonal with rounded corners: they leave and
- * enter nodes at ports spread over the sides, turn in the gaps between columns (tracks, so parallel arrows do not
- * overlap) and cross other columns only in free corridors between the frames. Number circles sit on the arrows in the
- * gaps, effect labels next to them where they cover nothing (else the least covered place).
+ * neighbours (several sweeps), then by local swaps that lower the number of real crossings of the routed arrows (and
+ * the side of the loops inside a column), then pulled toward their neighbours (main-path neighbours first). Arrows are
+ * orthogonal with rounded corners: they leave and enter nodes at ports spread over the sides, turn in the gaps between
+ * columns (tracks, so parallel arrows do not overlap) and cross other columns only in free corridors between the
+ * frames. Number circles sit on the arrows in the gaps, effect labels (two short lines; the whole text in the tooltip)
+ * next to them, then pushed apart until no two labels overlap.
  *
  * The sheet is fitted to the dock (never below a readable scale; then it scrolls and can be dragged); playing moves
  * nothing — the current arrow and node are lit, a dot runs along the arrow, past steps stay saturated, future ones are
@@ -23,35 +30,40 @@
 AM.addI18n({
   ru: {
     shSheet: 'Лист', shSeq: 'Последовательность', shSheetTip: 'Сценарий на одном листе: слои слева направо, пронумерованные стрелки',
-    shSeqTip: 'Диаграмма последовательности', shColAct: 'Актор и итог', shColIn: 'Входы', shColDom: 'Логика', shColAd: 'Адаптеры',
-    shColExt: 'Внешние', shColSvc: 'Сервис', shEnq: 'поставить', shDeq: 'из очереди', shExit: 'Итог', shPlan: 'план',
+    shSeqTip: 'Диаграмма последовательности', shColAct: 'Актор', shColIn: 'Входы', shColDom: 'Логика', shColAd: 'Адаптеры',
+    shColExt: 'Внешние', shColSvc: 'Сервис', shColOut: 'Итог', shEnq: 'поставить', shDeq: 'из очереди', shExit: 'Итог', shPlan: 'план',
     shMore: (n, m) => 'показаны первые ' + n + ' из ' + m + ' шагов', shWalk: 'клик по стрелке — шаг · ↑ ↓ — выбрать · ← — назад',
     shFlow: 'сценарий', shInner: 'шаги внутри', shPick: 'выбрать этот исход', shGoFork: 'к развилке', shEmpty: 'Нет сценария для показа',
-    shNoCode: 'нет в коде',
+    shNoCode: 'нет в коде', shBrMore: (n) => 'ещё ' + n, shBrLess: 'свернуть список', shBrOpen: 'клик — развернуть ветку',
+    shBrClose: 'клик — свернуть ветку',
   },
   en: {
     shSheet: 'Sheet', shSeq: 'Sequence', shSheetTip: 'The scenario on one sheet: layers from left to right, numbered arrows',
-    shSeqTip: 'Sequence diagram', shColAct: 'Actor and outcome', shColIn: 'Entry', shColDom: 'Logic', shColAd: 'Adapters',
-    shColExt: 'External', shColSvc: 'Service', shEnq: 'enqueue', shDeq: 'from the queue', shExit: 'Outcome', shPlan: 'plan',
+    shSeqTip: 'Sequence diagram', shColAct: 'Actor', shColIn: 'Entry', shColDom: 'Logic', shColAd: 'Adapters',
+    shColExt: 'External', shColSvc: 'Service', shColOut: 'Outcome', shEnq: 'enqueue', shDeq: 'from the queue', shExit: 'Outcome', shPlan: 'plan',
     shMore: (n, m) => 'the first ' + n + ' of ' + m + ' steps', shWalk: 'click an arrow — step · ↑ ↓ — choose · ← — back',
     shFlow: 'scenario', shInner: 'steps inside', shPick: 'pick this outcome', shGoFork: 'to the fork', shEmpty: 'No scenario to show',
-    shNoCode: 'not in code',
+    shNoCode: 'not in code', shBrMore: (n) => n + ' more', shBrLess: 'fold the list', shBrOpen: 'click — unfold the branch',
+    shBrClose: 'click — fold the branch',
   },
 });
 
 const SH_MAX = 150;      // longer runs are cut (the sequence diagram shows them whole)
 const SH_MINZ = 0.75;    // the smallest scale: 11.5px labels stay ≥ 8.6px; below it the sheet scrolls
 const SH_MAXZ = 1.2;
-const SH_COLS = { 0: ['act', 'svc', 'ext'], 1: ['act', 'in', 'dom', 'ad', 'ext'], 2: ['act', 'in', 'dom', 'ad', 'ext'] };
-const SH_COLT = { act: 'shColAct', in: 'shColIn', dom: 'shColDom', ad: 'shColAd', ext: 'shColExt', svc: 'shColSvc' };
+const SH_COLS = { 0: ['act', 'svc', 'ext', 'out'], 1: ['act', 'in', 'dom', 'ad', 'ext', 'out'], 2: ['act', 'in', 'dom', 'ad', 'ext', 'out'] };
+const SH_COLT = { act: 'shColAct', in: 'shColIn', dom: 'shColDom', ad: 'shColAd', ext: 'shColExt', svc: 'shColSvc', out: 'shColOut' };
+const SH_STUBS = 3;      // stubs of folded branches shown under a fork, then "N more"
+const STH = 17, STG = 3; // the height of a stub and the gap between stubs
 const SH_COL_OF = { entry: 'in', ui: 'in', domain: 'dom', other: 'dom', test: 'dom', adapter: 'ad', infra: 'ad' };
 const SH_BAD = /(fail|error|cancel|reject|denied|block|expire|timeout|ошиб|отмен|отклон|истек|истёк|отказ|не оплач|неуспеш)/i;
-const SH_W = { fn: 190, plan: 190, mod: 200, svc: 230, actor: 160, ext: 170, queue: 170, out: 184, flowref: 184 };
+const SH_W = { fn: 190, plan: 190, mod: 200, svc: 230, actor: 144, ext: 160, queue: 160, out: 168, flowref: 168 };
 const SH_H = { fn: 30, plan: 30, mod: 44, svc: 64, actor: 36, ext: 40, queue: 40, out: 34, flowref: 34 };
-const SH_GAP = { 0: 170, 1: 132, 2: 124 };
+const SH_GAP = { 0: 150, 1: 112, 2: 100 };
 const FP = 8, FT = 22, NG = 8, IG = 20, Y0 = 58, X0 = 18, TS = 8, R = 6;
 
-const SH = { svg: null, host: null, box: null, strip: null, m: null, lay: null, key: '', lv: -1, z: 1, uz: 1, els: null, dotRaf: 0, lastStep: -2, flipT: 0 };
+// open: keys of unfolded branches, more: fork nodes whose stub list is unfolded (both kept while the run is the same)
+const SH = { svg: null, host: null, box: null, strip: null, m: null, lay: null, key: '', lv: -1, z: 1, uz: 1, els: null, dotRaf: 0, lastStep: -2, flipT: 0, open: new Set(), more: new Set(), runKey: '', anim: false };
 const S = (tag, attrs, parent, text) => AM.svg(tag, attrs, parent, text);
 
 /* ---------- text metrics ---------- */
@@ -200,15 +212,27 @@ function shModel(lv) {
     });
   });
 
-  // branches that the run did not take: from the fork node, "Na/Nb" with the condition, to an outcome or a scenario
-  const walking = AM.walk && AM.walk.on;
-  if (!run.fixed && !walking) {
-    const can = AM.play.branches() || [];
+  // the steps of the run are the main path; the calls of external systems are secondary
+  edges.forEach((e) => { e.main = e.kind !== 'ext' && e.steps.length > 0; });
+  nodes.forEach((x) => { x.main = x.steps.length > 0 || x.kind === 'actor'; });
+
+  // branches: a folded stub under the fork node ("Na · condition"); an unfolded one is a dashed arrow "Na" from the fork
+  // to its outcome (or the scenario it goes on in) in the outcome column. The branch a variant ends in, or the outcome
+  // picked at the end of the run, is unfolded and taken.
+  const walking = AM.walk && AM.walk.on, lastSi = run.segs.length - 1;
+  let ended = false;
+  if (!walking) {
+    const can = run.fixed ? [] : AM.play.branches() || [];
+    const v = run.kind === 'variant' && run.variant && !run.variant.main ? run.variant : null;
+    const vch = v && (v.choices || []).length ? v.choices[v.choices.length - 1] : null;
     run.segs.forEach((sg, si) => {
       const fl = sg.flow; if (!fl || !(fl.branches || []).length) return;
       const next = run.segs[si + 1], byAt = new Map();
+      const lastFid = sg.steps.filter((x) => D.fns[x]).pop();
       fl.branches.forEach((b) => {
-        const at = b.at && D.fns[b.at] && sg.steps.includes(b.at) ? b.at : sg.steps.filter((x) => D.fns[x]).pop();
+        // a fork past the end of the run (a variant stops earlier) is not drawn; a branch without a fork hangs on the last step
+        if (b.at && D.fns[b.at] && !sg.steps.includes(b.at)) return;
+        const at = b.at && D.fns[b.at] ? b.at : lastFid;
         if (!at) return;
         if (!byAt.has(at)) byAt.set(at, []);
         byAt.get(at).push(b);
@@ -219,18 +243,45 @@ function shModel(lv) {
         if (k < 0) return;
         const fork = fnNode(at);
         list.forEach((b, bi) => {
-          if (next && next.via === b) return; // taken: the next flow's entry arrow is this branch
-          const no = (k + 1) + String.fromCharCode(97 + Math.min(bi, 25)), key = b.text || b.cond || String(bi);
+          // taken: the next flow's entry arrow is this branch
+          if (next && (next.via === b || (b.flow && next.flow && b.flow === next.flow.id && at === lastFid))) return;
+          const no = (k + 1) + String.fromCharCode(97 + Math.min(bi, 25));
+          const key = (fl.id || '') + '|' + at + '|' + (b.cond || '') + '|' + (b.text || '') + '|' + (b.flow || '');
           const tf = b.flow && D.flowById[b.flow];
-          const tn = tf ? node('o:f:' + b.flow, { kind: 'flowref', col: 'act', label: tf.name, flow: tf, first: k + 0.5 + bi / 100 })
-            : node('o:t:' + key, { kind: 'out', col: 'act', label: b.text || b.cond, tone: SH_BAD.test((b.cond || '') + ' ' + (b.text || '')) ? 'bad' : 'good', first: k + 0.5 + bi / 100 });
+          const tone = tf ? 'link' : SH_BAD.test((b.cond || '') + ' ' + (b.text || '')) ? 'bad' : 'good';
+          const taken = si === lastSi && ((!run.fixed && !!AM.state.exitText && AM.state.exitText === (b.text || b.cond)) ||
+            (!!vch && vch.cond === b.cond && (!vch.at || vch.at === at)));
+          const open = taken || SH.open.has(key);
+          const st = { key, no, b, k, cond: b.cond || '', text: b.text || '', flow: tf, tone, open, taken, choice: can.includes(b) };
+          (fork.stubs = fork.stubs || []).push(st);
+          if (!open) return;
+          const tn = tf ? node('o:f:' + b.flow, { kind: 'flowref', col: 'out', label: tf.name, flow: tf, first: k + 0.5 + bi / 100 })
+            : node('o:t:' + key, { kind: 'out', col: 'out', label: b.text || b.cond, tone, first: k + 0.5 + bi / 100 });
           tn.b = tn.b || b;
-          const e = edge(fork, tn, 'branch', null, { numText: no, br: b, at: k, choice: can.includes(b) });
+          const e = edge(fork, tn, 'branch', null, { numText: no, br: b, at: k, choice: st.choice, stub: st });
           addTags(e, [b.cond]);
-          if (AM.state.exitText && AM.state.exitText === (b.text || b.cond)) { e.taken = true; tn.taken = true; }
+          if (taken) { e.taken = tn.taken = e.main = tn.main = true; e.fin = tn.fin = n - 1; ended = true; }
         });
       });
     });
+  }
+  // the outcome of the run: the last step of the main path ends in it
+  if (!walking && !ended && n === total) {
+    let ex = '', jump = null;
+    if (run.fixed) {
+      const je = AM.jv.end();
+      if (je && je.jump) jump = je.jump;
+      else if (run.kind === 'variant' && run.variant && !run.variant.main) ex = AM.L((run.variant.end && run.variant.end.text) || run.variant.name);
+      else if (je && je.exit) ex = String(je.text).replace(/^[^:]+:\s*/, '');
+    } else if (!AM.state.exitText) ex = AM.L((run.segs[lastSi].flow || {}).exit || '');
+    const lastS = steps[n - 1], from = lastS.planned ? planNode(lastS) : fnNode(lastS.fid);
+    const xn = jump ? node('o:f:' + jump.id, { kind: 'flowref', col: 'out', label: jump.name, flow: jump })
+      : ex ? node('o:exit', { kind: 'out', col: 'out', label: String(ex), tone: 'end' }) : null;
+    if (xn) {
+      xn.main = true; xn.fin = n - 1; xn.first = n;
+      const e = edge(from, xn, 'exit', null, { num: false, main: true, fin: n - 1 });
+      e.main = true;
+    }
   }
 
   // a walk: the fan of the arrows that leave the current step (calls, the queue, external systems)
@@ -265,16 +316,46 @@ function shLayout(m, stable) {
   const ci = {}; m.cols.forEach((c, i) => { ci[c] = i; });
   const nc = m.cols.length, last = nc - 1;
   const colOfN = (nd) => ci[nd.frame ? m.frames.get(nd.frame).col : nd.col];
-  m.nodes.forEach((nd) => { nd.c = colOfN(nd); nd.w = SH_W[nd.kind]; nd.ports = { L: [], R: [] }; });
-  // sides: forward arrows leave on the right and enter on the left, backward ones the other way round, arrows inside a
-  // column loop through the gap on its right (on its left for the last column)
-  m.edges.forEach((e) => {
-    const A = m.nodes.get(e.a), B = m.nodes.get(e.b);
-    if (e.a === e.b) { e.sa = e.sb = 'R'; } else if (A.c < B.c) { e.sa = 'R'; e.sb = 'L'; } else if (A.c > B.c) { e.sa = 'L'; e.sb = 'R'; } else { e.sa = e.sb = A.c < last ? 'R' : 'L'; }
-    A.ports[e.sa].push({ e, end: 'a' }); B.ports[e.sb].push({ e, end: 'b' });
+  m.nodes.forEach((nd) => {
+    nd.c = colOfN(nd); nd.w = SH_W[nd.kind];
+    // outcomes keep two lines of their text
+    nd.lines = nd.kind === 'out' || nd.kind === 'flowref' ? wrap2((nd.kind === 'flowref' ? '↪ ' : nd.tone === 'bad' ? '✕ ' : nd.tone === 'end' ? '■ ' : '✓ ') + nd.label, nd.w - 24, 12) : null;
+    // the stubs of the branches under a fork: three at most, then "N more" (or "fold the list" when unfolded)
+    const all = nd.stubs || [], many = all.length > SH_STUBS;
+    nd.vis = many && !SH.more.has(nd.id) && !all.slice(SH_STUBS).some((s) => s.open) ? all.slice(0, SH_STUBS) : all;
+    nd.hidden = all.length - nd.vis.length;
+    nd.sh = all.length ? 5 + (nd.vis.length + (many ? 1 : 0)) * (STH + STG) : 0;
   });
-  m.nodes.forEach((nd) => { const k = Math.max(nd.ports.L.length, nd.ports.R.length); nd.h = Math.max(SH_H[nd.kind], 10 + (nd.kind === 'fn' || nd.kind === 'plan' || nd.kind === 'mod' ? 11 : 6) * k); });
-  m.frames.forEach((f) => { f.w = SH_W.fn + 2 * FP; });
+  // a bus: two or more calls into one external system from the left share its entry and the last vertical run
+  m.edges.forEach((e) => { e.bus = null; });
+  const into = new Map();
+  m.edges.forEach((e) => { if (e.kind !== 'ext') return; const A = m.nodes.get(e.a), B = m.nodes.get(e.b); if (A.c < B.c) { if (!into.has(e.b)) into.set(e.b, []); into.get(e.b).push(e); } });
+  into.forEach((list, id) => { if (list.length > 1) list.forEach((e) => { e.bus = id; }); });
+  // sides: forward arrows leave on the right and enter on the left, backward ones the other way round, arrows inside a
+  // column loop through the gap on its right (on its left for the last column, or when flipped to cross less)
+  const sides = () => {
+    m.nodes.forEach((nd) => { nd.ports = { L: [], R: [] }; });
+    m.edges.forEach((e) => {
+      const A = m.nodes.get(e.a), B = m.nodes.get(e.b);
+      if (e.a === e.b) { e.sa = e.sb = 'R'; } else if (A.c < B.c) { e.sa = 'R'; e.sb = 'L'; } else if (A.c > B.c) { e.sa = 'L'; e.sb = 'R'; } else { const d = A.c < last ? 'R' : 'L'; e.sa = e.sb = e.flip ? (d === 'R' ? 'L' : 'R') : d; }
+      A.ports[e.sa].push({ e, es: [e], end: 'a' });
+      const shared = e.bus && B.ports[e.sb].find((p) => p.end === 'b' && p.e.bus === e.bus);
+      if (shared) shared.es.push(e); else B.ports[e.sb].push({ e, es: [e], end: 'b' });
+    });
+    m.nodes.forEach((nd) => {
+      const k = Math.max(nd.ports.L.length, nd.ports.R.length);
+      nd.h = Math.max(nd.lines && nd.lines.length > 1 ? 46 : SH_H[nd.kind], 10 + (nd.kind === 'fn' || nd.kind === 'plan' || nd.kind === 'mod' ? 11 : 6) * k);
+    });
+  };
+  sides();
+  // a frame (or a free node) with stubs widens so that they read: the condition and the target in full when possible
+  const stubW = (nd) => Math.max(0, ...(nd.stubs || []).map((s) => 40 + tw(s.no + ' · ' + (s.cond || s.text) + (s.flow ? ' → ' + s.flow.name + ' ↪' : ' ✓'), 10.5)));
+  m.nodes.forEach((nd) => { if (!nd.frame && nd.stubs) nd.w = Math.max(nd.w, Math.min(240, stubW(nd))); });
+  m.frames.forEach((f) => {
+    const inner = Math.max(SH_W.fn, Math.min(222, Math.max(0, ...f.nodes.map((id) => stubW(m.nodes.get(id))))));
+    f.w = inner + 2 * FP;
+    f.nodes.forEach((id) => { m.nodes.get(id).w = inner; });
+  });
   // items of the columns: frames and free nodes
   const items = m.cols.map(() => []);
   m.frames.forEach((f) => items[ci[f.col]].push({ fr: f, id: f.id }));
@@ -284,7 +365,8 @@ function shLayout(m, stable) {
   const itemKey = (it) => (it.fr ? Math.min(...fNodes(it.fr).map(keyOfNode)) : keyOfNode(it.nd));
   items.forEach((list) => list.sort((a, b) => itemKey(a) - itemKey(b) || (a.id < b.id ? -1 : 1)));
   m.frames.forEach((f) => f.nodes.sort((a, b) => m.nodes.get(a).first - m.nodes.get(b).first || (a < b ? -1 : 1)));
-  const itemH = (it) => (it.fr ? FT + fNodes(it.fr).reduce((s, nd) => s + nd.h, 0) + NG * (it.fr.nodes.length - 1) + FP : it.nd.h);
+  const bh = (nd) => nd.h + nd.sh;
+  const itemH = (it) => (it.fr ? FT + fNodes(it.fr).reduce((s, nd) => s + bh(nd), 0) + NG * (it.fr.nodes.length - 1) + FP : bh(it.nd));
   const stack = (c) => {
     let y = Y0;
     items[c].forEach((it) => { it.y = y; it.h = itemH(it); placeIn(it); y += it.h + IG; });
@@ -292,13 +374,23 @@ function shLayout(m, stable) {
   const placeIn = (it) => {
     if (it.nd) { it.nd.y = it.y; return; }
     let y = it.y + FT;
-    fNodes(it.fr).forEach((nd) => { nd.y = y; y += nd.h + NG; });
+    fNodes(it.fr).forEach((nd) => { nd.y = y; y += bh(nd) + NG; });
     it.fr.y = it.y; it.fr.h = it.h;
   };
   const yc = (nd) => nd.y + nd.h / 2;
   items.forEach((_, c) => stack(c));
-  const nbrs = new Map(); m.nodes.forEach((nd) => nbrs.set(nd.id, []));
-  m.edges.forEach((e) => { if (e.a !== e.b) { nbrs.get(e.a).push(e.b); nbrs.get(e.b).push(e.a); } });
+  // neighbours; a node of the main path is pulled by the step before it in another column (else the step after it):
+  // the spine runs straight from the actor to the right
+  const nbrs = new Map(), preds = new Map(), succs = new Map();
+  m.nodes.forEach((nd) => { nbrs.set(nd.id, []); preds.set(nd.id, []); succs.set(nd.id, []); });
+  m.edges.forEach((e) => { if (e.a !== e.b) { nbrs.get(e.a).push(e.b); nbrs.get(e.b).push(e.a); if (e.main) { preds.get(e.b).push(e.a); succs.get(e.a).push(e.b); } } });
+  let byAll = false; // the search may pull the main path by all its neighbours when that crosses less
+  const pullNb = (nd) => {
+    if (!nd.main || byAll) return nbrs.get(nd.id);
+    const other = (l) => l.filter((id) => m.nodes.get(id).c !== nd.c);
+    const p = other(preds.get(nd.id)), s = other(succs.get(nd.id));
+    return p.length ? p : s.length ? s : nbrs.get(nd.id);
+  };
   const crossings = () => {
     const segs = [];
     m.edges.forEach((e) => {
@@ -333,39 +425,67 @@ function shLayout(m, stable) {
         }));
         const ik = (x) => (x.fr ? fNodes(x.fr).reduce((s, nd) => s + key[nd.id], 0) / x.fr.nodes.length : key[x.nd.id]);
         const pos = new Map(items[c].map((x, i) => [x, i]));
-        items[c].sort((a, b) => ik(a) - ik(b) || pos.get(a) - pos.get(b));
-        items[c].forEach((x) => { if (x.fr) { const p = new Map(x.fr.nodes.map((id, i) => [id, i])); x.fr.nodes.sort((a, b) => key[a] - key[b] || p.get(a) - p.get(b)); } });
+        items[c].sort((a, b) => ik(a) - ik(b) || pos.get(a) - pos.get(b)); // inside a frame: the order of the run
         stack(c);
       });
       const cx = crossings();
       if (cx < bestX) { bestX = cx; best = snap(); }
     }
     restore(best);
-    m.crossings = bestX;
   }
+  // the geometry for the current order: pull, ports, routes, tracks, x; returns the number of real crossings
+  let out = null;
+  // the score of a geometry: crossings first, then the jogs of the main path (it should run straight)
+  const geom = () => {
+    m.edges.forEach((e) => { e.hy = null; });
+    items.forEach((_, c) => stack(c)); out = place();
+    // an arrow that crosses a column through a corridor takes its ports by the corridor's y, not its target's
+    let redo = false;
+    m.edges.forEach((e) => { if (e.pts && e.pts.length === 6) { e.hy = e.pts[2].y; redo = true; } });
+    if (redo) { items.forEach((_, c) => stack(c)); out = place(); }
+    let jogs = 0; m.edges.forEach((e) => { if (e.main && e.P && !e.self) jogs += Math.max(0, e.P.length - 2) / 2; });
+    return shCross(m) * 10 + jogs * 3;
+  };
   // pull the items toward their neighbours (straighter arrows), keeping the order and the gaps
   const pull = (c) => {
     let prev = Y0 - IG;
     items[c].forEach((it) => {
       const ns = it.fr ? fNodes(it.fr) : [it.nd];
-      const d = median(ns.map((nd) => { const md = median(nbrs.get(nd.id).map((id) => m.nodes.get(id)).filter((o) => o.c !== nd.c).map(yc)); return md == null ? 0 : md - yc(nd); }).filter((v) => v !== 0));
+      // a system at the end of a bus lines up with its topmost branch: the bus hangs down from its entry like a comb,
+      // and two buses do not cross at their entries
+      const d = median(ns.map((nd) => {
+        const ys = pullNb(nd).map((id) => m.nodes.get(id)).filter((o) => o.c !== nd.c).map(yc);
+        const md = ys.length && (into.get(nd.id) || []).length > 1 ? Math.min(...ys) : median(ys);
+        return md == null ? 0 : md - yc(nd);
+      }).filter((v) => v !== 0));
       it.y = Math.max(prev + IG, it.y + (d || 0));
       placeIn(it); prev = it.y + it.h;
     });
   };
+  const place = () => {
   for (let p = 0; p < 3; p++) (p % 2 ? m.cols.map((_, c) => last - c) : m.cols.map((_, c) => c)).forEach(pull);
   let minY = Infinity; items.forEach((l) => l.forEach((it) => { minY = Math.min(minY, it.y); }));
   const dy = Y0 - minY; items.forEach((l) => l.forEach((it) => { it.y += dy; placeIn(it); }));
   let maxY = 0; items.forEach((l) => l.forEach((it) => { maxY = Math.max(maxY, it.y + it.h); }));
 
-  // ports: spread the arrow ends over the sides, ordered by the y of the other end
+  // ports: spread the arrow ends over the sides, ordered by the y of the other end (a bus is one port)
   m.nodes.forEach((nd) => ['L', 'R'].forEach((sd) => {
     const ps = nd.ports[sd];
-    ps.forEach((p) => { const o = m.nodes.get(p.end === 'a' ? p.e.b : p.e.a); p.k = yc(o) + (o === nd ? (p.end === 'a' ? -1 : 1) : 0); });
+    // a loop inside the column takes the port nearest to its target, the farther loop the inner one: arrows that go on
+    // past the gap do not cross it
+    ps.forEach((p) => { p.k = median(p.es.map((e) => { const o = m.nodes.get(p.end === 'a' ? e.b : e.a); if (e.hy != null) return e.hy; return o !== nd && o.c === nd.c ? (yc(o) > yc(nd) ? 1e6 : -1e6) - yc(o) : yc(o) + (o === nd ? (p.end === 'a' ? -1 : 1) : 0); })); });
     ps.sort((a, b) => a.k - b.k);
-    ps.forEach((p, i) => { p.e['y' + p.end] = nd.y + (i + 1) * nd.h / (ps.length + 1); });
+    ps.forEach((p, i) => { p.es.forEach((e) => { e['y' + p.end] = nd.y + (i + 1) * nd.h / (ps.length + 1); }); });
   }));
 
+  // a main-path arrow a few pixels off straight is made straight when both ports can move there freely
+  m.edges.forEach((e) => {
+    if (!e.main || e.a === e.b || Math.abs(e.ya - e.yb) < 0.5 || Math.abs(e.ya - e.yb) > 16) return;
+    const A = m.nodes.get(e.a), B = m.nodes.get(e.b);
+    if (A.c === B.c) return;
+    const free = (nd, sd, y) => y > nd.y + 4 && y < nd.y + nd.h - 4 && nd.ports[sd].every((p) => p.es.includes(e) || p.es.every((x) => Math.abs(x['y' + p.end] - y) >= 7));
+    if (free(B, e.sb, e.ya)) e.yb = e.ya; else if (free(A, e.sa, e.yb)) e.ya = e.yb;
+  });
   // routing: vertical runs in the gaps (tracks), horizontal runs across other columns only in free corridors
   const occ = items.map((l) => l.map((it) => [it.y - 6, it.y + it.h + 6]));
   const freeIn = (c, y) => occ[c].every(([a, b]) => y < a || y > b);
@@ -381,8 +501,20 @@ function shLayout(m, stable) {
     return maxY + 16 + 7 * hUsed.length;
   };
   const vsegs = new Map(); // gap -> [vs]
-  const VS = (gap, y1, y2) => { const v = { gap, y1: Math.min(y1, y2), y2: Math.max(y1, y2), x: 0 }; if (!vsegs.has(gap)) vsegs.set(gap, []); vsegs.get(gap).push(v); return v; };
-  m.edges.forEach((e) => {
+  const VS0 = (gap, y1, y2) => { const v = { gap, y1: Math.min(y1, y2), y2: Math.max(y1, y2), x: 0 }; if (!vsegs.has(gap)) vsegs.set(gap, []); vsegs.get(gap).push(v); return v; };
+  // the last vertical run of a bus is shared: one trunk that grows over the branches
+  const trunks = new Map();
+  let cur = null;
+  const VS = (gap, y1, y2) => {
+    const B = cur && cur.bus ? m.nodes.get(cur.b) : null;
+    if (!B || gap !== B.c - 1) return VS0(gap, y1, y2);
+    let v = trunks.get(cur.bus);
+    if (!v) { v = VS0(gap, y1, y2); trunks.set(cur.bus, v); } else { v.y1 = Math.min(v.y1, y1, y2); v.y2 = Math.max(v.y2, y1, y2); }
+    return v;
+  };
+  // the main path is routed first: it gets the straight runs and the nearest corridors
+  m.edges.slice().sort((a, b) => (b.main ? 1 : 0) - (a.main ? 1 : 0)).forEach((e) => {
+    cur = e;
     const A = m.nodes.get(e.a), B = m.nodes.get(e.b), P = { y: e.ya }, Q = { y: e.yb };
     e.A = A; e.B = B;
     if (e.a === e.b) { e.pts = null; e.self = true; return; }
@@ -423,14 +555,15 @@ function shLayout(m, stable) {
   m.cols.forEach((_, c) => { colX[c] = x; x += colW[c] + (c < last ? gapW(c) : 0); });
   const W = x + (tracks[last] ? gapW(last) : 0) + X0;
   const gapL = (g) => (g < 0 ? X0 : colX[g] + colW[g]), gapR = (g) => (g >= last ? W - X0 : colX[g + 1]);
-  vsegs.forEach((list, g) => { const T = tracks[g], mid = (gapL(g) + gapR(g)) / 2; list.forEach((v) => { v.x = mid + (v.t - (T - 1) / 2) * TS; }); });
+  const trackX = (g) => { const list = vsegs.get(g), T = tracks[g], mid = (gapL(g) + gapR(g)) / 2; list.forEach((v) => { v.x = mid + (v.t - (T - 1) / 2) * TS; }); };
+  vsegs.forEach((_, g) => trackX(g));
   items.forEach((list, c) => list.forEach((it) => {
     if (it.nd) { it.nd.x = colX[c] + (colW[c] - it.nd.w) / 2; return; }
     it.fr.x = colX[c] + (colW[c] - it.fr.w) / 2;
     fNodes(it.fr).forEach((nd) => { nd.x = it.fr.x + FP; });
   }));
   // the points of the arrows
-  m.edges.forEach((e) => {
+  const points = () => m.edges.forEach((e) => {
     const sx = (nd, sd) => (sd === 'R' ? nd.x + nd.w : nd.x);
     if (e.self) {
       const xr = e.A.x + e.A.w, y = e.A.y + e.A.h / 2;
@@ -439,7 +572,97 @@ function shLayout(m, stable) {
     }
     e.P = e.pts.map((p, i) => ({ x: i === 0 ? sx(e.A, e.sa) : i === e.pts.length - 1 ? sx(e.B, e.sb) : p.v.x, y: p.y }));
   });
+  points();
+  // the order of the tracks in a gap: swap neighbouring tracks while the arrows cross less
+  vsegs.forEach((list, g) => {
+    const T = tracks[g], lo = gapL(g) - 1, hi = gapR(g) + 1;
+    let cx = T > 1 ? shCross(m, lo, hi) : 0;
+    for (let pass = 0; pass < 2 && T > 1 && cx > 0; pass++) {
+      let better = false;
+      for (let t = 0; t + 1 < T && cx > 0; t++) {
+        const sw = () => { list.forEach((v) => { if (v.t === t) v.t = t + 1; else if (v.t === t + 1) v.t = t; }); trackX(g); points(); };
+        sw();
+        const x2 = shCross(m, lo, hi);
+        if (x2 < cx) { cx = x2; better = true; } else sw();
+      }
+      if (!better) break;
+    }
+  });
   return { W, H: maxY + 30, colX, colW, items, ci };
+  };
+  let bestX = geom();
+  if (!stable && bestX > 0) {
+    // local search on the real routes: swap neighbours in a column (items; nodes inside a frame when one of them is
+    // not on the main path), flip the side of a loop inside a column; keep a change only when the score drops. Two
+    // starts: the order of the sweeps above and the order of the run; the better one wins.
+    const swap = (l, i) => { const t = l[i]; l[i] = l[i + 1]; l[i + 1] = t; };
+    const loops = m.edges.filter((e) => e.a !== e.b && e.A && e.B && e.A.c === e.B.c);
+    const state = () => ({ items: items.map((l) => l.slice()), fr: Array.from(m.frames.values()).map((f) => [f, f.nodes.slice()]), flip: loops.map((e) => !!e.flip), byAll });
+    const load = (s) => { s.items.forEach((l, c) => { items[c] = l.slice(); }); s.fr.forEach(([f, ns]) => { f.nodes = ns.slice(); }); loops.forEach((e, i) => { e.flip = s.flip[i]; }); byAll = s.byAll; sides(); };
+    // a move is its own inverse: a swap of neighbours, a flip of a loop, the pull mode of the main path
+    const apply = (mv) => { if (mv.e) { mv.e.flip = !mv.e.flip; sides(); } else if (mv.pm) byAll = !byAll; else swap(mv.l, mv.i); };
+    const search = () => {
+      const t0 = performance.now();
+      let sc = geom();
+      const moves = [{ pm: true }];
+      items.forEach((l) => { for (let i = 0; i + 1 < l.length; i++) moves.push({ l, i }); });
+      m.frames.forEach((f) => { for (let i = 0; i + 1 < f.nodes.length; i++) moves.push({ l: f.nodes, i, fr: true }); });
+      loops.forEach((e) => moves.push({ e }));
+      for (let pass = 0; pass < 5 && sc > 0 && performance.now() - t0 < 140; pass++) {
+        let better = false;
+        for (const mv of moves) {
+          if (performance.now() - t0 > 140) break;
+          if (mv.fr && m.nodes.get(mv.l[mv.i]).steps.length && m.nodes.get(mv.l[mv.i + 1]).steps.length) continue;
+          apply(mv);
+          const x = geom();
+          if (x < sc) { sc = x; better = true; continue; }
+          apply(mv);
+        }
+        if (!better) break;
+      }
+      return sc;
+    };
+    const a = search(), sa = state();
+    // the order of the run: items by their first step
+    items.forEach((l) => l.sort((p, q) => itemKey(p) - itemKey(q) || (p.id < q.id ? -1 : 1)));
+    m.frames.forEach((f) => f.nodes.sort((p, q) => m.nodes.get(p).first - m.nodes.get(q).first || (p < q ? -1 : 1)));
+    loops.forEach((e) => { e.flip = false; }); byAll = false; sides();
+    const b = search();
+    if (a <= b) load(sa);
+    bestX = geom();
+  }
+  m.crossings = shCross(m);
+  return out;
+}
+// real crossings of the routed arrows: a horizontal run of one arrow through a vertical run of another; the ends do
+// not count, and the arrows of a bus are one line (its trunk crossed once is one crossing)
+// (lo, hi: only the crossings with lo ≤ x ≤ hi — the ones a change inside one gap can touch)
+function shCross(m, lo = -Infinity, hi = Infinity) {
+  const H = [], V = [];
+  m.edges.forEach((e, k) => {
+    if (!e.P) return;
+    const g = e.bus ? 'b:' + e.bus : k;
+    for (let i = 0; i + 1 < e.P.length; i++) {
+      const a = e.P[i], b = e.P[i + 1];
+      if (Math.abs(a.y - b.y) < 0.5) { if (Math.max(a.x, b.x) >= lo && Math.min(a.x, b.x) <= hi) H.push({ g, y: a.y, x1: Math.min(a.x, b.x), x2: Math.max(a.x, b.x) }); } else if (Math.abs(a.x - b.x) < 0.5 && a.x >= lo && a.x <= hi) V.push({ g, x: a.x, y1: Math.min(a.y, b.y), y2: Math.max(a.y, b.y) });
+    }
+  });
+  const pts = new Set();
+  H.forEach((h) => V.forEach((v) => { if (h.g !== v.g && v.x > h.x1 + 1.5 && v.x < h.x2 - 1.5 && h.y > v.y1 + 1.5 && h.y < v.y2 - 1.5) pts.add(Math.round(v.x) + ',' + Math.round(h.y)); }));
+  return pts.size;
+}
+// a text in at most two lines of maxW (the second one cut)
+function wrap2(s, maxW, px) {
+  s = String(s || '');
+  if (tw(s, px) <= maxW) return [s];
+  const w = s.split(/\s+/);
+  let a = '';
+  for (let i = 0; i < w.length; i++) {
+    const t = a ? a + ' ' + w[i] : w[i];
+    if (tw(t, px) > maxW) { if (!a) return [fit(s, maxW, px)]; return [a, fit(w.slice(i).join(' '), maxW, px)]; }
+    a = t;
+  }
+  return [a];
 }
 
 /* ---------- labels: number circles and effect tags without overlaps ---------- */
@@ -447,7 +670,8 @@ function shLabels(m, lay) {
   const obst = [];
   m.nodes.forEach((nd) => obst.push({ x: nd.x - 2, y: nd.y - 2, w: nd.w + 4, h: nd.h + 4 }));
   m.frames.forEach((f) => obst.push({ x: f.x, y: f.y, w: f.w, h: FT - 2 }));
-  const over = (a) => obst.reduce((s, b) => s + Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)), 0);
+  m.nodes.forEach((nd) => { if (nd.sh) obst.push({ x: nd.x, y: nd.y + nd.h, w: nd.w, h: nd.sh }); });
+  const over =(a) => obst.reduce((s, b) => s + Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)), 0);
   const order = m.edges.slice().sort((a, b) => (a.steps.length ? Math.min(...a.steps) : 1e6) - (b.steps.length ? Math.min(...b.steps) : 1e6));
   const segsOf = (e) => { const out = []; for (let i = 0; i + 1 < e.P.length; i++) out.push([e.P[i], e.P[i + 1]]); return out; };
   // the number: on the first vertical run long enough, else on the longest horizontal run, sliding off other circles
@@ -471,15 +695,22 @@ function shLabels(m, lay) {
     e.nb = best; obst.push(best);
   });
   // the tags (effects, conditions): next to the number (or the middle of the arrow), the place that covers least
+  // the tags: a compact plate (two short lines at most, the whole text in the tooltip and the card)
+  const tags = [];
   order.forEach((e) => {
-    const lines = (e.tags || []).slice(0, 2).map((s) => fit(s, 200, 11, true));
-    if ((e.tags || []).length > 2) lines[1] = fit(lines[1] + ' …', 200, 11, true);
+    const TW = e.main ? 168 : 150;
+    const lines = (e.tags || []).slice(0, 2).map((s) => fit(s, TW, 11, true));
+    if ((e.tags || []).length > 2) lines[1] = fit(lines[1] + ' …', TW, 11, true);
     e.tl = lines;
     if (!lines.length) return;
     const w = Math.max(...lines.map((s) => tw(s, 11, true))) + 10, h = lines.length * 14 + 4;
     let c;
     if (e.nb) c = { x: e.nb.x + e.nb.w / 2, y: e.nb.y + e.nb.h / 2, r: e.nb.w / 2 };
-    else { const ss = segsOf(e).sort((p, q) => Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) - Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y))[0]; c = { x: (ss[0].x + ss[1].x) / 2, y: (ss[0].y + ss[1].y) / 2, r: 2 }; }
+    else if (e.kind === 'ext' && e.P.length > 1) {
+      // a branch of a bus: the effect sits on the branch, right after the step
+      const a = e.P[0], b = e.P[1], d = Math.min(Math.abs(b.x - a.x) / 2, 24);
+      c = { x: a.x + Math.sign(b.x - a.x) * d, y: a.y, r: 2 };
+    } else { const ss = segsOf(e).sort((p, q) => Math.hypot(q[1].x - q[0].x, q[1].y - q[0].y) - Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y))[0]; c = { x: (ss[0].x + ss[1].x) / 2, y: (ss[0].y + ss[1].y) / 2, r: 2 }; }
     const cand = [
       [c.x + c.r + 4, c.y - h / 2], [c.x - c.r - 4 - w, c.y - h / 2], [c.x - w / 2, c.y - c.r - 4 - h], [c.x - w / 2, c.y + c.r + 4],
       [c.x + 4, c.y - c.r - 2 - h], [c.x - w - 4, c.y - c.r - 2 - h], [c.x + 4, c.y + c.r + 2], [c.x - w - 4, c.y + c.r + 2],
@@ -492,9 +723,52 @@ function shLabels(m, lay) {
       const box = { x, y, w, h }, sc = over(box) * 4 + k * 3 + (x < 4 || x + w > lay.W - 4 ? 1e5 : 0);
       if (sc < bs) { bs = sc; best = box; }
     });
-    e.tb = best; e.tc = c; e.lead = Math.hypot(best.x + w / 2 - c.x, best.y + h / 2 - c.y) > c.r + Math.max(w, h) / 2 + 14;
-    obst.push(best);
+    e.tb = best; e.tc = c;
+    obst.push(best); tags.push(e);
   });
+  // push the plates apart: an overlapping pair moves away from each other (the later one more), a plate on a node or
+  // a stub moves off it; a plate far from its arrow gets a leader line
+  const fixed = obst.filter((b) => !tags.some((e) => e.tb === b) && !order.some((e) => e.nb === b));
+  const ov = (a, b) => a.x < b.x + b.w + 2 && b.x < a.x + a.w + 2 && a.y < b.y + b.h + 2 && b.y < a.y + a.h + 2;
+  for (let it = 0; it < 40; it++) {
+    let moved = false;
+    for (let i = 0; i < tags.length; i++) {
+      const a = tags[i].tb;
+      for (let j = i + 1; j < tags.length; j++) {
+        const b = tags[j].tb; if (!ov(a, b)) continue;
+        const up = a.y + a.h / 2 <= b.y + b.h / 2, d = up ? a.y + a.h + 3 - b.y : b.y + b.h + 3 - a.y;
+        if (up) { a.y -= d * 0.3; b.y += d * 0.7; } else { a.y += d * 0.3; b.y -= d * 0.7; }
+        moved = true;
+      }
+      fixed.forEach((f) => {
+        if (!ov(a, f)) return;
+        const dUp = a.y + a.h + 3 - f.y, dDn = f.y + f.h + 3 - a.y;
+        a.y += dUp < dDn ? -dUp : dDn; moved = true;
+      });
+      if (a.y < 34) { a.y = 34; }
+      if (a.y + a.h > lay.H - 4) a.y = lay.H - 4 - a.h;
+    }
+    if (!moved) break;
+  }
+  // a plate still on another one: the nearest free place around its anchor, farther and farther
+  const area = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  tags.forEach((e) => {
+    const others = tags.filter((o) => o !== e).map((o) => o.tb).concat(fixed, order.filter((o) => o.nb).map((o) => o.nb));
+    const hit = (b) => others.reduce((s, o) => s + area({ x: b.x - 2, y: b.y - 2, w: b.w + 4, h: b.h + 4 }, o), 0);
+    if (!hit(e.tb)) return;
+    const { w, h } = e.tb, c = e.tc;
+    let best = e.tb, bs = hit(e.tb) * 4 + 1e4;
+    for (let d = 8; d <= 160 && bs > 0; d += 8) {
+      for (const [x, y] of [[c.x - w / 2, c.y - d - h], [c.x - w / 2, c.y + d], [c.x + d, c.y - h / 2], [c.x - d - w, c.y - h / 2], [c.x + d * 0.7, c.y - d * 0.7 - h], [c.x - d * 0.7 - w, c.y + d * 0.7], [c.x + d * 0.7, c.y + d * 0.7], [c.x - d * 0.7 - w, c.y - d * 0.7 - h]]) {
+        if (x < 4 || x + w > lay.W - 4 || y < 34) continue;
+        const b = { x, y, w, h }, sc = hit(b) * 4 + d;
+        if (sc < bs) { bs = sc; best = b; }
+      }
+      if (bs <= d) break;
+    }
+    e.tb = best;
+  });
+  tags.forEach((e) => { const b = e.tb, c = e.tc; e.lead = Math.hypot(b.x + b.w / 2 - c.x, b.y + b.h / 2 - c.y) > c.r + Math.max(b.w, b.h) / 2 + 14; });
 }
 
 /* ---------- drawing ---------- */
@@ -528,7 +802,7 @@ function shDraw(m, lay, svg) {
     els.frames.set(f.id, g);
   });
   m.edges.forEach((e) => {
-    const cls = 'e k-' + e.kind + (e.taken ? ' taken' : '') + (e.choice ? ' choice' : '') + (e.guided ? ' guided' : '') + (e.seen ? ' seen' : '') + (e.B.ghost ? ' ghost' : '');
+    const cls = 'e k-' + e.kind + (e.main ? ' main' : ' sec') + (e.bus ? ' bus' : '') + (e.taken ? ' taken' : '') + (e.choice ? ' choice' : '') + (e.guided ? ' guided' : '') + (e.seen ? ' seen' : '') + (e.B.ghost ? ' ghost' : '');
     const g = S('g', { class: cls, 'data-k': 'e:' + e.id }, gE);
     const d = rounded(e.P);
     const line = S('path', { class: 'l', d }, g);
@@ -537,7 +811,7 @@ function shDraw(m, lay, svg) {
     S('title', null, g, title);
     const it = { e, g, line, num: null, tag: null };
     if (e.tb) {
-      const tg = S('g', { class: 'tag' + (e.kind === 'branch' ? ' cond' : ''), 'data-k': 't:' + e.id }, gL);
+      const tg = S('g', { class: 'tag' + (e.kind === 'branch' ? ' cond' : '') + (e.main ? '' : ' sec'), 'data-k': 't:' + e.id }, gL);
       if (e.lead) S('path', { class: 'lead', d: `M${e.tc.x},${e.tc.y} L${e.tb.x + e.tb.w / 2},${e.tb.y + e.tb.h / 2}` }, tg);
       S('rect', { x: e.tb.x, y: e.tb.y, width: e.tb.w, height: e.tb.h, rx: 4 }, tg);
       e.tl.forEach((s, k) => S('text', { x: e.tb.x + 5, y: e.tb.y + 13 + k * 14 }, tg, s));
@@ -558,7 +832,7 @@ function shDraw(m, lay, svg) {
     els.edges.push(it);
   });
   m.nodes.forEach((nd) => {
-    const cls = 'n k-' + nd.kind + (nd.ghost ? ' ghost' : '') + (nd.plan ? ' plan' : '') + (nd.tone ? ' ' + nd.tone : '') + (nd.taken ? ' taken' : '');
+    const cls = 'n k-' + nd.kind + (nd.main ? ' main' : '') + (nd.ghost ? ' ghost' : '') + (nd.plan ? ' plan' : '') + (nd.tone ? ' ' + nd.tone : '') + (nd.taken ? ' taken' : '');
     const g = S('g', { class: cls, 'data-k': nd.id, style: nd.layer ? '--lc:' + LC(nd.layer) : null, tabindex: 0, role: 'button' }, gN);
     const pill = nd.kind === 'actor' || nd.kind === 'out' || nd.kind === 'flowref';
     S('rect', { class: 'b', x: nd.x, y: nd.y, width: nd.w, height: nd.h, rx: pill ? Math.min(17, nd.h / 2) : nd.kind === 'svc' ? 12 : 7 }, g);
@@ -568,7 +842,8 @@ function shDraw(m, lay, svg) {
     const mono = nd.kind === 'fn';
     const tx = nd.kind === 'fn' || nd.kind === 'mod' || nd.kind === 'plan' ? nd.x + 14 : nd.x + 12;
     const room = nd.x + nd.w - tx - (nd.inner.length ? 34 : 8);
-    if (nd.sub || nd.kind === 'mod' || nd.kind === 'svc') {
+    if (nd.lines) nd.lines.forEach((s, k) => S('text', { class: 'lb', x: tx, y: cy + 4 + (k - (nd.lines.length - 1) / 2) * 15 }, g, s));
+    else if (nd.sub || nd.kind === 'mod' || nd.kind === 'svc') {
       const sub = nd.kind === 'mod' ? (AM.t('layers') || {})[nd.layer] || '' : nd.kind === 'svc' ? AM.t('seqSvc') : nd.sub;
       S('text', { class: 'sub', x: tx, y: cy - 4 }, g, fit(sub, room, 10, false));
       S('text', { class: 'lb', x: tx, y: cy + 10 }, g, nd.kind === 'mod' ? fitTail(nd.label, room, 12, true) : fit(pre + nd.label, room, 12, mono, true));
@@ -592,12 +867,61 @@ function shDraw(m, lay, svg) {
     g.addEventListener('dblclick', (ev) => { ev.stopPropagation(); if (nd.steps.length) AM.play.go(nd.steps[0]); });
     g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); act(); } });
     els.nodes.set(nd.id, { nd, g });
+    if (nd.sh) shStubs(nd, gN, els);
   });
   els.fx = gX;
   return els;
 }
+// the stubs of the branches under a fork node: "5b · QR expired ✕", "5a · paid → Send ↪"; a click unfolds / folds
+function shStubs(nd, parent, els) {
+  const x0 = nd.x + 6, x = nd.x + 14, w = nd.w - 14;
+  let y = nd.y + nd.h + 5;
+  const g = S('g', { class: 'stubs', 'data-k': 'S:' + nd.id }, parent);
+  const rows = nd.vis.length + ((nd.stubs || []).length > SH_STUBS ? 1 : 0), yEnd = y + (rows - 1) * (STH + STG) + STH / 2;
+  S('path', { class: 'stem', d: `M${x0},${nd.y + nd.h} V${yEnd}` }, g);
+  els.stubs = els.stubs || [];
+  const row = (cls, text, tip, onAct, k) => {
+    const sg = S('g', { class: 'stub ' + cls, 'data-k': k, tabindex: 0, role: 'button' }, g);
+    S('path', { class: 'tick', d: `M${x0},${y + STH / 2} H${x}` }, sg);
+    S('rect', { x, y, width: w, height: STH, rx: STH / 2 }, sg);
+    S('text', { x: x + 8, y: y + 12 }, sg, text);
+    S('title', null, sg, tip);
+    const act = (ev) => { ev.stopPropagation(); onAct(); };
+    sg.addEventListener('click', act);
+    sg.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); act(ev); } });
+    y += STH + STG;
+    return sg;
+  };
+  nd.vis.forEach((st) => {
+    const mark = st.flow ? ' ↪' : st.tone === 'bad' ? ' ✕' : ' ✓';
+    const head = st.no + ' · ', room = w - 16 - tw(head, 10.5, false, true) - tw(mark, 10.5);
+    let body;
+    if (st.flow) { const fn = fit(st.flow.name, room * 0.55, 10.5); body = fit(st.cond || st.text, room - tw(' → ' + fn, 10.5), 10.5) + ' → ' + fn; } else body = fit(st.cond || st.text, room, 10.5);
+    const tip = st.no + ' · ' + (st.cond ? st.cond + ' → ' : '') + (st.flow ? st.flow.name : st.text) + '\n' + AM.t(st.open && !st.taken ? 'shBrClose' : 'shBrOpen');
+    const sg = row(st.tone + (st.open ? ' open' : '') + (st.taken ? ' taken' : '') + (st.choice ? ' choice' : ''), '', tip, () => shToggle(st), 's:' + st.key);
+    const t = sg.querySelector('text');
+    S('tspan', { class: 'no' }, t, head); S('tspan', null, t, body + mark);
+    sg.setAttribute('aria-expanded', String(!!st.open));
+    els.stubs.push({ st, g: sg });
+  });
+  const all = (nd.stubs || []).length;
+  if (all > SH_STUBS) {
+    const less = !nd.hidden;
+    row('more', less ? '▴ ' + AM.t('shBrLess') : '▾ ' + AM.t('shBrMore', nd.hidden), '', () => {
+      if (SH.more.has(nd.id)) SH.more.delete(nd.id); else SH.more.add(nd.id);
+      shRerender();
+    }, 's:more:' + nd.id);
+  }
+}
+function shToggle(st) {
+  if (st.taken) { AM.play.go(st.k); return; } // the branch the run ends in stays unfolded
+  if (SH.open.has(st.key)) SH.open.delete(st.key); else SH.open.add(st.key);
+  shRerender();
+}
+function shRerender() { if (!SH.host || !SH.ctx) return; SH.anim = true; shRender(SH.host, SH.ctx); }
 function shEdgeAct(e) {
   if (e.kind === 'opt') { AM.walk.take(e.opt); return; }
+  if (e.kind === 'exit') { AM.play.go(e.fin); return; }
   if (e.kind === 'branch') {
     const can = AM.play.branches() || [];
     if (can.includes(e.br)) { AM.play.choose(e.br); return; }
@@ -622,7 +946,8 @@ function shNodeAct(nd) {
     const can = AM.play.branches() || [];
     if (can.includes(nd.b)) AM.play.choose(nd.b);
     else if (nd.kind === 'flowref') AM.play.load('flow:' + nd.flow.i);
-  }
+  } else if (nd.kind === 'flowref' && nd.flow) AM.play.load('flow:' + nd.flow.i);
+  else if (nd.kind === 'out' && nd.fin != null) AM.play.go(nd.fin);
 }
 
 /* ---------- the strip above the sheet: flows of a path, the outcome, the walk hint ---------- */
@@ -653,12 +978,16 @@ function shRender(host, ctx) {
   const key = (run ? run.key : '') + '|' + (run ? run.segs.map((s) => s.flow ? s.flow.id : '').join(',') : '');
   const sameRun = key === SH.key && SH.svg && SH.host === host && host.contains(SH.svg);
   const walk = !!(AM.walk && AM.walk.on);
-  const anim = sameRun && !AM.RM && (lv !== SH.lv || walk);
+  const anim = sameRun && !AM.RM && (lv !== SH.lv || walk || SH.anim);
+  SH.anim = false;
+  // unfolded branches belong to the run
+  const rk = run ? run.key : '';
+  if (rk !== SH.runKey) { SH.runKey = rk; SH.open.clear(); SH.more.clear(); }
   // the old picture: screen boxes of its nodes and frames for the morph
   const old = new Map();
   let oldSvg = null;
   if (anim) {
-    SH.svg.querySelectorAll('[data-k]').forEach((el) => { const k = el.getAttribute('data-k'); if (!/^[etn]:/.test(k)) old.set(k, el.getBoundingClientRect()); });
+    SH.svg.querySelectorAll('[data-k]').forEach((el) => { const k = el.getAttribute('data-k'); if (!/^[etnsS]:/.test(k)) old.set(k, el.getBoundingClientRect()); });
     if (lv !== SH.lv) oldSvg = SH.svg;
   }
   const sl = host.scrollLeft, stp = host.scrollTop;
@@ -716,7 +1045,7 @@ function shFlip(old, svg, lv) {
   const dur = Math.max(1, AM.DUR) * 1.05, ease = 'cubic-bezier(.2,.7,.2,1)';
   svg.querySelectorAll('[data-k]').forEach((el) => {
     const k = el.getAttribute('data-k');
-    if (/^[etn]:/.test(k)) { el.animate([{ opacity: 0 }, { opacity: 0, offset: 0.45 }, { opacity: 1 }], { duration: dur, easing: 'ease-out' }); return; }
+    if (/^[etnsS]:/.test(k)) { el.animate([{ opacity: 0 }, { opacity: 0, offset: 0.45 }, { opacity: 1 }], { duration: dur, easing: 'ease-out' }); return; }
     let r = old.get(k);
     if (!r) for (const a of alias(k)) { r = a === '*mods' ? union((x) => /^[mF]:/.test(x)) : old.get(a); if (r) break; }
     if (!r) { el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur, easing: 'ease-out' }); return; }
@@ -737,7 +1066,7 @@ function shSync(keep) {
   const can = AM.play.branches() || [];
   const curE = [];
   SH.els.edges.forEach((it) => {
-    const e = it.e, st = e.steps;
+    const e = it.e, st = e.steps.length ? e.steps : e.fin != null ? [e.fin] : [];
     const has = on && st.includes(cur);
     const past = on && !has && st.some((i) => i < cur);
     const fut = on && !has && !past && (st.length > 0 || e.kind === 'branch');
@@ -752,7 +1081,7 @@ function shSync(keep) {
   SH.els.nodes.forEach(({ nd, g }) => {
     // a function / module / service is current when the step lands in it; actors and external systems when an arrow
     // of the step touches them
-    const own = nd.steps.concat(nd.inner).concat(touch.get(nd.id) || []);
+    const own = nd.steps.concat(nd.inner).concat(touch.get(nd.id) || []).concat(nd.fin != null ? [nd.fin] : []);
     const isCur = on && own.includes(cur);
     const past = on && !isCur && own.some((i) => i < cur);
     g.classList.toggle('cur', isCur);
@@ -760,6 +1089,7 @@ function shSync(keep) {
     g.classList.toggle('future', on && !isCur && !past && nd.kind !== 'actor');
     g.classList.toggle('choice', !!nd.b && can.includes(nd.b));
   });
+  (SH.els.stubs || []).forEach(({ st, g }) => { g.classList.toggle('choice', can.includes(st.b)); g.classList.toggle('future', on && cur < st.k); });
   if (AM.state.sel) shSelect(AM.state.sel);
   if (SH.strip) SH.strip.querySelectorAll('.seg').forEach((b) => b.classList.toggle('cur', on && !!m.steps[cur] && m.steps[cur].seg === +b.dataset.si));
   if (cur !== SH.lastStep) {
@@ -773,7 +1103,7 @@ function shStop() { if (SH.dotRaf) cancelAnimationFrame(SH.dotRaf); SH.dotRaf = 
 function shRun(list) {
   shStop();
   if (AM.RM || !list.length) return;
-  const order = { entry: 0, call: 0, branch: 0, plan: 0, self: 0, enq: 0, deq: 1, ext: 2 };
+  const order = { entry: 0, call: 0, branch: 0, plan: 0, self: 0, enq: 0, deq: 1, ext: 2, exit: 3 };
   const seq = list.slice().sort((a, b) => (order[a.e.kind] || 0) - (order[b.e.kind] || 0)).map((it) => it.line);
   const dot = S('circle', { class: 'dot', r: 5 }, SH.els.fx);
   const per = 520 / (AM.state.speed || 1);
@@ -846,4 +1176,9 @@ AM.sheet = {
   render(host, ctx) { shPan(host); shRender(host, ctx); },
   sync: shSync, select: shSelect, wheel: shWheel, clear: shClear,
   get model() { return SH.m; }, get layout() { return SH.lay; }, get scale() { return SH.z; },
+  // real crossings of the arrows on the sheet now (also window.shCrossings() with ?debug=1)
+  crossings: () => (SH.m ? shCross(SH.m) : 0),
+  // unfold / fold a branch by its stub key or number ("5b"); false when there is no such stub
+  toggle(key) { const st = SH.m && Array.from(SH.m.nodes.values()).flatMap((x) => x.stubs || []).find((s) => s.key === key || s.no === key); if (st) shToggle(st); return !!st; },
 };
+if (new URLSearchParams(location.search).get('debug') === '1') window.shCrossings = AM.sheet.crossings;

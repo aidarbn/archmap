@@ -67,6 +67,29 @@ svg.sh .e.k-branch.taken path.l { stroke: var(--text-2); stroke-dasharray: none;
 svg.sh .e.k-opt path.l { stroke: var(--accent); stroke-dasharray: 5 4; opacity: .55; marker-end: url(#arrA); }
 svg.sh .e.k-opt.sel path.l { opacity: 1; stroke-width: 2.4; stroke-dasharray: none; }
 svg.sh .e.k-opt.seen path.l { opacity: .3; }
+/* the main path bold, the rest thin and muted */
+svg.sh .e.main path.l { stroke: color-mix(in oklab, var(--text) 62%, var(--edge)); stroke-width: 2.3; }
+svg.sh .e.sec path.l { opacity: .55; }
+svg.sh .e.k-ext path.l { stroke-width: 1.1; }
+svg.sh .e.k-exit path.l { stroke-dasharray: none; }
+svg.sh .tag.sec { opacity: .8; }
+svg.sh .n.main:not(.cur):not(:hover):not(.sel) rect.b { stroke: color-mix(in oklab, var(--text) 45%, var(--line-2)); stroke-width: 1.6; }
+svg.sh .n.k-fn.main text.lb { font-weight: 600; }
+svg.sh .n.k-out.end:not(.cur) rect.b { fill: color-mix(in oklab, var(--accent) 10%, var(--surface)); stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.8; }
+svg.sh .n.k-out text.lb, svg.sh .n.k-flowref text.lb { font-size: 11.5px; }
+/* stubs of folded branches */
+svg.sh .stubs .stem, svg.sh .stub .tick { fill: none; stroke: var(--line-2); stroke-width: 1.2; stroke-dasharray: 3 2; }
+svg.sh .stub { cursor: pointer; transition: opacity var(--t); }
+svg.sh .stub rect { fill: color-mix(in oklab, var(--good) 7%, var(--surface)); stroke: color-mix(in oklab, var(--good) 55%, var(--line)); stroke-dasharray: 3 2; }
+svg.sh .stub.bad rect { fill: color-mix(in oklab, var(--critical) 7%, var(--surface)); stroke: color-mix(in oklab, var(--critical) 55%, var(--line)); }
+svg.sh .stub.link rect { fill: var(--accent-soft); stroke: color-mix(in oklab, var(--accent) 60%, var(--line)); }
+svg.sh .stub.more rect { fill: var(--surface-2); stroke: var(--line-2); }
+svg.sh .stub text { font: 10.5px var(--font); fill: var(--text-2); pointer-events: none; }
+svg.sh .stub text .no { font-weight: 600; fill: var(--text); }
+svg.sh .stub.open rect { stroke-dasharray: none; stroke-width: 1.6; }
+svg.sh .stub.open text { fill: var(--text); }
+svg.sh .stub:hover rect, svg.sh .stub:focus-visible rect, svg.sh .stub.choice rect { stroke: var(--accent); stroke-dasharray: none; }
+svg.sh .stub:focus-visible { outline: none; }
 svg.sh .e:hover path.l { stroke: var(--accent); }
 svg.sh .e.cur path.l { stroke: var(--accent); stroke-width: 2.6; marker-end: url(#arrA); }
 svg.sh .e.choice path.l { stroke: var(--accent); stroke-dasharray: 5 3; opacity: 1; }
