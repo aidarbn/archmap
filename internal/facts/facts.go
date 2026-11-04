@@ -1,4 +1,4 @@
-// Package facts defines the facts.json format consumed by viewer.html.
+// Package facts defines the facts.json format consumed by the viewer (internal/render/viewer).
 //
 // The format is a compatibility contract with the original Python tool: field
 // names, nullability and omitted-when-empty rules must not change.

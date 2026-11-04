@@ -1,5 +1,5 @@
 // Package serve implements `archmap serve`: a live architecture map. It serves
-// viewer.html with the current facts on localhost, watches the repository and,
+// the viewer (internal/render) with the current facts on localhost, watches the repository and,
 // after a debounce, re-extracts and pushes an update to browsers over SSE.
 //
 // Change detection is polling of file mtimes and sizes rather than fsnotify:
