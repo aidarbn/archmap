@@ -320,6 +320,22 @@
     onLang() { render(); },
     onData() { render(); },
   });
+  // Data -> API: 'data:open-endpoint' {ep, fid, table} — find the endpoint, scroll to it, select it, open the card.
+  function openEndpoint(p) {
+    if (!p || !V.el) return;
+    const eps = EPS(), ep = p.ep || null;
+    let i = ep ? eps.indexOf(ep) : -1;
+    if (i < 0 && ep) i = eps.findIndex((x) => x.fid === ep.fid && x.path === ep.path && x.method === ep.method);
+    if (i < 0 && ep) i = eps.findIndex((x) => x.fid === ep.fid && x.path === ep.path);
+    if (i < 0) { const fid = p.fid || (ep && ep.fid); if (fid) i = eps.findIndex((x) => x.fid === fid); }
+    if (i < 0) return;
+    // a filter that hides the endpoint is dropped, a collapsed group is expanded
+    if (!filtered().includes(i)) { V.q = ''; V.kind = ''; V.access = ''; V.only = false; toolbar(); }
+    V.collapsed.delete(groupOf(eps[i]));
+    refresh(true);
+    pick(i); scrollTo(i); paint();
+  }
+  AM.bus.on('data:open-endpoint', openEndpoint);
   // the global "changed only" button of the header drives the list too
   AM.bus.on('filter', (on) => { if (!V.el) return; V.only = !!on; if (ui.onlyBtn) ui.onlyBtn.setAttribute('aria-pressed', V.only); refresh(true); });
   // data replaced (serve): derived caches are stale even before the view is mounted

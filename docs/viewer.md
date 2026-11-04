@@ -68,6 +68,14 @@ logged and do not break the page.
   changed, to highlight in your own view; the core flashes its own scenes and lists). `onData`
   is called before `live`. `Cam` has an optional `insetTop` (px, default 0): `fit`/`fitTop`
   keep that strip free of content.
+- **Cross-view events** (API ↔ Data), both emitted after `AM.setView(…)` of the target tab:
+  - `api:open-table` `{table, op, ep, fid, via}` — from the API view (a table in the endpoint card);
+    `op` is `R`/`W`/`RW`, `ep` the endpoint object, `via` the first function of the call closure that
+    touches the table. The same payload is kept in `AM.apiTarget` for a Data view that mounts later.
+  - `data:open-endpoint` `{ep, fid, table}` — from the Data view (an endpoint in the table card or the
+    matrix); `ep` is the endpoint object from `AM.D.endpoints`. The API view finds it (by object, then
+    `fid`+`path`, then `fid`), drops filters that hide it, expands its group, scrolls, selects it
+    and opens the card.
 - **Text** `AM.t(key, …)`, `AM.L({ru, en})`, `AM.lang`, `AM.addI18n`, `AM.plural`.
 - **DOM** `AM.h(tag, attrs, parent, html)`, `AM.svg(tag, attrs, parent, text)`, `AM.esc`,
   `AM.cut`, `AM.cutL`; `AM.Cam`, `AM.layered`, `AM.hop`, `AM.clip`, `AM.bbox`, `AM.runDot`,
