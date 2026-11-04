@@ -69,7 +69,7 @@ func declaredFlows(g *graph) []Flow {
 			seen[d.ID] = true
 			steps := g.declaredPath(entry, members[d.ID])
 			fl := Flow{
-				ID: d.ID, Name: d.Name, Kind: KindDeclared, Top: true,
+				ID: d.ID, Name: d.Name, Kind: KindDeclared,
 				Actor: d.Actor, Exit: d.Exit, Steps: steps,
 				Desc: declaredDesc(fn, d),
 			}
@@ -91,6 +91,70 @@ func declaredFlows(g *graph) []Flow {
 		}
 	}
 	return out
+}
+
+// markDeclaredTop sets Top on at most MaxTop declared flows: the best by the same
+// score as automatic ones (what the entry point reaches), one per actor first so
+// every audience has a main scenario, skipping near-copies of a chosen one. It
+// returns how many were marked; automatic flows share the remaining seats.
+func (g *graph) markDeclaredTop(flows []Flow) int {
+	type cand struct {
+		i, score int
+	}
+	cands := make([]cand, 0, len(flows))
+	for i := range flows {
+		flows[i].Top = false
+		steps := flows[i].Steps
+		if len(steps) < 2 {
+			continue
+		}
+		layers := map[string]bool{}
+		for _, s := range steps {
+			layers[g.layer[g.f.Functions[s].Module]] = true
+		}
+		kind := ""
+		if e := g.f.Functions[steps[0]].Entry; e != nil {
+			kind = e.Kind
+		}
+		cands = append(cands, cand{i, g.flowScore(kind, g.reach(steps[0]), len(steps), len(layers))})
+	}
+	sort.SliceStable(cands, func(a, b int) bool { return cands[a].score > cands[b].score })
+	var chosen []int
+	near := func(i int) bool {
+		in := map[string]bool{}
+		for _, s := range flows[i].Steps {
+			in[s] = true
+		}
+		for _, j := range chosen {
+			same := 0
+			for _, s := range flows[j].Steps {
+				if in[s] {
+					same++
+				}
+			}
+			if same*10 >= len(flows[i].Steps)*7 {
+				return true
+			}
+		}
+		return false
+	}
+	take := func(c cand) {
+		if len(chosen) < MaxTop && !flows[c.i].Top && !near(c.i) {
+			flows[c.i].Top = true
+			chosen = append(chosen, c.i)
+		}
+	}
+	seenActor := map[string]bool{}
+	for _, c := range cands {
+		if a := flows[c.i].Actor; !seenActor[a] {
+			seenActor[a] = true
+			take(c)
+		}
+	}
+	for _, c := range cands {
+		take(c)
+	}
+	return len(chosen)
 }
 
 func declaredDesc(fn facts.Function, d facts.FlowDecl) string {

@@ -52,7 +52,7 @@ function renderHeader() {
       `<button class="chgbtn" id="onlyBtn" aria-pressed="${state.only}">${esc(t('onlyChanged'))}</button>`;
     $('#onlyBtn').onclick = () => { state.only = !state.only; $('#onlyBtn').setAttribute('aria-pressed', state.only); paintMap(); if (fv && state.level === 2) { buildFns(fv.mod); } bus.emit('filter', state.only); };
   }
-  $('#themeBtn').title = t('theme'); paintAutoZoom();
+  $('#themeBtn').title = t('theme'); paintAutoZoom(); paintFlowsBtn();
   $('#zIn').title = t('zIn'); $('#zOut').title = t('zOut'); $('#zFit').title = t('zFit');
   $$('#langSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === LANG));
   document.documentElement.lang = LANG;

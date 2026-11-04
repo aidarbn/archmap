@@ -34,6 +34,23 @@ function fnSection(id, target, opt = {}) {
   h += `<h3>${esc(t('code'))}</h3><div class="code"${opt.codeId ? ` id="${opt.codeId}"` : ''}>${c.html}</div>`;
   return { h, hlIdx: c.hlIdx, loading: c.loading };
 }
+// scenarios in the side panel: groups by actor with counts, the first PS_N of each, "show all" for the rest;
+// subset — only these flows (an actor's own), shown as one list
+const PS = { all: false }, PS_N = 6;
+function scenSection(subset) {
+  const flows = subset || D.flows; if (!flows.length) return '';
+  const gs = flowGroups('', subset);
+  let h = `<h3>${esc(t('grpFlows'))} · ${flows.length}</h3><div class="scen-list">`;
+  gs.forEach((g) => {
+    if (!subset || gs.length > 1) h += `<div class="scen-grp">${esc(g.name)}<small>${g.items.length}</small></div>`;
+    (PS.all ? g.items : g.items.slice(0, PS_N)).forEach((fl) => { h += flowRow(fl, 'sc'); });
+    if (!PS.all && g.items.length > PS_N) h += `<div class="loc" style="padding:2px 8px">+ ${g.items.length - PS_N}</div>`;
+  });
+  h += '</div><div class="btnrow">';
+  if (flows.length > PS_N) h += `<button class="pbtn" data-act="flowsall">${esc(PS.all ? t('flowsFewer') : t('flowsAll', flows.length))}</button>`;
+  if (!subset) h += `<button class="pbtn" data-act="flowsbrowse">${esc(t('flowsBrowse'))}</button>`;
+  return h + '</div>';
+}
 function overviewHTML() {
   const PJ = D.F.project || {};
   let h = `<div class="kicker">${esc(t('lv')[state.level])}</div><h2>${esc(PJ.name || D.M.title || D.F.repo || '')}</h2>`;
@@ -42,7 +59,7 @@ function overviewHTML() {
     `<dt>${esc(t('branch'))}</dt><dd class="mono">${esc(D.F.branch || '')}${D.F.base ? ' vs ' + esc(D.F.base) : ''}</dd>` +
     `<dt>${esc(t('modules'))}</dt><dd>${D.allMods.length}</dd><dt>${esc(t('fns'))}</dt><dd>${D.fids.length}</dd><dt>${esc(t('entries'))}</dt><dd>${D.entries.length}</dd></dl>`;
   if (state.level === 1 && D.roots.size) h += `<p class="loc" style="margin-top:14px">${esc(t('rootsHidden', Array.from(D.roots).join(', ')))}</p>`;
-  if (state.run) h += `<h3>${esc(t('grpFlows'))}</h3><p style="margin:0">${esc(state.run.name)}</p>`;
+  h += D.flows.length ? scenSection() : state.run ? `<h3>${esc(t('grpFlows'))}</h3><p style="margin:0">${esc(state.run.name)}</p>` : '';
   h += `<p class="loc">${esc(t('clickHint'))}</p>`;
   return h;
 }
@@ -99,7 +116,7 @@ function renderPanel() {
     h = `<div class="kicker">${esc(t('lv')[0])}</div><h2>${esc(PJ.name || D.F.repo || '')}</h2><p class="lead">${esc(PJ.description || D.M.summary || '')}</p>`;
     h += `<dl class="kv"><dt>${esc(t('modules'))}</dt><dd>${D.allMods.length}</dd><dt>${esc(t('fns'))}</dt><dd>${D.fids.length}</dd><dt>${esc(t('entries'))}</dt><dd>${D.entries.length}</dd>${Object.keys(D.tables).length ? `<dt>${esc(t('tables'))}</dt><dd>${Object.keys(D.tables).length}</dd>` : ''}</dl>`;
     h += `<h3>${esc(t('layer'))}</h3><div class="tbl-pills">${LAYERS.filter((l) => D.allMods.some((m) => layerOf(m) === l)).map((l) => `<span class="chip"><i style="background:${LCOLOR[l]}"></i>${esc(t('layers')[l])} · ${D.allMods.filter((m) => layerOf(m) === l).length}</span>`).join('')}</div>`;
-    h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>`;
+    h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>` + scenSection();
   } else if (s.t === 'actor') {
     const a = D.actors.find((x) => x.id === s.id); if (!a) { state.sel = null; return renderPanel(); }
     h = `<div class="kicker">${esc(t('kinds').actor)}</div><h2>${esc(actorName(a))}</h2><p class="lead">${esc(actorSub(a))}</p>`;
@@ -109,6 +126,8 @@ function renderPanel() {
     else if (a.fids.length) h += `<h3>${esc(t('entries'))}</h3>` + relList(a.fids, t('entries'), 'out', '').replace(/^<h3>.*?<\/h3>/, '');
     h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${Array.from(a.mods).map(chipMod).join('') || '—'}</div>`;
     if (a.mods.size) h += `<div class="btnrow"><button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button></div>`;
+    const mine = D.flows.filter((fl) => fl.steps.length && (a.fids.includes(fl.steps[0]) || (fl.actor && fl.actor === actorName(a))));
+    if (mine.length) h += scenSection(mine);
   } else if (s.t === 'ext') {
     const x = D.externals.find((q) => q.id === s.id); if (!x) { state.sel = null; return renderPanel(); }
     h = `<div class="kicker">${esc(t('kinds')[x.kind] || x.kind)}</div><h2>${esc(x.name)}</h2>`;
@@ -137,6 +156,9 @@ function wirePanel(p, s) {
   act('code', () => jumpToFn(s.id, 3));
   act('playfn', () => playFrom(s.id));
   act('intomod', () => goModule(s.id));
+  p.querySelectorAll('[data-k="flow"]').forEach((e) => e.addEventListener('click', () => playFlowIdx(+e.dataset.id)));
+  act('flowsall', () => { PS.all = !PS.all; renderPanel(); });
+  act('flowsbrowse', () => openFlows());
   act('intosvc', () => { setView('map'); drill(1, { from: sys.nodes.svc.el }); });
   act('intosys', () => { setView('map'); if (state.level === 0) drillFromSys(s.id); else intoSelected(); });
   act('expand', () => expandGroup(G.TN[s.id]));

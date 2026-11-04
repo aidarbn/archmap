@@ -252,10 +252,14 @@ function computeActors() {
     return acts.get(key);
   };
   const hasQueue = D.externals.some((x) => x.kind === 'queue');
+  // arch:actor of the scenarios wins over the server-side role: one name, one node
+  const declActor = {};
+  D.flows.forEach((fl) => { if (fl.actor && fl.steps && fl.steps.length && !declActor[fl.steps[0]]) declActor[fl.steps[0]] = fl.actor.trim(); });
+  const byName = (name) => get('d:' + name.toLowerCase(), name);
   D.endpoints.forEach((e) => {
     if (e.kind === 'task' || e.kind === 'cli') return;
     const r = epRole(e);
-    const a = get(r, r === 'public' ? null : humanize(r));
+    const a = e.fid && declActor[e.fid] ? byName(declActor[e.fid]) : get(r, r === 'public' ? null : humanize(r));
     a.eps.push(e); if (e.fid) { a.fids.push(e.fid); if (D.fns[e.fid]) a.mods.add(D.fns[e.fid].module); }
     a.protos.add(e.kind === 'grpc' ? 'gRPC' : e.kind === 'ws' ? 'WebSocket' : 'HTTP');
     if (e.service) a.services.add(e.service);
@@ -271,12 +275,27 @@ function computeActors() {
   } else if (!hasQueue) {
     D.endpoints.filter((e) => e.kind === 'task').forEach((e) => { const a = get('task', null); a.eps.push(e); if (e.fid && D.fns[e.fid]) { a.fids.push(e.fid); a.mods.add(D.fns[e.fid].module); } });
   }
+  // a declared actor whose entry is not an endpoint (cron, queue consumer, ...) still gets its node
+  D.flows.forEach((fl) => {
+    if (!fl.actor || !fl.steps || !fl.steps.length) return;
+    const first = fl.steps[0];
+    if (Array.from(acts.values()).some((a) => a.fids.includes(first))) return;
+    const a = byName(fl.actor.trim()); a.fids.push(first); if (D.fns[first]) a.mods.add(D.fns[first].module);
+  });
   // a declared flow names the actor of its first step
   D.flows.forEach((fl) => {
     if (!fl.actor || !fl.steps || !fl.steps.length) return;
     for (const a of acts.values()) if (a.fids.includes(fl.steps[0]) && !a.named) { a.name = fl.actor; a.named = true; }
   });
-  let list = Array.from(acts.values()).sort((a, b) => (b.eps.length + b.fids.length) - (a.eps.length + a.fids.length));
+  // nodes that ended up with the same name are one actor: handles add up
+  const merged = new Map();
+  Array.from(acts.values()).forEach((a) => {
+    const nm = a.name && a.name.trim().toLowerCase(); if (!nm) { merged.set(a.key, a); return; }
+    const o = merged.get('n:' + nm);
+    if (!o) { merged.set('n:' + nm, a); return; }
+    o.eps.push(...a.eps); o.fids.push(...a.fids); a.mods.forEach((m) => o.mods.add(m)); a.protos.forEach((p) => o.protos.add(p)); a.services.forEach((s) => o.services.add(s));
+  });
+  let list = Array.from(merged.values()).sort((a, b) => (b.eps.length + b.fids.length) - (a.eps.length + a.fids.length));
   if (list.length > 6) {
     const rest = list.slice(5), o = { id: 'actor:others', key: 'others', name: null, eps: [], fids: [], mods: new Set(), protos: new Set(), services: new Set() };
     rest.forEach((a) => { o.eps.push(...a.eps); o.fids.push(...a.fids); a.mods.forEach((m) => o.mods.add(m)); a.protos.forEach((p) => o.protos.add(p)); });
