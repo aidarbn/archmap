@@ -66,6 +66,14 @@ function overviewHTML() {
 }
 function stepHTML() {
   const s = curStep(); if (!s) return { h: overviewHTML() };
+  if (s.planned) {
+    const from = s.prev ? fnInfo(s.prev).name : '—';
+    let h = `<div class="kicker">${esc(t('stepN'))} ${s.i + 1} · ${esc(cut(state.run.name, 40))} <span class="chip">⌁ ${esc(t('planTag'))}</span></div><h2>${esc(s.label)}</h2>`;
+    h += `<p class="lead">${esc(from)} → ⌁ ${esc(t('planStep'))}${s.mod ? ' · ' + esc(t('planIn')) + ' ' + esc(modLabel(s.mod)) : ''}</p><p class="loc">${esc(t('planNoCode'))}</p>`;
+    if (s.mod && D.mods[s.mod]) h += `<div class="btnrow">${chipMod(s.mod)}</div>`;
+    if (s.exts.length) h += `<div class="btnrow" style="margin:6px 0">${s.exts.map((x) => `<span class="chip">↗ ${esc(x.name)}</span>`).join('')}</div>`;
+    return { h, hlIdx: -1, loading: false, fids: s.prev ? [s.prev] : [] };
+  }
   const f = fnInfo(s.fid), from = s.prev ? fnInfo(s.prev).name : s.actor ? actorName(s.actor) : '—';
   let h = `<div class="kicker">${esc(t('stepN'))} ${s.i + 1} · ${esc(cut(state.run.name, 40))}</div><h2>${esc(s.label)}</h2>
     <p class="lead">${esc(from)} → ${esc(f.name)} · <span class="mono" style="font-size:11.5px">${esc(s.kind === 'async' ? t('viaQueue') : s.kind)}</span></p>`;
@@ -95,7 +103,7 @@ function renderPanel() {
     h += `<div class="btnrow"><button class="pbtn" data-act="code">${esc(t('into'))} · ${esc(t('lv')[3])}</button>${D.fns[s.id] && fnInfo(s.id).out.length ? `<button class="pbtn" data-act="playfn">${esc(t('playFromFn'))}</button>` : ''}${AM.walk ? `<button class="pbtn primary" data-act="walk">${esc(t('wkFrom'))}</button>` : ''}</div>`;
   } else if (s.t === 'mod') {
     const m = s.id, c = D.modChg[m], imps = ((D.mods[m] || {}).imports || []).filter((x) => D.mods[x]), by = D.importedBy[m] || [];
-    const inRun = runList().map((x, i) => [x, i]).filter(([x]) => D.fns[x.fid].module === m);
+    const inRun = runList().map((x, i) => [x, i]).filter(([x]) => (D.fns[x.fid] || {}).module === m);
     h = `<div class="kicker"><span class="chip"><i style="background:${LCOLOR[layerOf(m)]}"></i>${esc(t('layers')[layerOf(m)])}</span></div><h2 class="mono">${esc(modLabel(m))}</h2>`;
     const d = modDesc(m); h += `<p class="lead">${esc(d || modRole(m))}</p>`;
     h += `<dl class="kv"><dt>${esc(t('fns'))}</dt><dd>${(D.byMod[m] || []).length}</dd><dt>files</dt><dd>${((D.mods[m] || {}).files || []).length}</dd><dt>${esc(t('imports'))}</dt><dd>${imps.length}</dd><dt>${esc(t('importedBy'))}</dt><dd>${by.length}</dd>${hasChg(c) ? `<dt>${esc(t('st_modified'))}</dt><dd>${esc(chgText(c))}</dd>` : ''}</dl>`;
