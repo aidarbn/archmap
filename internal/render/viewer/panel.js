@@ -186,5 +186,74 @@ function openMod(m) {
   setSel({ t: 'mod', id: m });
 }
 
-Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel });
+/* ---------- hiding and resizing the side panel ----------
+ * Hidden by the header button #panelBtn, the button in the panel's corner, `]` or Cmd/Ctrl+. ; the map, the views and
+ * the sequence dock take the freed width and fit again (a window "resize"). A hidden panel stays hidden on a
+ * selection: the header button gets a dot ("there are details") instead. The width is dragged by the left edge
+ * (arrows nudge it, double-click resets it). Both are kept in localStorage (archmap.panel.hidden, archmap.panel.w). */
+addI18n({
+  ru: { pnHide: 'Скрыть панель (] или ⌘.)', pnShow: 'Показать панель (] или ⌘.)', pnDetails: 'есть детали', pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },
+  en: { pnHide: 'Hide the panel (] or ⌘.)', pnShow: 'Show the panel (] or ⌘.)', pnDetails: 'there are details', pnGrip: 'Drag to resize; double-click for the default' },
+});
+const PNL = { hidden: false, w: 0 };
+const pnStore = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
+const pnLoad = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const pnMaxW = () => Math.max(260, Math.min(720, Math.round(window.innerWidth * 0.6)));
+function paintPanelBtn() {
+  const b = $('#panelBtn'); if (!b) return;
+  b.setAttribute('aria-pressed', String(!PNL.hidden));
+  b.title = t(PNL.hidden ? 'pnShow' : 'pnHide') + (b.classList.contains('dot') ? ' · ' + t('pnDetails') : '');
+  $('#panelHide').title = t('pnHide'); $('#panelHide').setAttribute('aria-label', t('pnHide'));
+  $('#panelGrip').title = t('pnGrip'); $('#panelGrip').setAttribute('aria-label', t('pnGrip'));
+}
+const pnRefit = () => window.dispatchEvent(new Event('resize'));
+function setPanelHidden(h, keep) {
+  PNL.hidden = !!h;
+  $('main').classList.toggle('nopanel', PNL.hidden);
+  if (!PNL.hidden) $('#panelBtn').classList.remove('dot');
+  if (!keep) pnStore('archmap.panel.hidden', PNL.hidden ? '1' : null);
+  paintPanelBtn();
+  pnRefit();
+}
+function setPanelWidth(w, save) {
+  PNL.w = w ? Math.max(260, Math.min(pnMaxW(), Math.round(w))) : 0;
+  if (PNL.w) $('main').style.setProperty('--pw', PNL.w + 'px'); else $('main').style.removeProperty('--pw');
+  if (save) pnStore('archmap.panel.w', PNL.w ? String(PNL.w) : null);
+}
+function setupSidePanel() {
+  const w = +pnLoad('archmap.panel.w');
+  if (w) setPanelWidth(w);
+  PNL.hidden = pnLoad('archmap.panel.hidden') === '1';
+  $('main').classList.toggle('nopanel', PNL.hidden);
+  $('#panelBtn').onclick = () => setPanelHidden(!PNL.hidden);
+  $('#panelHide').onclick = () => setPanelHidden(true);
+  window.addEventListener('keydown', (e) => {
+    const tg = e.target.tagName;
+    if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable) return;
+    if ((e.key === ']' && !e.metaKey && !e.ctrlKey && !e.altKey) || (e.key === '.' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); setPanelHidden(!PNL.hidden); }
+  });
+  // a selection while the panel is hidden: a dot on the header button, the panel stays hidden
+  bus.on('select', (sel) => { if (PNL.hidden && sel) { $('#panelBtn').classList.add('dot'); paintPanelBtn(); } });
+  const grip = $('#panelGrip');
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const x0 = e.clientX, w0 = $('#panel').getBoundingClientRect().width;
+    grip.classList.add('drag'); $('main').classList.add('presize');
+    try { grip.setPointerCapture(e.pointerId); } catch (er) { /* synthetic */ }
+    const mv = (ev) => setPanelWidth(w0 + (x0 - ev.clientX));
+    const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); grip.classList.remove('drag'); $('main').classList.remove('presize'); setPanelWidth(PNL.w, true); pnRefit(); };
+    grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+  });
+  grip.addEventListener('dblclick', () => { setPanelWidth(0, true); pnRefit(); });
+  grip.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault(); e.stopPropagation();
+    setPanelWidth($('#panel').getBoundingClientRect().width + (e.key === 'ArrowLeft' ? 24 : -24), true); pnRefit();
+  });
+  paintPanelBtn();
+  bus.on('lang', paintPanelBtn);
+}
+
+Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel, panel: { setHidden: setPanelHidden, setWidth: setPanelWidth, get hidden() { return PNL.hidden; }, get width() { return PNL.w; } } });
 bus.on('jv', () => renderPanel());

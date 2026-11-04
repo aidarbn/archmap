@@ -206,7 +206,9 @@ function init() {
   $('#pAuto').onclick = () => auto();
   $('#pReset').onclick = () => resetRun();
   $('#pSpeed').onchange = (e) => { state.speed = +e.target.value; };
-  setupPicker(); setupSearch(); setupLists(); setupAutoZoom();
+  setupPicker(); setupSearch(); setupLists(); setupAutoZoom(); setupSidePanel();
+  requestAnimationFrame(fitHeader); // the header with every button in place (and the fonts measured)
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitHeader);
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
