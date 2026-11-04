@@ -247,9 +247,8 @@ func TestGoTransitions(t *testing.T) {
 	for _, name := range []string{"Pay", "Ship", "Cancel", "Create", "Report", "Touch"} {
 		i := strings.Index(f.Text, ") "+name+"(")
 		start := strings.Count(f.Text[:i], "\n") + 1
-		end := start + strings.Count(f.Text[i:], "\n}\n")*0
 		rest := f.Text[i:]
-		end = start + strings.Count(rest[:strings.Index(rest, "\n}\n")], "\n") + 1
+		end := start + strings.Count(rest[:strings.Index(rest, "\n}\n")], "\n") + 1
 		funcs = append(funcs, stFunc{Fid: name, File: f.Path, Start: start, End: end})
 	}
 	st := detectStates([]stFile{f}, funcs, nil)["OrderStatus"]
@@ -375,12 +374,12 @@ func TestSameNameMachinesGetModule(t *testing.T) {
 }
 
 func TestStatements(t *testing.T) {
-	got := statements("a := 1 // x = 2\nf(a,\n  \"b;c\")\nq := `sel\nect`; z()\n", "go")
+	got := statements("a := 1 // x = 2\nf(a,\n  \"b;c\")\nq := `sel\nxyz`; z()\n", "go")
 	var raw []string
 	for _, s := range got {
 		raw = append(raw, strings.TrimSpace(s.raw))
 	}
-	want := []string{"a := 1", `f(a,   "b;c")`, "q := `sel\nect`", "z()"}
+	want := []string{"a := 1", `f(a,   "b;c")`, "q := `sel\nxyz`", "z()"}
 	if !reflect.DeepEqual(raw, want) {
 		t.Errorf("%q", raw)
 	}

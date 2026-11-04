@@ -208,13 +208,13 @@ func tokens(s string) ([]string, error) {
 	var out []string
 	rs := []rune(strings.TrimSpace(s))
 	for i := 0; i < len(rs); {
-		switch {
-		case rs[i] == ' ' || rs[i] == '\t':
+		switch rs[i] {
+		case ' ', '\t':
 			i++
-		case rs[i] == '"' || rs[i] == '“':
+		case '"', '“':
 			end := closer(rs[i])
 			j := i + 1
-			for j < len(rs) && rs[j] != end && !(end == '”' && rs[j] == '"') {
+			for j < len(rs) && rs[j] != end && (end != '”' || rs[j] != '"') {
 				j++
 			}
 			if j >= len(rs) {

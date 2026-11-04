@@ -220,7 +220,6 @@ var fallbackFns = map[string][]string{
 var (
 	djPathRE    = regexp.MustCompile(`\b(path|re_path|url)\(\s*r?(?:'([^']*)'|"([^"]*)")\s*,\s*(.+?)\s*$`)
 	djIncludeRE = regexp.MustCompile(`include\(\s*(?:\(\s*)?(?:r?['"]([\w.]+)['"]|(\w+)\.urls)`)
-	djRouterRE  = regexp.MustCompile(`(\w+)\s*=\s*(?:\w+\.)?(?:Default|Simple|Nested\w*)Router\(`)
 	djRegRE     = regexp.MustCompile(`(\w+)\.register\(\s*(?:prefix\s*=\s*)?r?['"]([^'"]*)['"]\s*,\s*(?:viewset\s*=\s*)?([\w.]+)`)
 	djRouterURL = regexp.MustCompile(`urlpatterns\s*(?:\+)?=\s*(?:\[[^\]]*\]\s*\+\s*)?(\w+)\.urls`)
 	djAsViewRE  = regexp.MustCompile(`([\w.]+?)\.as_view\((.*)\)`)

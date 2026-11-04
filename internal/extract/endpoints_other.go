@@ -48,9 +48,8 @@ func (c *apiCtx) annotationsAbove(fid string) string {
 }
 
 type annoClass struct {
-	cls    string
-	annos  string
-	prefix string
+	cls   string
+	annos string
 }
 
 func (c *apiCtx) annotatedClasses(p string) map[string]annoClass {
@@ -369,10 +368,7 @@ func (c *apiCtx) railsEndpoints() []facts.Endpoint {
 					acts = []string{"show", "create", "update", "destroy"}
 				}
 				if on := regexp.MustCompile(`only:\s*(?:\[([^\]]*)\]|:(\w+))`).FindStringSubmatch(rest); on != nil {
-					acts = nil
-					for _, s := range regexp.MustCompile(`\w+`).FindAllString(on[1]+on[2], -1) {
-						acts = append(acts, s)
-					}
+					acts = regexp.MustCompile(`\w+`).FindAllString(on[1]+on[2], -1)
 				} else if ex := regexp.MustCompile(`except:\s*\[([^\]]*)\]`).FindStringSubmatch(rest); ex != nil {
 					skip := ex[1]
 					var keep []string
