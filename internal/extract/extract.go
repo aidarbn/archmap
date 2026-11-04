@@ -162,7 +162,7 @@ func Run(opts Options) (*facts.Facts, error) {
 			imps []lang.Import
 		}{name, f.Imports}
 		defaultExport[p] = f.DefaultExport
-		fileDoc[p] = f.Doc
+		fileDoc[p] = lang.StripArch(f.Doc)
 		if name == "go" {
 			srcs[p] = string(b)
 			for _, d := range f.Types {
@@ -446,7 +446,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		f := fns[fid]
 		o := facts.Function{
 			Name: f.Name, Cls: facts.StrPtr(f.Cls), Start: f.Start, End: f.End,
-			Sig: f.Sig, Doc: f.Doc, Callees: f.callees, File: f.file, Module: f.module, Lang: f.lang,
+			Sig: f.Sig, Doc: lang.StripArch(f.Doc), Callees: f.callees, File: f.file, Module: f.module, Lang: f.lang,
 			AsyncCallees: f.async,
 			Arch:         f.arch,
 			Entry:        entries[fid], Decorators: f.Decorators, Bases: f.Bases,

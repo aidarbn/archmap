@@ -183,3 +183,10 @@ func (s *Service) Do(ctx context.Context, r Repo, p *pkg.Plan, xs []Item, n, m i
 		t.Errorf("params = %+v", got)
 	}
 }
+
+func TestDocSkipsArchMarkup(t *testing.T) {
+	f := parse(t, "package p\n\n// Pay charges the cart.\n// arch:step pay \"ask QR\"\n// arch:ext Kaspi\nfunc Pay() {}\n")
+	if d := byName(f, "Pay").Doc; d != "Pay charges the cart." {
+		t.Errorf("doc = %q", d)
+	}
+}

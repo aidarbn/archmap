@@ -45,3 +45,19 @@ func TestShorten(t *testing.T) {
 		t.Errorf("long: %d %q", len(got), got)
 	}
 }
+
+func TestArchMarkupIsNotDescription(t *testing.T) {
+	if got := StripArch(`Pays the order. arch:step kaspi-pay "request QR" arch:ext Kaspi`); got != "Pays the order." {
+		t.Errorf("StripArch: %q", got)
+	}
+	if got := StripArch(`arch:flow pay "Pay"`); got != "" {
+		t.Errorf("StripArch only markup: %q", got)
+	}
+	src := "// Package pay takes payments from the cart.\n// arch:flow pay \"Pay\"\n// arch:ext Kaspi\npackage pay\n"
+	if got := FileDoc("a/x.go", []byte(src)); got != "Package pay takes payments from the cart." {
+		t.Errorf("FileDoc: %q", got)
+	}
+	if !IsArchLine("// arch:step x") || IsArchLine("Search for arch: nothing") {
+		t.Error("IsArchLine")
+	}
+}

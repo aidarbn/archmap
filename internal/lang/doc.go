@@ -70,6 +70,9 @@ func Describe(raw string) string {
 	for _, l := range strings.Split(raw, "\n") {
 		l = strings.TrimSpace(decoRe.ReplaceAllString(l, " "))
 		l = strings.TrimLeft(l, "!*#-= ")
+		if IsArchLine(l) {
+			continue
+		}
 		if l == "" {
 			if len(keep) > 0 {
 				break // first paragraph only
@@ -301,4 +304,23 @@ func commentBlocks(text string, hash bool) []string {
 	}
 	flush()
 	return blocks
+}
+
+// archMark matches an `arch:` markup directive at the start of a text or after a space.
+var archMark = regexp.MustCompile(`(^|\s)arch:[a-z]`)
+
+// StripArch removes `arch:` markup (arch:flow, arch:step, ...) from a description.
+// Markup comments sit next to the prose in the same comment block; their lines
+// are not an explanation of the code. Text from the first directive on is cut,
+// because the lines of a block may already be joined.
+func StripArch(s string) string {
+	if loc := archMark.FindStringIndex(s); loc != nil {
+		s = s[:loc[0]]
+	}
+	return strings.TrimSpace(s)
+}
+
+// IsArchLine reports whether one comment line is `arch:` markup.
+func IsArchLine(l string) bool {
+	return strings.HasPrefix(strings.TrimLeft(l, " \t*#/!-"), "arch:")
 }
