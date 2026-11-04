@@ -428,6 +428,13 @@ The registry (`internal/lang/all`) is the only source of file extensions.
 A language needing hand-written logic (decorators, bases, entry points) gets its
 own package like the first five.
 
+### Releasing (maintainers)
+
+Push a `v*` tag; the release workflow builds the archives and creates the release with
+`checksums.txt`. If no macOS runner starts, run `scripts/release-mac-local.sh vX.Y.Z` on a Mac
+(builds both darwin archives, uploads them and recomputes `checksums.txt`), then
+`scripts/update-tap.sh vX.Y.Z` for the Homebrew tap.
+
 ## Limitations
 
 - Calls are resolved by name and receiver, which is an approximation: expect
