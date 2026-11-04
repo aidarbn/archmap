@@ -15,7 +15,9 @@ with [tree-sitter](https://tree-sitter.github.io/).
 
 The viewer UI is bilingual (English and Russian): it follows the browser
 language, can be forced with `?lang=en` / `?lang=ru`, and has an EN/RU switch
-in the header.
+in the header. One scene goes from the system context down to modules, functions
+and code; scenarios play through all four levels. How the viewer is built and how
+to add a view: [docs/viewer.md](docs/viewer.md).
 
 ## How it explains code
 

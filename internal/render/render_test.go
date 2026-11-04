@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestEscapesScriptBreakouts(t *testing.T) {
@@ -91,6 +92,83 @@ func TestStaticRenderHasNoServeKey(t *testing.T) {
 	if !strings.Contains(string(live), `"serve":{"seq":3,"events":"/e","data":"/d"}`) {
 		t.Error("live page lacks the serve key")
 	}
+}
+
+// The embedded viewer is one self-contained page: CSS and scripts inlined in the
+// declared order, views wrapped in blocks, no external resources.
+func TestViewerAssembledFromParts(t *testing.T) {
+	v := Viewer()
+	for _, s := range []string{cssSlot, jsSlot} {
+		if strings.Contains(v, s) {
+			t.Errorf("slot %s left in the page", s)
+		}
+	}
+	if strings.Count(v, titleTag) != 2 || strings.Count(v, dataSlot) != 1 {
+		t.Error("placeholders must survive assembly: title twice, data once")
+	}
+	order := append(append([]string{}, coreJS...), "views/map.js", lastJS)
+	last := -1
+	for _, name := range order {
+		i := strings.Index(v, "/* --- "+name+" --- */")
+		if i < 0 {
+			t.Fatalf("%s missing from the page", name)
+		}
+		if i < last {
+			t.Errorf("%s out of order", name)
+		}
+		last = i
+	}
+	if !strings.Contains(v, "/* --- views/map.js --- */\n{\n") {
+		t.Error("a view must be wrapped in its own block")
+	}
+	if strings.Count(strings.ToLower(v), "<script") != 1 || strings.Count(strings.ToLower(v), "</script") != 1 {
+		t.Error("the page must have exactly one script block")
+	}
+	if strings.Index(v, "const DATA = ") > strings.Index(v, "/* --- core.js --- */") {
+		t.Error("DATA must be defined before the scripts")
+	}
+	for _, ext := range []string{"src=\"http", "href=\"http", "@import", "url(http"} {
+		if strings.Contains(v, ext) {
+			t.Errorf("external resource %q in the page", ext)
+		}
+	}
+}
+
+func TestAssembleOrderAndChecks(t *testing.T) {
+	shell := "<style-slot><!--@CSS--></style-slot>\n<script>\nconst DATA = /*ARCH_DATA*/null;\n<!--@JS-->\n</script>"
+	base := fstest.MapFS{"viewer/shell.html": {Data: []byte(shell)}, "viewer/viewer.css": {Data: []byte("a{}")}, "viewer/" + lastJS: {Data: []byte("main();")}}
+	for _, n := range coreJS {
+		base["viewer/"+n] = &fstest.MapFile{Data: []byte("// " + n)}
+	}
+	base["viewer/views/b.js"] = &fstest.MapFile{Data: []byte("const x = 2;")}
+	base["viewer/views/a.js"] = &fstest.MapFile{Data: []byte("const x = 1;")}
+	base["viewer/views/a.css"] = &fstest.MapFile{Data: []byte(".a{}")}
+	out, err := assemble(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ia, ib, im := strings.Index(out, "views/a.js"), strings.Index(out, "views/b.js"), strings.Index(out, "main();")
+	if ia < 0 || ib < ia || im < ib || strings.Index(out, "// panel.js") > ia {
+		t.Errorf("wrong order:\n%s", out)
+	}
+	if !strings.Contains(out, "{\nconst x = 1;\n}") || !strings.Contains(out, ".a{}") {
+		t.Error("view not wrapped in a block or view css missing")
+	}
+	bad := func(name, src string) {
+		fs := fstest.MapFS{}
+		for k, v := range base {
+			fs[k] = v
+		}
+		fs[name] = &fstest.MapFile{Data: []byte(src)}
+		if _, err := assemble(fs); err == nil {
+			t.Errorf("%s with %q must be rejected", name, src)
+		}
+	}
+	bad("viewer/views/c.js", "s = '</SCRIPT>';")
+	bad("viewer/core.js", "x = '/*ARCH_DATA*/null';")
+	bad("viewer/views/c.css", "</style>")
+	bad("viewer/shell.html", "<!--@CSS--><!--@JS-->")
+	bad("viewer/shell.html", "<!--@CSS--><!--@JS-->/*ARCH_DATA*/null")
 }
 
 func TestFilesNoSrcDropsBodies(t *testing.T) {
