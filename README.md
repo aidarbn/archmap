@@ -190,7 +190,7 @@ archmap extract [--root DIR] [--base REF] [--tests] [--no-src] --out facts.json
 archmap render  --facts facts.json --out arch.html [--no-src]
 archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
 archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
-archmap lint    [--root DIR] [--format text|json] [--tests]
+archmap lint    [--root DIR] [--format text|json] [--tests] [--strict]
 archmap version
 ```
 
@@ -213,7 +213,8 @@ archmap version
   leaves them out, for a page that leaves your machine. `serve` never embeds
   them: the page reads a body from disk on demand at `/src?fid=` (`--no-src`
   turns that endpoint off).
-- `lint` checks `arch:` scenario markup, see [Annotating flows](#annotating-flows).
+- `lint` checks `arch:` scenario markup, see [Annotating flows](#annotating-flows),
+  and the optional `arch/*.arch` spec against the code, see [Designing with .arch](#designing-with-arch).
 
 ## Annotating flows
 
@@ -344,16 +345,64 @@ folded outcomes, "…N more"). Search looks through all three.
 ### Lint
 
 ```sh
-archmap lint [--root DIR] [--format text|json] [--tests]
+archmap lint [--root DIR] [--format text|json] [--tests] [--strict]
 ```
 
-Checks the markup and exits with 1 when something is wrong, so it fits CI:
+`--strict` counts warnings as errors (for CI). Checks the markup and exits with 1 when something is wrong, so it fits CI:
 syntax errors (with the line); a `step` or `on -> …` that names a flow that is
 not declared; a flow id declared twice; a step that cannot be reached by calls
 from the flow's entry point; `ext` and `state` of a wrong shape; a journey that names a
 flow that is not declared, a `then` of an unknown journey, a journey id declared twice. A gap
 in a journey (two neighbouring flows with no link in the code) is a warning and does not change
-the exit code.
+the exit code. The same run checks the `.arch` spec, see below.
+
+## Designing with .arch
+
+Comments in code describe what *is*. The optional `arch/*.arch` files in the repo
+describe what *should be*: statuses and their transitions, scenarios and journeys.
+They hold behaviour only (what happens, never how), they are plain text you can
+read in a pull request, and `archmap lint` compares them with the code. There is
+no code generation. You can write them by hand or draw them on the map under
+`archmap serve` (the editor sends operations and the server rewrites the file in
+the canonical form).
+
+```
+states OrderStatus
+  validated -> payment_requested   on kaspi-pay   "QR requested"
+  payment_requested -> accepted    on payment.paid
+  * -> cancelled                   on cancel-order
+  final created, rejected, cancelled
+
+flow kaspi-pay "Pay for an order with Kaspi QR"
+  actor Tablet
+  step TabletsServer.RequestKaspiQRForOrder   "The guest asks for a QR"
+  step Service.requestQR  ext Kaspi           "Create the QR at Kaspi"
+  step plan "Check the payment limit"         # planned: no code yet
+  state Order: validated -> payment_requested
+  alt processed -> confirm-order
+  alt expired "the QR is out of date"
+  exit "The order is paid"
+
+journey guest-kaspi "The guest pays with Kaspi": create-order > kaspi-pay > confirm-order
+```
+
+- A step names a function as `Type.Method`, `Func`, or a `path::fid` suffix; an
+  ambiguous name is an error that lists the candidates. `step plan "..."` is a step
+  that has no code yet.
+- A spec flow with the id of an `arch:flow` in the code is merged with it (the
+  spec wins on captions and order, code steps the spec does not list are marked).
+  A spec-only flow is a declared scenario with planned steps. Spec states are
+  added to the state machines found in the code. `map` and `serve` show all of it;
+  the static `map` only reads the files.
+- `lint` reports drift: a transition the code makes that the spec lacks (error), a
+  transition in the spec the code lacks ("not implemented", warning), a step that
+  names no function (error), a step that is not reachable from the previous one
+  (warning), a journey or `alt` naming a flow that exists nowhere (error), planned
+  steps (info, counted). Use `--strict` to fail on warnings.
+- Under `archmap serve` the model is edited through `GET /spec`, `POST /spec/ops`
+  and `PUT /spec/file`; every write is followed by the usual rebuild and live update.
+
+Full grammar, the JSON model and the operations: [docs/spec.md](docs/spec.md).
 
 ## serve: live map while you code
 
@@ -388,7 +437,9 @@ viewer as `map`, but it follows the repo:
   function on the map, Shift+Enter in its code. The Lists drop-down holds
   modules by layer, all functions with a filter, and the branch changes.
 - Only loopback addresses are accepted for `--addr`; requests with a foreign
-  `Host` header and non-GET methods are rejected.
+  `Host` header are rejected, and so are all methods but GET/HEAD, except
+  `POST /spec/ops` and `PUT /spec/file` (JSON only, same origin, files only
+  inside `<root>/arch`).
 - `/` renders the same page as `map` plus a `serve` key in the data; a static
   `arch.html` is unchanged and works offline as before.
 

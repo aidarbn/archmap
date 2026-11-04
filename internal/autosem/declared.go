@@ -197,7 +197,10 @@ func (g *graph) declaredPath(entry string, marked map[string]string) []string {
 // Reachable reports the marked functions of flow id that the walk from entry
 // reaches (used by lint). The entry point is always included.
 func Reachable(f *facts.Facts, entry string) map[string]bool {
-	g := newGraph(f, nil)
+	return newGraph(f, nil).reachable(entry)
+}
+
+func (g *graph) reachable(entry string) map[string]bool {
 	seen := map[string]bool{entry: true}
 	var dfs func(string)
 	dfs = func(x string) {

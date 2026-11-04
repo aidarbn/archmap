@@ -114,6 +114,15 @@ type Flow struct {
 	// per outcome of a fork, at most MaxVariants; VariantsMore counts the cut ones.
 	Variants     []Variant `json:"variants,omitempty"`
 	VariantsMore int       `json:"variantsMore,omitempty"`
+	// From the .arch specification (see mergeSpec):
+	// Spec marks a flow the spec declares (alone or together with arch:flow);
+	// Planned lists the steps that have no code yet (ids from PlannedID);
+	// Unspecified lists steps found in the code that the spec flow does not list;
+	// Ext names the external system of a step (step id -> system).
+	Spec        bool              `json:"spec,omitempty"`
+	Planned     map[string]bool   `json:"planned,omitempty"`
+	Unspecified map[string]bool   `json:"unspecified,omitempty"`
+	Ext         map[string]string `json:"ext,omitempty"`
 }
 
 type graph struct {

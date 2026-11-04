@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/aidarbn/archmap/internal/facts"
+	"github.com/aidarbn/archmap/internal/spec"
 )
 
 // ModuleInfo describes a module in the semantic layer.
@@ -38,10 +39,17 @@ type Model struct {
 	Flows   []Flow                `json:"flows"`
 	// Journeys are paths over several flows (see Journey): declared first.
 	Journeys []Journey `json:"journeys"`
+	// Spec is the `.arch` specification checked against the code (nil without
+	// spec files): planned steps, transition source and drift. See internal/spec.
+	Spec *spec.Model `json:"spec,omitempty"`
 }
 
 // Build derives the model from facts.
-func Build(f *facts.Facts) Model {
+func Build(f *facts.Facts) Model { return buildModel(f, nil) }
+
+func marshalModel(m Model) ([]byte, error) { return json.Marshal(m) }
+
+func buildModel(f *facts.Facts, set *spec.Set) Model {
 	m := Model{Title: f.Repo, Modules: map[string]ModuleInfo{}, Flows: []Flow{}, Journeys: []Journey{}}
 	if f.Project != nil {
 		if f.Project.Name != "" {
@@ -66,6 +74,17 @@ func Build(f *facts.Facts) Model {
 	m.Flows = buildFlows(g)
 	buildVariants(m.Flows)
 	m.Journeys = g.buildJourneys(m.Flows)
+	if !set.Empty() || (set != nil && len(set.Errors) > 0) {
+		reach := map[string]map[string]bool{}
+		sm, _ := spec.Check(set, f, func(entry string) map[string]bool {
+			if reach[entry] == nil {
+				reach[entry] = g.reachable(entry)
+			}
+			return reach[entry]
+		})
+		mergeSpec(&m, sm)
+		m.Spec = &sm
+	}
 	return m
 }
 

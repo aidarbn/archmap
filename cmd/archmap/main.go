@@ -26,6 +26,7 @@ import (
 	"github.com/aidarbn/archmap/internal/lang/all"
 	"github.com/aidarbn/archmap/internal/render"
 	"github.com/aidarbn/archmap/internal/serve"
+	"github.com/aidarbn/archmap/internal/spec"
 )
 
 // version is set with -ldflags "-X main.version=…"; falls back to build info.
@@ -38,7 +39,7 @@ Usage:
   archmap render  --facts facts.json --out arch.html [--no-src]
   archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
   archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
-  archmap lint    [--root DIR] [--format text|json] [--tests]
+  archmap lint    [--root DIR] [--format text|json] [--tests] [--strict]
   archmap version
 `
 
@@ -193,11 +194,16 @@ func cmdMap(args []string, stdout, stderr io.Writer) error {
 	if *out == "" {
 		*out = filepath.Join(*root, ".archmap", "arch.html")
 	}
-	fb, err := marshal(f, "")
+	// arch/*.arch is shown read-only: the static map has no editor
+	set, err := spec.Load(*root)
 	if err != nil {
 		return err
 	}
-	mb, err := autosem.JSON(f)
+	fb, err := marshal(spec.MergeStates(f, set), "")
+	if err != nil {
+		return err
+	}
+	mb, err := autosem.JSONWith(f, set)
 	if err != nil {
 		return err
 	}

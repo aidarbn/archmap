@@ -36,6 +36,7 @@ import (
 	"github.com/aidarbn/archmap/internal/gitstat"
 	"github.com/aidarbn/archmap/internal/lang"
 	"github.com/aidarbn/archmap/internal/render"
+	"github.com/aidarbn/archmap/internal/spec"
 	"github.com/aidarbn/archmap/internal/walk"
 )
 
@@ -78,9 +79,11 @@ type Server struct {
 	opts  Options
 	cache *extract.ParseCache
 
+	specMu sync.Mutex // serializes reads and writes of arch/*.arch
 	mu     sync.Mutex
 	factsJ []byte
 	srcIdx map[string]srcRef // where each function lives, for /src
+	facts  *facts.Facts      // the latest extraction, for /spec
 	modelJ []byte
 	last   Update
 	subs   map[chan Update]struct{}
@@ -119,27 +122,47 @@ func (s *Server) Seq() int {
 	return s.last.Seq
 }
 
-// Handler returns the HTTP handler (GET / , /data.json, /events).
+// Handler returns the HTTP handler: GET / , /data.json, /events, /src, /spec
+// and the two writers of the specification, POST /spec/ops and PUT /spec/file.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/data.json", s.handleData)
 	mux.HandleFunc("/events", s.handleEvents)
+	mux.HandleFunc("/spec", s.handleSpec)
+	mux.HandleFunc("/spec/ops", s.handleSpecOps)
+	mux.HandleFunc("/spec/file", s.handleSpecFile)
 	if !s.opts.NoSrc {
 		mux.HandleFunc("/src", s.handleSrc)
 	}
 	return guard(mux)
 }
 
-// guard allows GET/HEAD only and rejects foreign Host headers (DNS rebinding).
+// writers are the only endpoints that take a body: path -> method.
+var writers = map[string]string{"/spec/ops": http.MethodPost, "/spec/file": http.MethodPut}
+
+// guard allows GET/HEAD, plus POST /spec/ops and PUT /spec/file, and rejects
+// foreign Host headers (DNS rebinding). A write must be JSON and must not come
+// from another origin: a form or a fetch from a foreign page is refused (a JSON
+// content type forces a CORS preflight, which this server never grants).
 func guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		write := r.Method != http.MethodGet && r.Method != http.MethodHead
+		if write && writers[r.URL.Path] != r.Method {
+			w.Header().Set("Allow", "GET, HEAD")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		if !loopbackHost(r.Host) {
 			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if write && !sameOrigin(r) {
+			http.Error(w, "forbidden origin", http.StatusForbidden)
+			return
+		}
+		if write && !isJSON(r) {
+			http.Error(w, "content type must be application/json", http.StatusUnsupportedMediaType)
 			return
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -348,6 +371,13 @@ func (s *Server) takeSnapshot() snapshot {
 			snap[key] = stamp{st.ModTime().UnixNano(), st.Size()}
 		}
 	}
+	if ents, err := os.ReadDir(filepath.Join(s.opts.Root, spec.Dir)); err == nil {
+		for _, e := range ents {
+			if p := spec.Dir + "/" + e.Name(); !e.IsDir() && spec.ValidPath(p) {
+				add("s:"+p, filepath.Join(s.opts.Root, filepath.FromSlash(p)))
+			}
+		}
+	}
 	exts := s.exts()
 	root := s.opts.Root
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -406,11 +436,12 @@ func (s *Server) build(snap snapshot, changed map[string]bool) error {
 	if err != nil {
 		return err
 	}
-	fj, err := marshal(f)
+	set := s.loadSpec() // arch/*.arch: a broken file shows as errors in /spec, the map still builds
+	fj, err := marshal(spec.MergeStates(f, set))
 	if err != nil {
 		return err
 	}
-	mj, err := autosem.JSON(f)
+	mj, err := autosem.JSONWith(f, set)
 	if err != nil {
 		return err
 	}
@@ -454,6 +485,7 @@ func (s *Server) build(snap snapshot, changed map[string]bool) error {
 	s.snap, s.hashes, s.prev = snap, hashes, f
 	s.mu.Lock()
 	s.factsJ, s.modelJ = fj, mj
+	s.facts = f
 	s.srcIdx = idx
 	seq := s.last.Seq + 1
 	s.mu.Unlock()

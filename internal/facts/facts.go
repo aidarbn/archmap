@@ -206,4 +206,11 @@ type Transition struct {
 	Source string `json:"source"`
 	// Confirmed is set on a code transition that is also declared with arch:state.
 	Confirmed bool `json:"confirmed,omitempty"`
+	// On, Label and Drift come from the .arch specification (see internal/spec):
+	// the trigger and caption of the declared transition; Drift is
+	// "not_implemented" (Source "spec": declared, absent in the code) or
+	// "undeclared" (in the code, absent in the spec).
+	On    string `json:"on,omitempty"`
+	Label string `json:"label,omitempty"`
+	Drift string `json:"drift,omitempty"`
 }
