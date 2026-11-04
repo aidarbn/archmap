@@ -24,7 +24,9 @@ type Facts struct {
 	// payment and POS providers, ...), found from adapter modules and imports.
 	Externals []External `json:"externals,omitempty"`
 	// States are state machines found in the code, keyed by the type or enum name.
-	States map[string]*StateMachine `json:"states,omitempty"`
+	States    map[string]*StateMachine `json:"states,omitempty"`
+	Endpoints []Endpoint               `json:"endpoints,omitempty"`
+	Data      *DataModel               `json:"data,omitempty"`
 }
 
 // Project describes the analysed repository as a whole.
@@ -67,6 +69,8 @@ type Function struct {
 	Src string `json:"src,omitempty"`
 	// Arch holds the scenario annotations (`arch:` comments) above the function.
 	Arch *ArchNote `json:"arch,omitempty"`
+	// Data lists the tables and stores the function reads or writes.
+	Data []Access `json:"data,omitempty"`
 }
 
 // ArchNote is the parsed `arch:` markup of one function (see package annot).

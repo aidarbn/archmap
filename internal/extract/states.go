@@ -85,7 +85,7 @@ var (
 	goConstLine  = regexp.MustCompile(`^\s*(\w+)(?:\s+([\w.]+))?\s*=\s*(.+?)\s*$`)
 	goConstBare  = regexp.MustCompile(`^\s*(\w+)\s*$`)
 	strLit       = regexp.MustCompile("^(?:\"([^\"]*)\"|`([^`]*)`)")
-	pyClass      = regexp.MustCompile(`^(\s*)class\s+(\w+)\s*\(([^)]*)\)\s*:`)
+	pyClassLine  = regexp.MustCompile(`^(\s*)class\s+(\w+)\s*\(([^)]*)\)\s*:`)
 	pyMember     = regexp.MustCompile(`^\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$`)
 	pyStr        = regexp.MustCompile(`["']([^"']+)["']`)
 	tsEnum       = regexp.MustCompile(`(?:export\s+)?(?:declare\s+)?(?:const\s+)?enum\s+(\w+)\s*\{([^}]*)\}`)
@@ -198,7 +198,7 @@ func goMachines(set *machineSet, f stFile) {
 func pyMachines(set *machineSet, f stFile) {
 	lines := strings.Split(f.Text, "\n")
 	for i := 0; i < len(lines); i++ {
-		m := pyClass.FindStringSubmatch(lines[i])
+		m := pyClassLine.FindStringSubmatch(lines[i])
 		if m == nil || !statusTypeRe.MatchString(m[2]) || !regexp.MustCompile(`(?i)enum|choices`).MatchString(m[3]) {
 			continue
 		}

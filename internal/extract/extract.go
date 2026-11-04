@@ -400,6 +400,8 @@ func Run(opts Options) (*facts.Facts, error) {
 	}
 	entries := findEntries(files, read, fns, order, byName, defaultExport, func(p string) string { return fileLang[p] })
 
+	apiEndpoints, apiData, apiAccess := analyzeAPIData(newAPICtx(root, fns, order, entries))
+
 	var base, baseName string
 	base, baseName = gitstat.ResolveBase(root, opts.Base)
 	status := map[string]facts.Status{}
@@ -427,6 +429,8 @@ func Run(opts Options) (*facts.Facts, error) {
 		Modules:   map[string]facts.Module{},
 		Functions: map[string]facts.Function{},
 		Deleted:   deleted,
+		Endpoints: apiEndpoints,
+		Data:      apiData,
 	}
 	if baseName != "" {
 		out.Base = &baseName
@@ -446,6 +450,7 @@ func Run(opts Options) (*facts.Facts, error) {
 			AsyncCallees: f.async,
 			Arch:         f.arch,
 			Entry:        entries[fid], Decorators: f.Decorators, Bases: f.Bases,
+			Data: apiAccess[fid],
 		}
 		if s, ok := status[fid]; ok {
 			u := s.Uncommitted

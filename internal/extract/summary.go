@@ -121,5 +121,20 @@ func Summary(f *facts.Facts) string {
 		}
 		fmt.Fprintf(&b, "  %3d  %s\n", indeg[id], id)
 	}
+	if len(f.Endpoints) > 0 || f.Data != nil {
+		nt, withData := 0, 0
+		if f.Data != nil {
+			nt = len(f.Data.Tables)
+		}
+		for _, fn := range f.Functions {
+			if len(fn.Data) > 0 {
+				withData++
+			}
+		}
+		fmt.Fprintf(&b, "\nэндпоинтов: %d, таблиц: %d, функций с доступом к данным: %d\n", len(f.Endpoints), nt, withData)
+		if m := endpointMatrix(f, 10); m != "" {
+			b.WriteString("эндпоинты × таблицы (R читает, W пишет), топ-10:\n" + m)
+		}
+	}
 	return strings.TrimRight(b.String(), "\n")
 }
