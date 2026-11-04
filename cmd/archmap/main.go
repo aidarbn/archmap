@@ -38,6 +38,7 @@ Usage:
   archmap render  --facts facts.json --out arch.html
   archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open]
   archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
+  archmap lint    [--root DIR] [--format text|json] [--tests]
   archmap version
 `
 
@@ -58,6 +59,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = cmdMap(args[1:], stdout, stderr)
 	case "serve":
 		err = cmdServe(args[1:], stdout, stderr)
+	case "lint":
+		return cmdLint(args[1:], stdout, stderr)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, "archmap", buildVersion())
 		return 0

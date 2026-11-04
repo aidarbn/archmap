@@ -18,17 +18,33 @@ type Branch struct {
 	Text string `json:"text,omitempty"` // outcome text
 }
 
-// declaredFlows builds the scenarios announced by `arch:flow` comments, in the
-// order of their entry points (by function id, then declaration order). The
-// first declaration of an id wins; lint reports duplicates.
-func declaredFlows(g *graph) []Flow {
-	var entries []string
-	for fid, fn := range g.f.Functions {
+// DeclOrder lists the functions that declare flows in source order (file, line),
+// so the first declaration of an id is the one that comes first in the code.
+func DeclOrder(f *facts.Facts) []string {
+	var out []string
+	for fid, fn := range f.Functions {
 		if fn.Arch != nil && len(fn.Arch.Flows) > 0 {
-			entries = append(entries, fid)
+			out = append(out, fid)
 		}
 	}
-	sort.Strings(entries)
+	sort.Slice(out, func(i, j int) bool {
+		a, b := f.Functions[out[i]], f.Functions[out[j]]
+		if a.File != b.File {
+			return a.File < b.File
+		}
+		if a.Start != b.Start {
+			return a.Start < b.Start
+		}
+		return out[i] < out[j]
+	})
+	return out
+}
+
+// declaredFlows builds the scenarios announced by `arch:flow` comments, in the
+// source order of their entry points (see DeclOrder). The
+// first declaration of an id wins; lint reports duplicates.
+func declaredFlows(g *graph) []Flow {
+	entries := DeclOrder(g.f)
 	// members[flow id] = functions marked as its steps
 	members := map[string]map[string]string{}
 	for fid, fn := range g.f.Functions {
