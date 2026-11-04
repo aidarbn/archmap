@@ -34,10 +34,10 @@ var version = "dev"
 const usage = `archmap - interactive function-level architecture map
 
 Usage:
-  archmap extract [--root DIR] [--base REF] [--tests] --out facts.json
-  archmap render  --facts facts.json --out arch.html
-  archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open]
-  archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open]
+  archmap extract [--root DIR] [--base REF] [--tests] [--no-src] --out facts.json
+  archmap render  --facts facts.json --out arch.html [--no-src]
+  archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
+  archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
   archmap lint    [--root DIR] [--format text|json] [--tests]
   archmap version
 `
@@ -98,8 +98,16 @@ func newFlags(name string, stderr io.Writer) *flag.FlagSet {
 	return fs
 }
 
-func extractFacts(root, base string, tests bool) (*facts.Facts, error) {
-	return extract.Run(extract.Options{Root: root, Base: base, WithTests: tests, Parsers: all.Parsers()})
+func extractFacts(root, base string, tests, src bool) (*facts.Facts, error) {
+	return extract.Run(extract.Options{Root: root, Base: base, WithTests: tests, Parsers: all.Parsers(), Src: src})
+}
+
+// srcFlags registers --src (default on) and --no-src; the result says whether
+// function bodies go into the output.
+func srcFlags(fs *flag.FlagSet) func() bool {
+	src := fs.Bool("src", true, "put function bodies into the output")
+	no := fs.Bool("no-src", false, "leave function bodies out (for a page that leaves your machine)")
+	return func() bool { return *src && !*no }
 }
 
 func writeJSON(path string, v any) error {
@@ -131,13 +139,14 @@ func cmdExtract(args []string, stdout, stderr io.Writer) error {
 	base := fs.String("base", "", "git ref to diff against (default: merge-base with the default branch)")
 	tests := fs.Bool("tests", false, "include test files")
 	out := fs.String("out", "", "output facts.json (required)")
+	withSrc := srcFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *out == "" {
 		return errors.New("--out is required")
 	}
-	f, err := extractFacts(*root, *base, *tests)
+	f, err := extractFacts(*root, *base, *tests, withSrc())
 	if err != nil {
 		return err
 	}
@@ -152,13 +161,14 @@ func cmdRender(args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("render", stderr)
 	factsPath := fs.String("facts", "", "facts.json (required)")
 	out := fs.String("out", "", "output HTML (required)")
+	withSrc := srcFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *factsPath == "" || *out == "" {
 		return errors.New("--facts and --out are required")
 	}
-	if err := render.Files(*factsPath, *out); err != nil {
+	if err := render.Files(*factsPath, *out, !withSrc()); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, *out)
@@ -172,10 +182,11 @@ func cmdMap(args []string, stdout, stderr io.Writer) error {
 	tests := fs.Bool("tests", false, "include test files")
 	out := fs.String("out", "", "output HTML (default: <root>/.archmap/arch.html)")
 	open := fs.Bool("open", false, "open the result in the default browser")
+	withSrc := srcFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	f, err := extractFacts(*root, *base, *tests)
+	f, err := extractFacts(*root, *base, *tests, withSrc())
 	if err != nil {
 		return err
 	}
@@ -228,6 +239,7 @@ func cmdServe(args []string, stdout, stderr io.Writer) error {
 	tests := fs.Bool("tests", false, "include test files")
 	addr := fs.String("addr", "127.0.0.1:0", "listen address (loopback only)")
 	open := fs.Bool("open", false, "open the map in the default browser")
+	withSrc := srcFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -236,7 +248,7 @@ func cmdServe(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	defer ln.Close()
-	srv, err := serve.New(serve.Options{Root: *root, Base: *base, WithTests: *tests, Parsers: all.Parsers()})
+	srv, err := serve.New(serve.Options{Root: *root, Base: *base, WithTests: *tests, Parsers: all.Parsers(), NoSrc: !withSrc()})
 	if err != nil {
 		return err
 	}

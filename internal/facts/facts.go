@@ -20,6 +20,11 @@ type Facts struct {
 	Functions map[string]Function `json:"functions"`
 	Deleted   []Deleted           `json:"deleted"`
 	Project   *Project            `json:"project,omitempty"`
+	// Externals are the outside systems the code talks to (databases, queues,
+	// payment and POS providers, ...), found from adapter modules and imports.
+	Externals []External `json:"externals,omitempty"`
+	// States are state machines found in the code, keyed by the type or enum name.
+	States map[string]*StateMachine `json:"states,omitempty"`
 }
 
 // Project describes the analysed repository as a whole.
@@ -58,6 +63,8 @@ type Function struct {
 	Uncommitted  *bool    `json:"uncommitted,omitempty"` // set together with Status
 	Decorators   []string `json:"decorators,omitempty"`
 	Bases        []string `json:"bases,omitempty"`
+	// Src is the function body as written, cut to 60 lines with a note.
+	Src string `json:"src,omitempty"`
 	// Arch holds the scenario annotations (`arch:` comments) above the function.
 	Arch *ArchNote `json:"arch,omitempty"`
 }
@@ -146,4 +153,30 @@ func StrPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// External is a system outside the repository that the code talks to.
+type External struct {
+	Name string `json:"name"`
+	// Kind is payment | pos | auth | db | cache | queue | storage | messaging | http_api | other.
+	Kind    string   `json:"kind"`
+	Modules []string `json:"modules"`
+	// Functions are the fids of functions outside Modules that call into them.
+	Functions []string `json:"functions"`
+}
+
+// StateMachine is a set of states and the transitions seen in the code.
+type StateMachine struct {
+	States      []string     `json:"states"`
+	Transitions []Transition `json:"transitions"`
+}
+
+// Transition is a state change made by the function Fid. From is empty when the
+// source state is not visible. Source is "code" (found by the extractor) or
+// "annotation" (declared with arch:state).
+type Transition struct {
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Fid    string `json:"fid"`
+	Source string `json:"source"`
 }

@@ -26,6 +26,8 @@ type Options struct {
 	Base      string // git ref; "" = merge-base with the default branch
 	WithTests bool
 	Parsers   []lang.Parser
+	// Src puts the body of every function into Function.Src (cut to MaxSrcLines).
+	Src bool
 	// Cache, if set, remembers parse results by file content between runs
 	// (used by `archmap serve` so a rebuild re-parses only edited files).
 	Cache *ParseCache
@@ -139,6 +141,7 @@ func Run(opts Options) (*facts.Facts, error) {
 	srcs := map[string]string{}
 	goDecls := map[typeKey]goType{}
 	fileLang := map[string]string{}
+	texts := map[string]string{}
 	for _, p := range files {
 		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
 		if err != nil {
@@ -153,6 +156,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		f := parse(p, b)
 		langs[name]++
 		fileLang[p] = name
+		texts[p] = string(b)
 		rawImports[p] = struct {
 			lang string
 			imps []lang.Import
@@ -447,6 +451,9 @@ func Run(opts Options) (*facts.Facts, error) {
 			u := s.Uncommitted
 			o.Status, o.Uncommitted = s.Status, &u
 		}
+		if opts.Src {
+			o.Src = SourceSlice(texts[f.file], f.Start, f.End, MaxSrcLines, f.lang)
+		}
 		out.Functions[fid] = o
 		if filesByMod[f.module] == nil {
 			filesByMod[f.module] = map[string]bool{}
@@ -463,6 +470,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		mf := sortedKeys(filesByMod[m])
 		out.Modules[m] = facts.Module{Imports: sortedKeys(modImports[m]), Files: mf, Doc: moduleDoc(root, m, mf, fileDoc)}
 	}
+	addSystemContext(out, fns, order, rawImports, texts, sqlQueries(root))
 	return out, nil
 }
 

@@ -25,7 +25,7 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "archmap: --format must be text or json")
 		return 2
 	}
-	f, err := extractFacts(*root, "", *tests)
+	f, err := extractFacts(*root, "", *tests, false)
 	if err != nil {
 		fmt.Fprintln(stderr, "archmap:", err)
 		return 1
