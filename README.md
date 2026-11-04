@@ -52,6 +52,11 @@ Lists and the scenario scroll normally.
   "Scenarios (N)"). `?view=sequence` opens the map with the panel full screen.
   The panel has two views, **Sheet** (the default) and **Sequence**; the choice
   is remembered (see "Scenario sheet" below).
+- **The side card** on the right (system, module, function, step) hides with
+  the panel button in the header, the button in its corner, `]` or Cmd+. —
+  the map, the views and the scenario panel take the freed width; a selection
+  then only puts a dot on the button. Drag its left edge to resize it
+  (double-click resets); both are remembered.
 - **API** lists every endpoint (HTTP, gRPC, WebSocket, tasks, CLI) grouped by
   service, with filters by kind and access and a search. The card shows the
   request and response types, the function, the scenario to play and the tables
