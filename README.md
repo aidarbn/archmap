@@ -404,6 +404,46 @@ journey guest-kaspi "The guest pays with Kaspi": create-order > kaspi-pay > conf
 
 Full grammar, the JSON model and the operations: [docs/spec.md](docs/spec.md).
 
+### Edit mode
+
+Under `archmap serve` the **Edit** button on the toolbar turns the map into a
+drawing board (a static `map` file has no server and hides it). Everything you
+draw is an operation the server applies to the `.arch` file, so the file stays
+in the canonical form and `git diff` shows exactly what you changed.
+
+![Edit mode on the Statuses view of spring-petclinic, with the Drift tab](docs/img/edit-petclinic.png)
+*A `VisitStatus` machine drawn over a repository that has no such code yet; the Drift tab lists what the spec promises and the code lacks.*
+
+- **Statuses:** double click empty space to add a status, double click a node to
+  rename it, drag from one node to another to add a transition (an inline field
+  asks for the event), `Del` removes the selected node or transition.
+- **Scenarios:** the Scenarios tab edits a flow: caption, actor, exit, the order
+  of steps (drag), planned steps, `alt` branches that point to another flow.
+- **Text:** the same files as plain text with line numbers. `Save` (Cmd/Ctrl+S)
+  parses first; an error highlights its line and nothing is written.
+- **Drift:** the same report as `archmap lint`, live. Each item has *on the map*,
+  *in the text* and, where it makes sense, *add to the description*.
+- Undo and redo (the arrows on the toolbar) work operation by operation; a hand
+  edit in the Text tab resets the history.
+
+### Walk mode
+
+**Walk** answers "what happens next?" on real code. Pick a function (or start
+from a scenario), then choose the next call from the list of calls it makes: the
+chosen function is drawn on the map and its arrow is added to the sequence
+diagram, the code of the call is highlighted. Queue hand-offs and external
+systems appear as options too.
+
+![Walk mode on spring-petclinic: three steps from OwnerController.processFindForm](docs/img/walk-petclinic.png)
+*Three steps from `OwnerController.processFindForm`: the map, the sequence and the trace.*
+
+- Keys: `Right` or `Enter` goes on, `Up` and `Down` choose, `Left` goes back,
+  `Esc` exits.
+- Add a planned step or a branch to the walk when the code has no such call yet.
+- **Save as scenario** (needs `serve`) writes the walk to `arch/*.arch` as a
+  flow; it shows up in the scenario list at once. Walking itself also works in a
+  static `map` file.
+
 ## serve: live map while you code
 
 ```sh
