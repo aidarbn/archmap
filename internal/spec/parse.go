@@ -138,6 +138,12 @@ func isRef(s string) bool {
 	return true
 }
 
+// isModule reports whether s can be a module path of the facts (`services/kaspi`,
+// `@scope/pkg`, `app.orders`): one word without quotes, `#` or `->`.
+func isModule(s string) bool {
+	return s != "" && s[0] != '-' && !strings.ContainsAny(s, " \t\r\n\"#") && !strings.Contains(s, "->")
+}
+
 type parser struct {
 	file string
 	errs []Error
@@ -429,12 +435,25 @@ func (p *parser) step(n int, ts []tok) {
 		s.Ext = rest[1].s
 		rest = rest[2:]
 	}
-	if len(rest) > 0 {
-		if !rest[0].quoted || len(rest) > 1 {
-			p.errAt(n, rest[0].col, "unexpected %q; a caption must be in quotes", rest[0].s)
+	if len(rest) > 0 && rest[0].quoted {
+		s.Text = rest[0].s
+		rest = rest[1:]
+	}
+	if len(rest) > 0 && !rest[0].quoted && rest[0].s == "in" {
+		if !s.Planned {
+			p.errAt(n, rest[0].col, "only a planned step names its module: step plan \"...\" in <module>")
 			return
 		}
-		s.Text = rest[0].s
+		if len(rest) < 2 || rest[1].quoted || !isModule(rest[1].s) {
+			p.errAt(n, rest[0].col, "expected a module path after `in`")
+			return
+		}
+		s.Module = rest[1].s
+		rest = rest[2:]
+	}
+	if len(rest) > 0 {
+		p.errAt(n, rest[0].col, "unexpected %q; a caption must be in quotes", rest[0].s)
+		return
 	}
 	if s.Planned && s.Text == "" {
 		p.errAt(n, ts[1].col, "a planned step needs a caption: step plan \"...\"")

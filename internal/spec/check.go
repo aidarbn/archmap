@@ -27,6 +27,7 @@ const (
 	CodeUndeclared  = "undeclared-transition"
 	CodeNotImpl     = "not-implemented"
 	CodeStateRef    = "unknown-state"
+	CodeModuleRef   = "unknown-module"
 )
 
 // Finding is one result of Check: a place in a spec file or in the code.
@@ -208,6 +209,9 @@ func Check(s *Set, f *facts.Facts, reach func(entry string) map[string]bool) (Mo
 			if s.Planned {
 				fl.Planned++
 				add(fl.File, s.Line, SevInfo, CodePlanned, "flow %s: planned step %q (no code yet)", fl.ID, s.Text)
+				if _, ok := f.Modules[s.Module]; s.Module != "" && len(f.Modules) > 0 && !ok {
+					add(fl.File, s.Line, SevWarning, CodeModuleRef, "flow %s: planned step %q: no module %q in the code", fl.ID, s.Text, s.Module)
+				}
 				continue
 			}
 			fid, cands := Resolve(f, s.Ref)

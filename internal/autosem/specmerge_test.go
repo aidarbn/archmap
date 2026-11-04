@@ -27,7 +27,7 @@ func TestMergeSpecIntoCodeFlow(t *testing.T) {
 	m := BuildWith(f, specSet(t, `flow pay "Оплата по спецификации"
   actor Касса
   step save   "Сохраняем"
-  step plan "Проверить лимит"
+  step plan "Проверить лимит" in internal/x
   step requestQR   ext Kaspi
   alt declined -> retry
   exit "Оплачено"
@@ -48,7 +48,7 @@ journey j-new "Новый путь": pay > retry
 	if fl.Labels[id("save")] != "Сохраняем" || fl.Labels[PlannedID("pay", 1)] != "Проверить лимит" || fl.Labels[id("requestQR")] == "" {
 		t.Fatalf("labels: %v", fl.Labels)
 	}
-	if !fl.Planned[PlannedID("pay", 1)] || fl.Ext[id("requestQR")] != "Kaspi" {
+	if !fl.Planned[PlannedID("pay", 1)] || fl.Ext[id("requestQR")] != "Kaspi" || fl.PlanMod[PlannedID("pay", 1)] != "internal/x" {
 		t.Fatalf("planned/ext: %v %v", fl.Planned, fl.Ext)
 	}
 	if len(fl.Unspecified) == 0 || fl.Unspecified[id("save")] {

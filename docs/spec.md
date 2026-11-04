@@ -30,7 +30,7 @@ names    = id { [","] id } .
 flow     = "flow" id [ string ] NL { "  " flowline NL } .
 flowline = "actor" text
          | "step" ref [ "ext" System ] [ string ]   # ref: Type.Method | Func | path::fid
-         | "step" "plan" string                     # planned step: no code yet
+         | "step" "plan" string [ "in" module ]     # planned step: no code yet; module — where it will live
          | "state" Entity ":" from "->" to          # the flow moves an entity
          | "alt" cond [ "->" flowid ] [ string ]    # a branch or outcome
          | "exit" text .
@@ -44,6 +44,17 @@ journeys (each in its order), two-space indent, columns of `states` transitions
 (arrow, `on`, label) and `step`s (ref, `ext`, caption) padded with three spaces,
 `actor` bare unless it needs quotes, `exit` always quoted, one blank line between
 blocks, a newline at the end. `Parse(Format(x)) == x`.
+
+`module` is a module path as archmap shows it (`services/kaspi`, `app.orders`): one
+word without quotes, `#` or `->`. The viewer draws the planned step in that module
+(on the map, in the sequence and on the scenario sheet); without `in` it sits next
+to the service. Lint warns when no such module exists in the code. Example:
+
+```
+flow kaspi-pay "Оплата Kaspi QR"
+  step Service.requestQR   ext Kaspi   "Создаём QR"
+  step plan                            "Проверить лимит платежей"   in services/kaspi
+```
 
 Comments: a `#` line at column 0 stays attached to the block below it (field
 `comment`), those after the last block are `tail`. Comments at the end of a line
@@ -82,6 +93,7 @@ fields are omitted; lists are never `null`.
     "steps": [{
       "ref": "Service.requestQR",          // empty for a planned step
       "planned": true,                     // `step plan "…"`
+      "module": "services/kaspi",          // planned steps only: `in <module>`
       "ext": "Kaspi", "text": "caption", "line": 9,
       "fid": "path::fid",                  // enrich: resolved function
       "drift": "missing | ambiguous | unreachable"   // enrich
@@ -131,8 +143,8 @@ field is a JSON string unless noted; `index` and `to_index` are 0-based numbers.
 - `rename_flow` `flow`, `to`. Also in `alt … -> flow` and in journeys.
 - `set_name` `flow` or `journey`, `name`.
 - `set_actor` `flow`, `actor`; `set_exit` `flow`, `exit`. An empty string clears.
-- `add_step` `flow`, and either `ref` or `planned: true` with `text` [, `ext`,
-  `index` (default: the end)].
+- `add_step` `flow`, and either `ref` [, `ext`] or `planned: true` with `text`
+  [, `module`]; [`index` (default: the end)]. `module` with a `ref` is an error.
 - `set_step` `flow`, `index`, and the same fields as `add_step`; replaces the step.
 - `remove_step` `flow`, `index`.
 - `move_step` `flow`, `index`, `to_index`. The step lands at `to_index` in the
@@ -157,7 +169,7 @@ capped at 1 MiB; paths are `arch/<name>.arch`, nothing else is ever written.
   `files` holds the text as it is on disk, `errors` the syntax errors, `findings`
   what `lint` would report for the spec (severity `error | warning | info`; codes
   `syntax duplicate no-function ambiguous-function unreachable-step planned
-  no-flow undeclared-transition not-implemented unknown-state`; `undeclared-transition`
+  no-flow undeclared-transition not-implemented unknown-state unknown-module`; `undeclared-transition`
   points into the code file). A file with a syntax error contributes the part
   that parsed. `seq` is the number of the last rebuild (the SSE `seq`).
 - `POST /spec/ops` → same shape plus `"changed": ["arch/orders.arch"]` (the files
@@ -180,9 +192,10 @@ read the files.
 
 `model.spec` is the model above. `model.flows[]` gets, for flows the spec
 declares: `spec: true`, `planned` (step id → true), `unspecified` (step id →
-true), `ext` (step id → system). A planned step has the id
-`plan:<flow id>:<position in the spec flow>` in `steps` (there is no function);
-`labels[step id]` holds its caption.
+true), `ext` (step id → system), `planMod` (planned step id → module of `in`). A
+planned step has the id `plan:<flow id>:<position in the spec flow>` in `steps`
+(there is no function); `labels[step id]` holds its caption. The player plays
+planned steps like the others (a dashed node, no code to open).
 
 - Flow with the same id as an `arch:flow` of the code: the spec wins on `name`,
   `actor`, `exit`, captions and the order of steps; code steps the spec flow does
@@ -221,6 +234,7 @@ warnings too. Text output prints `path:line: message`, warnings as `warning: …
 - warning: `state Entity: a -> b` in a flow where `a` or `b` is not in that
   entity's `states`.
 - info: every planned step (counted in `planned`).
+- warning: a planned step `in <module>` that names no module of the code.
 
 `arch:step`, `arch:on` and `arch:journey` in the code may name flows that only the
 spec declares.

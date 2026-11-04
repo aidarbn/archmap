@@ -140,9 +140,12 @@ func formatFlow(fl *Flow) string {
 	}
 	table := make([][]string, len(fl.Steps))
 	for i, s := range fl.Steps {
-		ref, ext, text := "step "+s.Ref, "", ""
+		ref, ext, text, mod := "step "+s.Ref, "", "", ""
 		if s.Planned {
 			ref = "step plan"
+			if s.Module != "" {
+				mod = "in " + s.Module
+			}
 		}
 		if s.Ext != "" {
 			ext = "ext " + s.Ext
@@ -150,7 +153,7 @@ func formatFlow(fl *Flow) string {
 		if s.Text != "" {
 			text = quote(s.Text)
 		}
-		table[i] = []string{ref, ext, text}
+		table[i] = []string{ref, ext, text, mod}
 	}
 	for _, l := range rows(table) {
 		sb.WriteString(l + "\n")

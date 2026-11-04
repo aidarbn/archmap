@@ -653,3 +653,51 @@ func TestCommentsSurviveRewrite(t *testing.T) {
 		t.Fatal("round trip")
 	}
 }
+
+func TestPlannedStepModule(t *testing.T) {
+	src := "flow f\n  step x.Y   \"cap\"\n  step plan \"Проверить лимит\" in services/kaspi\n  step plan \"later\"\n"
+	d := mustParse(t, src)
+	if s := d.Flows[0].Steps[1]; !s.Planned || s.Module != "services/kaspi" || s.Text != "Проверить лимит" {
+		t.Fatalf("step: %+v", s)
+	}
+	if s := d.Flows[0].Steps[2]; s.Module != "" {
+		t.Fatalf("no module: %+v", s)
+	}
+	out := Format(d)
+	if !strings.Contains(out, "\"Проверить лимит\"   in services/kaspi\n") {
+		t.Fatalf("format:\n%s", out)
+	}
+	if !sameDoc(mustParse(t, out), d) || Format(mustParse(t, out)) != out {
+		t.Fatalf("round trip:\n%s", out)
+	}
+	for _, bad := range []string{
+		"flow f\n  step x.Y \"cap\" in services/kaspi\n",
+		"flow f\n  step plan \"a\" in\n",
+		"flow f\n  step plan \"a\" in \"m\"\n",
+		"flow f\n  step plan \"a\" in m extra\n",
+	} {
+		if _, errs := Parse("arch/e.arch", bad); len(errs) == 0 {
+			t.Errorf("%q: no error", bad)
+		}
+	}
+	s := setOf(t, map[string]string{"arch/f.arch": src})
+	if _, err := s.Apply([]Op{{Op: "add_step", Flow: "f", Plan: true, Text: "n", Module: "app/orders"}}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Model().Flows[0].Steps[3]; st.Module != "app/orders" {
+		t.Fatalf("add_step: %+v", st)
+	}
+	idx := 1
+	if _, err := s.Apply([]Op{{Op: "set_step", Flow: "f", Index: &idx, Plan: true, Text: "m", Module: "other"}}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Model().Flows[0].Steps[1]; st.Module != "other" || st.Text != "m" {
+		t.Fatalf("set_step: %+v", st)
+	}
+	if _, err := s.Apply([]Op{{Op: "add_step", Flow: "f", Ref: "x.Z", Module: "m"}}); err == nil {
+		t.Fatal("a real step with a module must fail")
+	}
+	if _, err := s.Apply([]Op{{Op: "add_step", Flow: "f", Plan: true, Text: "q", Module: "a b"}}); err == nil {
+		t.Fatal("a module with a space must fail")
+	}
+}
