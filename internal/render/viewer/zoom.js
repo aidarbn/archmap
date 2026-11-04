@@ -28,6 +28,7 @@ function setupAutoZoom() {
   paintAutoZoom();
   const sc = $('#sc3');
   sc.addEventListener('wheel', codeWheel, { passive: false });
+  onGesture(sc, codeWheel);
   bus.on('level', (l) => { if (l !== 3) setCodeZoom(1); });
 }
 
@@ -88,7 +89,7 @@ function setCodeZoom(z) { AZ.cz = z; $('#sc3').style.setProperty('--cz', z); }
 function codeWheel(e) {
   if (state.level !== 3 || state.view !== 'map') return;
   const code = $('#sc3 .code'); if (!code) return;
-  if (!e.ctrlKey && code.scrollHeight > code.clientHeight + 2) return;
+  if (!isZoomWheel(e)) return; // a plain wheel / two-finger scroll scrolls the code natively
   scaleWheel(e, { z: AZ.cz, set: setCodeZoom, out: () => up(2, false, AFTER_UP) });
 }
 // Content without a camera (code text, the scenario diagram) zooms by a scale z; crossing a threshold changes the
@@ -97,16 +98,18 @@ function codeWheel(e) {
 // o: {z, set(z), in?() → Promise, out?() → Promise}. The caller decides whether a plain wheel scrolls instead.
 const SCALE_DIVE = DIVE / LEAVE; // ≈ 1.57: as far in as the map's dive/leave hysteresis
 function scaleWheel(e, o) {
+  if (!isZoomWheel(e)) return; // only pinch / Cmd+wheel / Ctrl+wheel zoom; the rest scrolls the container natively
   e.preventDefault();
-  if (autoBusy() || !e.deltaY) return;
+  const dy = wheelPx(e).y;
+  if (autoBusy() || !dy) return;
   const free = AZ.on ? gate(performance.now()) : true; // the tail of the gesture that changed the level does not zoom on
   if (AZ.on && !free && !AZ.armed) return;
-  const z = o.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+  const z = o.z * Math.exp(-dy * zoomRate(e));
   if (AZ.on && o.out && z < CODE_LEAVE) { if (free) { o.set(1); settle(o.out()); } return; }
   if (AZ.on && o.in && z > SCALE_DIVE) { if (free) { o.set(1); settle(o.in()); } return; }
   o.set(Math.min(CODE_MAX, Math.max(CODE_LEAVE, z)));
 }
-AM.zoom = { scaleWheel, get on() { return AZ.on; }, DIVE: SCALE_DIVE, LEAVE: CODE_LEAVE, MAX: CODE_MAX };
+AM.zoom = { scaleWheel, onGesture, isZoomWheel, get on() { return AZ.on; }, DIVE: SCALE_DIVE, LEAVE: CODE_LEAVE, MAX: CODE_MAX };
 
 /* ---------- debug audit: no foreign panels after a view or level change ---------- */
 // auditPanels(label): visible position:absolute/fixed elements (and anything inside an inactive view) that do not

@@ -91,7 +91,7 @@ logged and do not break the page.
   `fid` that calls `target` (or a callee leading to it); `has` is false while the body is unknown.
 - **Scenarios** `AM.flowGroups(query)` → `[{name, items: [flow], auto?}]` (by actor, then the automatic
   ones), `AM.flowActor(flow)`.
-- **Zoom** `AM.zoom.scaleWheel(e, {z, set(z), in?(), out?()})` — scale content by the wheel and change the
+- **Zoom** `AM.zoom.scaleWheel(e, {z, set(z), in?(), out?()})` — scale content by pinch / Cmd+wheel / Ctrl+wheel (a plain wheel is left to native scrolling) and change the
   level past the thresholds (once per gesture); `AM.zoom.on` — auto-dive is on.
 - **Code** `AM.hlLine(line, lang)`, `AM.codeHTML(fid, targetFid)` → `{html, hlIdx, has}`,
   `AM.srcOf(fid)`, `AM.loadSrc(fid)` (fetches `/src` only under `archmap serve`),

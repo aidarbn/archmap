@@ -24,6 +24,11 @@ tabs show. How the viewer is built and how to add a view:
 The header has five tabs; a scenario that is playing stays in sync across all of
 them (the player bar at the bottom is shared).
 
+Gestures work as in Figma or maps in every view with a camera: a two-finger
+scroll (or the mouse wheel, Shift+wheel for sideways) pans; a pinch or
+Cmd/Ctrl+wheel zooms to the cursor, and only zooming dives into or leaves a level.
+Lists and the scenario scroll normally.
+
 - **Map** is one scene that goes through four **levels of understanding**:
   system (who uses it and what it talks to) -> modules -> functions of a module
   -> code. Click selects an element and its links; double-click or "Inside" dives
@@ -84,8 +89,8 @@ fold) and from the call graph between them: the caller of a step is the previous
 step or a frame below it on the call stack that reaches it. **Enter** on a message
 (or a double-click) opens it in a frame one level deeper; at the function level
 the frame holds the chain of calls from the caller to the step (up to 8 hops)
-with the call lines. Frames nest; **Leave** folds one. Ctrl+wheel or a pinch over
-the diagram zooms it and, past the same thresholds as the map's auto-dive, moves
+with the call lines. Frames nest; **Leave** folds one. A pinch or Cmd/Ctrl+wheel over
+the diagram zooms it (a plain two-finger scroll or wheel just scrolls) and, past the same thresholds as the map's auto-dive, moves
 the whole diagram a level in or out with the current step kept in view. The
 current step is lit on every level (on the system level, the message that holds
 it); branches and queue pauses are drawn on every level. Works the same for
