@@ -15,6 +15,12 @@
       <b id="repoName"><!--TITLE--></b><span class="meta" id="repoMeta"></span>
     </div>
     <nav class="tabs" role="tablist" id="tabs"></nav>
+    <div class="search" id="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input type="search" id="q" autocomplete="off" spellcheck="false" role="combobox" aria-controls="qpop" aria-expanded="false"><kbd>/</kbd>
+      <div class="qpop" id="qpop" role="listbox" hidden></div>
+    </div>
+    <button class="iconbtn" id="listBtn" aria-haspopup="true" aria-expanded="false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span></span></button>
     <div class="spacer"></div>
     <div class="chg" id="chg"></div>
     <span class="live" id="live" hidden><i></i><b></b><span id="liveInfo"></span></span>
@@ -31,6 +37,7 @@
         <div class="legend off" id="legend"></div>
         <div class="zoomctl"><button class="iconbtn" id="zIn">+</button><button class="iconbtn" id="zOut">−</button><button class="iconbtn" id="zFit">⤢</button></div>
       </div>
+      <div class="lists" id="lists" hidden></div>
     </section>
     <aside id="panel"><div class="pane" id="pane"></div></aside>
   </main>

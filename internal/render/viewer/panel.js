@@ -3,8 +3,10 @@
  * {t:'mod', id}, {t:'group', id}, {t:'fn', id, why?}, {t:'step'}. Views add kinds with
  * registerPanel(kind, render) and select them with AM.select({t: kind, …}). */
 
+let QUIET = false; // reapplying marks after a live update: no panel redraw, no select event
 function setSel(sel) {
   state.sel = sel || null;
+  if (QUIET) return;
   renderPanel();
   if (state.view === 'map') renderLevelBar();
   bus.emit('select', state.sel);

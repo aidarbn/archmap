@@ -2,6 +2,7 @@
  * module groups for large repos, selection, drill-in/out with camera animation, crumbs, minimap. */
 
 let sys = null, map = null, fv = null, mini = null;
+const INSET = 64; // px at the top of every scene covered by the crumbs and the level buttons
 
 /* ===================== module groups (more than GROUP_MIN modules) ===================== */
 // A path trie of modules; the start cut greedily splits the largest branch while blocks <= GROUP_TARGET.
@@ -193,7 +194,7 @@ function buildSystem() {
   const svg = S_('svg', {}, root);
   const g = S_('g', {}, svg), gl = S_('g', {}, g), ge = S_('g', {}, g), gn = S_('g', {}, g), fx = S_('g', {}, g);
   sys = { svg, g, fx, nodes: {}, edges: [] };
-  sys.cam = new Cam(svg);
+  sys.cam = new Cam(svg); sys.cam.insetTop = INSET;
   const { P, labels } = sysLayout();
   labels.forEach((l) => S_('text', { x: l.x, y: l.y, 'text-anchor': 'middle', class: 'grp' }, gl, l.text));
   // service card
@@ -341,7 +342,7 @@ function buildMap() {
   exts.forEach((o) => o.tg.forEach((u) => E.push({ a: u, b: o.x.id, w: 1, dash: true })));
   drawPortEdges(E, pos, ge);
   map.cam = new Cam(svg, (vb) => { updateMinimap(vb); svg.classList.toggle('lod-lo', (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
-  map.cam.maxW = map.extent.w * 1.8;
+  map.cam.insetTop = INSET; map.cam.maxW = map.extent.w * 1.8;
   wireSelect(svg, map.cam, selectMod, (id) => {
     if (U[id] && U[id].kind === 'g') return expandGroup(U[id].node);
     if (U[id]) return drill(2, { from: map.nodes[id].el, mod: id });
@@ -636,7 +637,7 @@ function buildFns(mod) {
   const x1 = Math.min(frame.x, ...pr.map((r) => r.x)) - 10, x2 = Math.max(frame.x + frame.w, ...pr.map((r) => r.x + r.w)) + 10;
   fv.extent = { x: x1, y: frame.y - (nIn ? 100 : 10), w: x2 - x1, h: frame.h + (nIn ? 100 : 10) + (nOut ? 90 : 10) };
   fv.cam = new Cam(svg);
-  fv.cam.maxW = fv.extent.w * 2.5;
+  fv.cam.insetTop = INSET; fv.cam.maxW = fv.extent.w * 2.5;
   wireSelect(svg, fv.cam, selectFn, (id) => {
     if (id.startsWith('port:')) { goModule(id.split(':').slice(2).join(':')); return; }
     drill(3, { from: fv.nodes[id].el, fn: id });
@@ -814,16 +815,43 @@ function intoSelected() {
 }
 const curCam = () => [sys && sys.cam, map && map.cam, fv && fv.cam][state.level];
 function fitCur() { if (state.level === 0) sys.cam.animTo(sys.extent, 30, 0, 300); if (state.level === 1) map.cam.animTo(map.extent, 10, 0, 300); if (state.level === 2) fv.cam.animTo(fv.extent, 10, 0, 300); }
-// rebuildMap(): rebuild every level in place (language, data, resize) keeping level and selection
-function rebuildMap() {
+// rebuildMap(keep): rebuild every level in place (language, data, resize) keeping level and selection.
+// keep = true also keeps the cameras (live updates) and the selection marks on the scene.
+function rebuildMap(keep) {
   const lvl = state.level, mod = state.mod, fn = state.fn;
+  const cams = keep ? { sys: sys && { ...sys.cam.vb }, map: map && { ...map.cam.vb }, fv: fv && { mod: fv.mod, vb: { ...fv.cam.vb } } } : null;
   setupGroups();
   buildSystem(); buildMap();
   fitSys(); fitMap();
   if (lvl >= 2 && mod && D.byMod[mod]) { buildFns(mod); fitFns(); } else if (lvl >= 2) { state.level = Math.min(lvl, 1); }
   if (state.level >= 3 && fn && D.fns[fn]) { const s = curStep(); buildCode(fn, s && s.fid === fn ? s.next : null, s ? framesUpTo(state.step) : defaultFrames(fn)); } else if (state.level >= 3) state.level = 2;
   SC().forEach((e, i) => e.classList.toggle('hidden', i !== state.level));
+  if (cams) {
+    if (cams.sys) sys.cam.set(cams.sys);
+    if (cams.map) map.cam.set(cams.map);
+    if (cams.fv && fv && fv.mod === cams.fv.mod) fv.cam.set(cams.fv.vb);
+    reapplySel(); restorePlay();
+  }
   afterLevel();
+}
+// the selection marks live in the scene DOM: put them back after a rebuild without touching the panel
+function reapplySel() {
+  const s = state.sel; if (!s) return;
+  QUIET = true;
+  try {
+    if (state.level === 0 && sys) { const id = s.t === 'svc' ? 'svc' : s.t === 'actor' || s.t === 'ext' ? s.id : null; if (id && sys.nodes[id]) selectSys(id); }
+    else if (state.level === 1 && map) { const id = s.t === 'mod' || s.t === 'group' ? (unitFor(s.id) || s.id) : s.t === 'actor' || s.t === 'ext' ? s.id : null; if (id && map.nodes[id]) selectMod(id); }
+    else if (state.level === 2 && fv && s.t === 'fn' && fv.nodes[s.id]) selectFn(s.id);
+  } finally { QUIET = false; state.sel = s; }
+}
+// play marks of the current step on the visible level (no camera move, no dot)
+function restorePlay() {
+  const s = curStep(); if (!s || state.view !== 'map') return;
+  const sc = [sys, map, fv][state.level]; if (!sc) return;
+  clearSel(sc.svg); sc.svg.classList.add('play');
+  if (state.level === 0) hotOn(sys.nodes, 'svc');
+  else if (state.level === 1) { const b = unitFor(s.mod), a = s.prev && D.fns[s.prev] ? unitFor(D.fns[s.prev].module) : null; hotOn(map.nodes, b); if (a) { hotOn(map.nodes, a); hotEdge(map.edges, a, b); } }
+  else if (state.level === 2) hotOn(fv.nodes, s.fid);
 }
 
 Object.assign(AM, {

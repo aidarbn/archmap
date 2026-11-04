@@ -203,10 +203,18 @@ viewer as `map`, but it follows the repo:
 - A rebuild re-parses only files whose content changed; resolving calls and
   imports is redone in full. A failed rebuild keeps the last good map and shows
   the error.
-- The browser keeps your selected function, opened groups, map position, search,
-  filters and playback; functions that are new or whose body (or change status)
-  changed flash on the map and in the lists. The header shows
-  live / rebuilding / error.
+- The browser keeps what you were doing across an update: the view (tab), level,
+  selection, camera (position and zoom of each level), opened module groups, the
+  changed-only filter, the scenario and the playback position, the scroll of the
+  right card. Functions that are new or whose body (or change status) changed,
+  and their modules, flash on the map, in the right card, in the code and in the
+  lists. The header shows live (with time, rebuild time and the number of
+  changed functions), rebuilding, or the error text; it reconnects by itself.
+  Function code is read from `/src` on demand (not embedded); the code of a
+  changed function is re-read.
+- Search (`/` or Ctrl/Cmd+K) finds functions, modules and files; Enter opens the
+  function on the map, Shift+Enter in its code. The Lists drop-down holds
+  modules by layer, all functions with a filter, and the branch changes.
 - Only loopback addresses are accepted for `--addr`; requests with a foreign
   `Host` header and non-GET methods are rejected.
 - `/` renders the same page as `map` plus a `serve` key in the data; a static

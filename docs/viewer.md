@@ -16,11 +16,12 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, crumbs, minimap, legend. |
 | `playback.js` | Scenario runs: picker, steps through the levels, branches, effects/status badges, auto play. |
 | `panel.js` | Right card for the selection (`setSel`). |
+| `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
 | `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. |
 | `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
-`layout.js`, `map.js`, `playback.js`, `panel.js` (one shared scope), then every `views/*.js` by
+`layout.js`, `map.js`, `playback.js`, `panel.js`, `nav.js` (one shared scope), then every `views/*.js` by
 name, **each wrapped in its own `{ … }` block**, then `main.js`. The core list is in
 `render.go` (`coreJS`); views are picked up automatically — adding a view needs no Go change.
 Assembly fails (tests catch it) if a part contains `</script` / `</style`, or a placeholder.
@@ -63,7 +64,10 @@ logged and do not break the page.
 - **State** `AM.state`: `view`, `level`, `mod`, `fn`, `sel`, `only` (changed-only filter),
   `run`, `step`, `playing`, `speed`.
 - **Bus** `AM.bus.on(event, fn)` → unsubscribe; events: `data`, `lang`, `theme`, `view`,
-  `level`, `select`, `step`, `flow`, `filter`, `resize`.
+  `level`, `select`, `step`, `flow`, `filter`, `resize`, `live` (after a serve update; `{flash: [fid]}` — functions that
+  changed, to highlight in your own view; the core flashes its own scenes and lists). `onData`
+  is called before `live`. `Cam` has an optional `insetTop` (px, default 0): `fit`/`fitTop`
+  keep that strip free of content.
 - **Text** `AM.t(key, …)`, `AM.L({ru, en})`, `AM.lang`, `AM.addI18n`, `AM.plural`.
 - **DOM** `AM.h(tag, attrs, parent, html)`, `AM.svg(tag, attrs, parent, text)`, `AM.esc`,
   `AM.cut`, `AM.cutL`; `AM.Cam`, `AM.layered`, `AM.hop`, `AM.clip`, `AM.bbox`, `AM.runDot`,
