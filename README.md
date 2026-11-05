@@ -13,152 +13,65 @@ with [tree-sitter](https://tree-sitter.github.io/).
 ![archmap serve on archmap itself](docs/img/serve-archmap.png)
 *`archmap serve` on this repository: the live map with the function list.*
 
-The viewer UI is bilingual (English and Russian): it follows the browser
-language, can be forced with `?lang=en` / `?lang=ru`, and has an EN/RU switch
-in the header, plus a light and a dark theme. See [Views](#views) for what the
-tabs show. How the viewer is built and how to add a view:
-[docs/viewer.md](docs/viewer.md).
+How the viewer is built and how to add a view: [docs/viewer.md](docs/viewer.md).
 
-## Views
+## Interface
 
-The header has four tabs (Map, API, Data, Statuses); a scenario that is playing
-stays in sync across all of them (the player bar at the bottom is shared). The
-sequence diagram of the scenario is not a tab but a panel of the Map (see below).
+The page is deliberately minimal: one line on top and the map under it. More
+controls come back only when they prove necessary.
 
-Gestures work as in Figma or maps in every view with a camera: a two-finger
-scroll (or the mouse wheel, Shift+wheel for sideways) pans; a pinch or
-Cmd/Ctrl+wheel zooms to the cursor, and only zooming dives into or leaves a level.
-Lists and the scenario scroll normally.
+- **Top line**: the logo and the project name (a click goes back to the system;
+  the tooltip has the repo, the branch and its changes; under `archmap serve` a
+  small dot next to the name is the live state), the breadcrumbs "where I am"
+  (system › modules › module › function — a click goes back up) and one field,
+  **⌘K Find or run…**.
+- **⌘K** (a click on the field, Cmd/Ctrl+K or `/`) is the only place to control
+  the page. It finds modules, functions, files, scenarios (flows and through
+  paths), API endpoints, tables and state machines, grouped; ↑/↓ choose, Enter
+  opens (Shift+Enter opens a function in its code), Esc closes. It also runs the
+  commands: **View: Map / API / Data / Statuses**, **Language**, **Theme**,
+  **Show / hide the details panel**, **Back**, **Close the scenario** and, on a
+  branch with changes, **Only changed**.
+- **Map**: one scene with four levels — system (who uses it and what it talks
+  to) → modules → functions of a module → code. A click selects an element and
+  its links, a double click dives in, Esc or the breadcrumbs go up. A two-finger
+  scroll (or the wheel) pans, a pinch or Cmd/Ctrl+wheel zooms; zoom never changes
+  the level by itself. Small +/−/fit buttons sit in the corner.
+- **Details panel**: appears only when something is selected (module, function,
+  step, endpoint, table, status) and floats over the right side; ✕, `]` or
+  Cmd/Ctrl+. hide it until the next selection; drag its left edge to resize.
+- **Scenarios** go only by hand — there is no auto play and nothing starts by
+  itself. Pick a scenario in ⌘K: the map shows its first step and a bar appears
+  at the bottom: `<name>  ← Step k/N →  <the step>  ✕`. → and ← (or the arrows
+  of the bar) step, Home goes back to the first step, Esc closes it. The camera
+  moves smoothly and only when the step is off screen; at a fork the bar offers
+  the branches.
+- **API** (⌘K → View: API) lists the endpoints grouped by service; the card shows
+  the request and response types, the function, the scenario from it and the
+  tables it reaches through its calls (a table opens in Data).
+- **Data** (⌘K → View: Data, a table in ⌘K, or Postgres on the map) is the schema
+  as an ER diagram. The table card shows the **description of the table** under
+  its name and every field with its type, NULL / NOT NULL, PK / reference and
+  **its description** — taken from the code, never made up: `COMMENT ON TABLE /
+  COLUMN`, `-- …` comments on or right above a column or `CREATE TABLE` / `ALTER
+  TABLE … ADD COLUMN` (goose Down parts ignored, the last description wins), doc
+  comments of Go struct fields mapped to the table (by the struct name or its
+  `db` / `gorm` column tags), Django `help_text` / `verbose_name` and model
+  docstrings. Then who reads and changes the table and which endpoints reach it.
+- **Statuses** (⌘K → View: Statuses, or a machine in ⌘K) draws one state machine
+  found in the code (status constants and enums, transitions from assignments,
+  `UpdateStatusIfX(...)` calls and SQL, plus `arch:state` lines); the transition
+  of the current step lights up.
 
-- **Map** is one scene that goes through four **levels of understanding**:
-  system (who uses it and what it talks to) -> modules -> functions of a module
-  -> code. Click selects an element and its links; double-click or "Inside" dives
-  in, Esc, "Back" or the breadcrumbs go up. A scenario plays through all four
-  levels, so you can follow a request from the outside system down to the lines
-  that run.
-  The **sequence panel** docks on the map when a scenario, path or variant is
-  chosen or plays (the diagram button in the top right of the map opens it by
-  hand): it shows the same scenario as a sequence diagram, with lifelines for the
-  actor, the service, modules or functions, the queue and external systems,
-  `alt` blocks for the branches (`arch:on`), a pause where a step goes through a
-  queue, and the effects and status changes of every step. It is nested like the
-  map (see below). The panel sits at the bottom (default, 40% of the height) or
-  on the right; drag the separator to resize it (double-click resets), fold it
-  into a strip with the scenario name and progress, or open it full screen
-  (the map is hidden; Esc brings it back). The place, size and fold are
-  remembered. The map fits the current step into the part the panel leaves free.
-  The header of the panel has a combobox with search to switch the scenario
-  (paths, scenarios by actor, "Main" on top; the same list is in
-  "Scenarios (N)"). `?view=sequence` opens the map with the panel full screen.
-  The panel has two views, **Sheet** (the default) and **Sequence**; the choice
-  is remembered (see "Scenario sheet" below).
-- **The side card** on the right (system, module, function, step) hides with
-  the panel button in the header, the button in its corner, `]` or Cmd+. —
-  the map, the views and the scenario panel take the freed width; a selection
-  then only puts a dot on the button. Drag its left edge to resize it
-  (double-click resets); both are remembered.
-- **API** lists every endpoint (HTTP, gRPC, WebSocket, tasks, CLI) grouped by
-  service, with filters by kind and access and a search. The card shows the
-  request and response types, the function, the scenario to play and the tables
-  the endpoint reaches through its calls; a table opens in the Data view.
-- **Data** shows the schema as an ER diagram (tables, fields, foreign keys), a
-  table card (who reads and changes it, which endpoints reach it) and an
-  endpoints x tables matrix. An endpoint in the card opens in the API view.
-  While a scenario plays, the tables the current step touches are marked.
-- **Statuses** draws the state machines found in the code (status constants and
-  enums, transitions from assignments, `UpdateStatusIfX(...)` calls and SQL,
-  plus `arch:state` lines); the transition of the current step lights up.
+The interface is bilingual (English and Russian): it follows the browser
+language, `?lang=en` / `?lang=ru` force it, ⌘K → Language switches it. Light and
+dark themes: ⌘K → Theme, `?theme=dark`. `?view=api|data|status` opens a view.
 
-Search (`/` or Ctrl/Cmd+K) finds functions, modules and files; the Lists
-drop-down holds modules by layer, all functions and the branch changes.
-
-![API view on spring-petclinic](docs/img/api-petclinic.png)
-*API: endpoints of [spring-petclinic](https://github.com/spring-projects/spring-petclinic) by controller, the card on the right.*
+The scenario sheet, the sequence panel, Walk and the Edit mode (below) are kept
+in the sources but are not part of the current page.
 
 ![Data view on spring-petclinic](docs/img/data-petclinic.png)
-*Data: the schema of spring-petclinic with the selected table and its links.*
-
-![Sequence panel on the map of ripgrep](docs/img/sequence-dock-ripgrep.png)
-*The sequence panel at the bottom of the map of [ripgrep](https://github.com/BurntSushi/ripgrep): the map and the diagram show the same step.*
-
-![Statuses view on django-oscar](docs/img/status-oscar.png)
-*Statuses: a state machine from `arch:state` lines on the same copy.*
-
-### Scenario sheet
-
-The whole scenario on one sheet, a flowchart from left to right: columns are
-the layers (actor -> entry points -> logic -> adapters -> external systems:
-databases, the queue, outside APIs -> outcome), the functions of the steps sit in
-frames of their modules, and every step is an arrow numbered in the order of the
-run. The steps of the run are the main path: bold arrows that run as straight as
-they can and end in the outcome; calls of external systems are thin and muted,
-and many calls into one system share a bus (one entry, the effects on its
-branches). A function visited again keeps one node and gets one more numbered
-arrow; a hand-off through the queue is two dashed arrows ("enqueue ..." / "from
-the queue"); the effect of a step (`Order -> payment_requested`, `UPDATE orders`)
-is a short plate at its number (the whole text on hover). Branches (`arch:on`,
-`alt`) are folded into stubs under the fork node — `5b · QR expired ✕`,
-`5a · paid -> Send to the POS ↪`, three at most and then "N more"; a click
-unfolds a branch (its outcome joins the outcome column), another click folds
-it, and playing a variant unfolds the branch it ends in.
-Planned steps (`step plan "..." in <module>`) are dashed nodes in the frame of
-their module and play like the others.
-
-- **Levels**, in step with the map: functions (full), modules (a frame folds into
-  a node, arrows list their steps: `3–5`), system (actor, service, external
-  systems). A level change redraws the sheet in place: nodes move from where
-  they were.
-- **Playing** moves nothing: the current arrow and node are lit, a dot runs
-  along the arrow, past steps stay bright, future ones are dimmed. A path shows
-  its flows one after another on the same sheet; the strip above lists them
-  (`1–3 Book a visit ▸ 4–5 Remind the owner`), a click jumps to a flow.
-- **Walk** builds the sheet from the trace and fans out every outgoing arrow of
-  the current function (calls, queue, external systems) with its number; a click
-  takes it, the sheet grows by a node without jumping, `←` steps back.
-- The sheet is fitted to the panel (never below a readable size; then drag or
-  scroll it); pinch or Cmd/Ctrl+wheel zooms it and changes the level.
-
-Columns, frames and arrows are laid out by archmap itself (no libraries): items
-are ordered by the median of their neighbours over several sweeps, then a short
-local search over the real routes (swaps in a column, the side of a loop, the
-order of the tracks) keeps the layout with the fewest crossings and the
-straightest main path; arrows are orthogonal, turn in the gaps between columns
-on separate tracks and cross other columns only between frames; numbers and
-labels are placed where they cover nothing and pushed apart until no two overlap.
-
-![Scenario sheet on spring-petclinic](docs/img/sheet-petclinic.png)
-*A path of [spring-petclinic](https://github.com/spring-projects/spring-petclinic) on the sheet: three coded steps, then two planned ones (dashed), the fourth playing.*
-
-### Nested scenario
-
-The sequence panel has the same four levels as the map, and by default follows
-the map's level ("link with the map"; switching either one moves the other):
-
-- **System**: the actor, the service as one participant, the queue and external
-  systems. Only the hand-offs between them are messages (entry -> service ->
-  Kaspi -> ... -> reply); the steps inside the service fold into one message
-  labelled with its first step and the number of folded steps.
-- **Modules**: modules by layer, the queue and externals; one message per change
-  of module.
-- **Functions**: one message per call, for the whole scenario or for one module
-  (the rest stays folded into modules).
-- **Code**: as functions, with the line of the caller that makes each call.
-
-The messages come from the steps of the flow (with `arch:step` labels: on the
-function level per step, on the upper levels the label of the first step of the
-fold) and from the call graph between them: the caller of a step is the previous
-step or a frame below it on the call stack that reaches it. **Enter** on a message
-(or a double-click) opens it in a frame one level deeper; at the function level
-the frame holds the chain of calls from the caller to the step (up to 8 hops)
-with the call lines. Frames nest; **Leave** folds one. A pinch or Cmd/Ctrl+wheel over
-the diagram zooms it (a plain two-finger scroll or wheel just scrolls) and, past the same thresholds as the map's auto-dive, moves
-the whole diagram a level in or out with the current step kept in view. The
-current step is lit on every level (on the system level, the message that holds
-it); branches and queue pauses are drawn on every level. Works the same for
-annotated flows and for automatic scenarios.
-
-![Nested scenario on ripgrep](docs/img/sequence-full-ripgrep.png)
-*A scenario of [ripgrep](https://github.com/BurntSushi/ripgrep) in the full-screen panel, function level, with a message opened into a frame.*
+*Data: the schema of spring-petclinic with the selected table and its links (older screenshot).*
 
 Endpoints are found from routers (Go: gin, chi, echo and the like), decorators
 (FastAPI, Flask, Express-style), Django/DRF urls, NestJS, Spring annotations,
@@ -274,7 +187,7 @@ The automatic scenarios follow the call graph. To tell the story yourself, mark
 functions with `arch:` lines in the comment right above them (a decorator or
 annotation line between the comment and the declaration is fine). It works in
 every supported language; the comment style is the language's own. The markup
-feeds the scenarios and the sequence panel (flows, steps, branches) and the Statuses view
+feeds the scenarios (flows, steps, branches) and the Statuses view
 (`arch:state`); `archmap lint` checks it. The screenshots above of django-oscar
 come from a temporary copy with exactly this kind of markup, for example:
 
@@ -381,18 +294,14 @@ through all the steps. The name is built from the condition (`paid → to the ca
 has at most 12 variants (outcomes with the same end are folded together first). A flow without
 `arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
 
-**In the viewer** the scenario list (the "Scenarios (N)" button, the combobox in the header of the
-sequence panel, the system panel) has three levels: "Through paths" (name, actor, the chain of flows with
-an icon for each transition: condition, queue, written by hand), "Scenarios" (grouped by actor
-as before), and under a scenario its foldable "Variants" (the main path first, `one of: …` for
-folded outcomes, "…N more"). Search looks through all three.
+**In the viewer** through paths and scenarios are found with ⌘K (group "Scenarios"; paths are
+marked "through path").
 
-- Playing a path runs its flows one after another; between two flows a plate says how the next
-  one starts ("→ through the queue", "→ on condition …", "next the client calls …"), and the map
-  and the sequence panel show the overall progress ("flow 2/5 · step 3/7") and a label with the
-  name of the path.
-- Playing a variant takes its forks by itself. At the end a plate shows the outcome, or offers
-  "Go to the scenario" when the variant ends in another flow.
+- Stepping through a path goes over its flows one after another; between two flows a plate in the
+  scenario bar says how the next one starts ("→ through the queue", "→ on condition …", "next the
+  client calls …"), and the bar shows the overall progress ("flow 2/5 · step 3/7").
+- A variant (`variant:<id>` runs, kept in the code) takes its forks by itself. At the end a plate
+  shows the outcome, or offers "Go to the scenario" when the variant ends in another flow.
 
 ### Lint
 
@@ -459,6 +368,9 @@ Full grammar, the JSON model and the operations: [docs/spec.md](docs/spec.md).
 
 ### Edit mode
 
+> Not in the current minimal interface: the code stays (`views/editor.js`) and the
+> `/spec` endpoints of `serve` still work; the page has no way to open it.
+
 Under `archmap serve` the **Edit** button on the toolbar turns the map into a
 drawing board (a static `map` file has no server and hides it). Everything you
 draw is an operation the server applies to the `.arch` file, so the file stays
@@ -480,6 +392,8 @@ in the canonical form and `git diff` shows exactly what you changed.
   edit in the Text tab resets the history.
 
 ### Walk mode
+
+> Not in the current minimal interface (the code stays in `views/walk.js`).
 
 **Walk** answers "what happens next?" on real code. Pick a function (or start
 from a scenario), then choose the next call from the list of calls it makes: the
@@ -518,17 +432,15 @@ viewer as `map`, but it follows the repo:
   selection, camera (position and zoom of each level), opened module groups, the
   changed-only filter, the scenario and the playback position, the scroll of the
   right card. Functions that are new or whose body (or change status) changed,
-  and their modules, flash on the map, in the right card, in the code and in the
-  lists. The header shows live (with time, rebuild time and the number of
-  changed functions), rebuilding, or the error text; it reconnects by itself.
+  and their modules, flash on the map, in the right card and in the code. The
+  dot next to the project name is green (live; the tooltip has the time, the
+  rebuild time and the number of changed functions), yellow (rebuilding) or red
+  (the error in the tooltip); it reconnects by itself.
   Function code is read from `/src` on demand (not embedded); the code of a
   changed function is re-read.
-- All four tabs and the sequence panel follow the update (the endpoint list, the ER
-  diagram, the state machines and the diagram are rebuilt from the new facts; the
-  panel keeps its place, size and the open frames of the diagram).
-- Search (`/` or Ctrl/Cmd+K) finds functions, modules and files; Enter opens the
-  function on the map, Shift+Enter in its code. The Lists drop-down holds
-  modules by layer, all functions with a filter, and the branch changes.
+- Every view follows the update (the endpoint list, the ER diagram and the state
+  machines are rebuilt from the new facts).
+- ⌘K works as in a static file (see [Interface](#interface)).
 - Only loopback addresses are accepted for `--addr`; requests with a foreign
   `Host` header are rejected, and so are all methods but GET/HEAD, except
   `POST /spec/ops` and `PUT /spec/file` (JSON only, same origin, files only
