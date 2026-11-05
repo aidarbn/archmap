@@ -43,7 +43,7 @@ function build() {
   const T = {}, acc = {};
   const mk = (n, tb, virtual) => {
     const fields = tb.fields || [], refs = (tb.refs || []);
-    T[n] = { name: n, fields, refs, source: tb.source, virtual, fk: new Set(refs.map((r) => r.field)), in: [] };
+    T[n] = { name: n, fields, refs, source: tb.source, desc: tb.desc || '', virtual, fk: new Set(refs.map((r) => r.field)), in: [] };
   };
   Object.keys(D.tables).forEach((n) => mk(n, D.tables[n], false));
   D.fids.forEach((fid) => (D.fns[fid].data || []).forEach((a) => {
@@ -211,6 +211,7 @@ function renderER() {
   X.names.forEach((n) => {
     const tb = X.T[n], p = LY.pos[n], s = shown(tb);
     const g = svg('g', { class: 'tb n' + (tb.virtual ? ' ext' : ''), 'data-id': n }, gc);
+    svg('title', {}, g, n + (tb.desc ? '\n' + tb.desc : ''));
     svg('rect', { x: p.x, y: p.y, width: p.w, height: p.h, rx: 10, class: 'card' }, g);
     svg('path', { d: `M${p.x},${p.y + HH} v-${HH - 10} a10,10 0 0 1 10,-10 h${p.w - 20} a10,10 0 0 1 10,10 v${HH - 10} z`, class: 'hd' }, g);
     svg('text', { x: p.x + 12, y: p.y + 19, class: 'nm' }, g, tshort(n, 27));
@@ -218,7 +219,8 @@ function renderER() {
     const rows = {};
     s.list.forEach((f, i) => {
       const y = p.y + HH + i * RH + 2;
-      const fg = svg('g', { class: 'fld' }, g);
+      const fg = svg('g', { class: 'fld' + (f.desc ? ' has-desc' : '') }, g);
+      svg('title', {}, fg, f.name + ' ' + (f.type || '') + (f.desc ? '\n' + f.desc : ''));
       rows[f.name] = svg('rect', { x: p.x + 4, y, width: p.w - 8, height: RH, rx: 4, class: 'row' }, fg);
       const tx = svg('text', { x: p.x + 12, y: y + 12.5 }, fg);
       svg('tspan', { class: 'fn' }, tx, tshort(f.name, 20));
@@ -350,68 +352,24 @@ function paintMatrix() {
   if (c) { /* reserved */ }
 }
 
-/* ---------- tabs and toolbar ---------- */
-function ctl(tag, attrs, parent, html) { return h(tag, attrs, parent, html); }
+/* ---------- the bar ---------- */
+// The minimal Data view is the schema only: tables are found with ⌘K, the zoom is the wheel / pinch. The bar holds
+// just the effect badges of the current scenario step. The endpoints × tables matrix stays in the code (S.tab = 'mx'
+// is not reachable from the interface).
 function buildToolbar() {
   const tb = V.bar; tb.innerHTML = '';
-  const st = ctl('div', { class: 'subtabs' }, tb);
-  [['er', tr('dvEr')], ['mx', tr('dvMx')]].forEach(([k, name]) => {
-    const b = ctl('button', { 'aria-selected': S.tab === k }, st, esc(name));
-    b.onclick = () => { S.tab = k; syncTab(); };
-  });
-  const er = V.erCtl = ctl('div', { class: 'dv-ctl' }, tb);
-  const inp = ctl('input', { type: 'search', class: 'dv-in', placeholder: tr('dvSearchT'), value: S.q }, er);
-  inp.oninput = () => { S.q = inp.value; paintER(); };
-  inp.onkeydown = (ev) => {
-    if (ev.key !== 'Enter' || !V.er) return;
-    const q = S.q.trim().toLowerCase(), n = Object.keys(V.er.cards).find((x) => q && x.toLowerCase().includes(q));
-    if (n) { A.select({ t: 'table', id: n }); focusTable(n); }
-  };
-  const gb = ctl('button', { class: 'pbtn', 'aria-pressed': !!S.groups }, er, esc(tr('dvGroups')));
-  gb.onclick = () => { S.groups = !S.groups; S.grp = ''; renderER(); buildToolbar(); };
-  if (S.groups && V.er) {
-    const sel = ctl('select', { class: 'dv-in' }, er, `<option value="">${esc(tr('dvAllGroups'))}</option>` + V.er.boxes.map((b) => `<option value="${esc(b.key)}|${b.other ? 1 : 0}">${esc(b.other ? tr('dvOther') : b.key)} (${b.n})</option>`).join(''));
-    sel.value = S.grp;
-    sel.onchange = () => {
-      S.grp = sel.value;
-      if (!sel.value) return fitER();
-      const b = V.er.boxes.find((x) => x.key + '|' + (x.other ? 1 : 0) === sel.value);
-      if (b) V.er.cam.animTo(b, 30, 600);
-    };
-  }
-  [['+', 0.7], ['−', 1.4]].forEach(([l, f]) => { const b = ctl('button', { class: 'iconbtn' }, er, l); b.onclick = () => V.er && V.er.cam.zoomAt(.5, .5, f); });
-  const fb = ctl('button', { class: 'iconbtn', title: tr('dvFit') }, er, '⤢'); fb.onclick = fitER;
-  const mx = V.mxCtl = ctl('div', { class: 'dv-ctl' }, tb);
-  const re = () => { S.rows = 250; renderMatrix(); };
-  const i1 = ctl('input', { type: 'search', class: 'dv-in', placeholder: tr('dvSearchE'), value: S.mq }, mx); i1.oninput = () => { S.mq = i1.value; re(); };
-  const i2 = ctl('input', { type: 'search', class: 'dv-in', placeholder: tr('dvSearchC'), value: S.cq }, mx); i2.oninput = () => { S.cq = i2.value; re(); };
-  const kinds = Array.from(new Set(D.endpoints.map((e) => e.kind).filter(Boolean)));
-  const sel = (opts, cur, fn) => { const s = ctl('select', { class: 'dv-in' }, mx, opts.map((o, i) => `<option value="${i}">${esc(o)}</option>`).join('')); s.value = cur; s.onchange = () => { fn(+s.value); re(); }; };
-  if (kinds.length > 1) { const s = ctl('select', { class: 'dv-in' }, mx, `<option value="">${esc(tr('dvAllKinds'))}</option>` + kinds.map((k) => `<option>${esc(k)}</option>`).join('')); s.value = S.kind; s.onchange = () => { S.kind = s.value; re(); }; }
-  sel(tr('dvMode'), S.mode, (v) => (S.mode = v));
-  sel(tr('dvSort'), S.sort, (v) => (S.sort = v));
-  sel(tr('dvColSort'), S.csort, (v) => (S.csort = v));
-  V.mxInfo = ctl('span', { class: 'dv-info' }, mx);
-  V.badge = ctl('span', { class: 'dv-badge' }, tb);
-  syncTab(true);
+  V.badge = h('span', { class: 'dv-badge' }, tb);
   paintBadge(A.play.current ? safeCur() : null);
 }
-function syncTab(skipBar) {
+function syncTab() {
   if (!V) return;
-  V.erBox.style.display = S.tab === 'er' ? '' : 'none';
-  V.mxWrap.style.display = S.tab === 'mx' ? '' : 'none';
-  V.erCtl.style.display = S.tab === 'er' ? '' : 'none';
-  V.mxCtl.style.display = S.tab === 'mx' ? '' : 'none';
-  if (!skipBar) V.bar.querySelectorAll('.subtabs button').forEach((b, i) => b.setAttribute('aria-selected', (i === 0) === (S.tab === 'er')));
-  if (S.tab === 'mx' && !V.mxDone) { V.mxDone = true; renderMatrix(); }
-  if (S.tab === 'er') requestAnimationFrame(() => { if (V.er && !V.fitted && V.erBox.offsetWidth) { V.fitted = true; fitER(); } });
+  requestAnimationFrame(() => { if (V.er && !V.fitted && V.erBox.offsetWidth) { V.fitted = true; fitER(); } });
 }
 function rebuildAll() {
   if (!V) return;
-  V.mxDone = false; V.fitted = false;
+  V.fitted = false;
   buildToolbar();
   renderER();
-  if (S.tab === 'mx') { V.mxDone = true; renderMatrix(); }
 }
 const safeCur = () => { try { return A.play.current(); } catch (e) { return null; } };
 
@@ -480,11 +438,17 @@ A.registerPanel('table', (sel) => {
   if (!tb) return `<h2>${esc(sel.id)}</h2>`;
   const accs = X.acc[tb.name] || [];
   let hh = `<div class="kicker"><span class="chip">${esc(tr('dvSource')[tb.source] || tb.source || 'table')}</span>${tb.virtual ? `<span class="chip">${esc(tr('dvVirtual'))}</span>` : ''}</div><h2 class="mono">${esc(tb.name)}</h2>`;
+  if (tb.desc) hh += `<p class="lead dv-tdesc">${esc(tb.desc)}</p>`;
   if (tb.fields.length) {
-    hh += `<h3>${esc(tr('dvFields'))} (${tb.fields.length})</h3><table class="touch dv-fields">` + tb.fields.map((f) => {
-      const r = tb.refs.find((x) => x.field === f.name);
-      return `<tr><td class="fl"><b>${esc(f.name)}</b></td><td class="fl">${esc(f.type || '')}</td><td>${pkOf(f) ? '<span class="op-b R">PK</span>' : ''}${r ? `<span class="chip dv-link" data-tbl="${esc(r.table)}">→ ${esc(r.table)}</span>` : ''}</td></tr>`;
-    }).join('') + '</table>';
+    // a field: name, type, NULL / NOT NULL (SQL sources only), PK, the table it points to; its description under it
+    const sql = tb.source === 'migration' || tb.source === 'sqlc';
+    hh += `<h3>${esc(tr('dvFields'))} (${tb.fields.length})</h3><div class="dv-fields">` + tb.fields.map((f) => {
+      const r = tb.refs.find((x) => x.field === f.name), pk = pkOf(f);
+      return `<div class="dv-f"><div class="dv-fh"><b class="mono">${esc(f.name)}</b><span class="mono dv-ft">${esc(f.type || '')}</span>` +
+        `${pk ? '<span class="op-b R">PK</span>' : sql ? `<span class="dv-nl">${f.notNull ? 'NOT NULL' : 'NULL'}</span>` : ''}` +
+        `${r ? `<span class="chip dv-link" data-tbl="${esc(r.table)}">→ ${esc(r.table)}</span>` : ''}</div>` +
+        `${f.desc ? `<div class="dv-fd">${esc(f.desc)}</div>` : ''}</div>`;
+    }).join('') + '</div>';
   }
   if (tb.refs.length) hh += `<h3>${esc(tr('dvRefsOut'))}</h3><div class="tbl-pills">` + Array.from(new Set(tb.refs.map((r) => r.table))).map(chipT).join('') + '</div>';
   if (tb.in.length) hh += `<h3>${esc(tr('dvRefsIn'))}</h3><div class="tbl-pills">` + Array.from(new Set(tb.in.map((r) => r.table))).map(chipT).join('') + '</div>';
@@ -499,13 +463,13 @@ A.registerPanel('table', (sel) => {
       const w = (l) => l.filter((o) => Array.from(o.ops).some(isW)).length;
       return w(b[1]) - w(a[1]) || b[1].length - a[1].length;
     });
-    let left = sel.all ? 1e9 : 40;
+    let left = sel.all ? 1e9 : 10;
     mods.forEach(([m, list]) => {
       if (left <= 0) return;
       const part = list.slice(0, left); left -= part.length;
       hh += `<div class="dv-mod"><span class="chip" data-mod="${esc(m)}" style="cursor:pointer">${esc(A.cut(A.short(m), 40))}</span></div><table class="touch">${part.map(fnRowHTML).join('')}</table>`;
     });
-    if (!sel.all && rows.length > 40) hh += `<div class="btnrow"><button class="pbtn" data-all="1">${esc(tr('dvShowAll', rows.length))}</button></div>`;
+    if (!sel.all && rows.length > 10) hh += `<div class="btnrow"><button class="pbtn" data-all="1">${esc(tr('dvShowAll', rows.length))}</button></div>`;
   }
   // endpoints
   allEps();
@@ -513,11 +477,11 @@ A.registerPanel('table', (sel) => {
   hh += `<h3>${esc(tr('dvEps'))} (${eps.length})</h3>`;
   if (!eps.length) hh += `<p class="lead">${esc(tr('dvNoEps'))}</p>`;
   else {
-    hh += '<ul class="rel-list">' + eps.slice(0, sel.all ? 1e9 : 30).map((o) => {
+    hh += '<ul class="rel-list">' + eps.slice(0, sel.all ? 1e9 : 10).map((o) => {
       const e = D.endpoints[o.i];
       return `<li data-api="${o.i}" title="${esc(e.path || '')}"><span class="op-b ${o.w ? 'U' : 'R'}">${o.r && o.w ? 'RW' : o.w ? 'W' : 'R'}</span><span class="fn">${esc(epName(e))}</span><span class="md">${esc(e.service || e.kind || '')}</span></li>`;
     }).join('') + '</ul>';
-    if (!sel.all && eps.length > 30) hh += `<div class="btnrow"><button class="pbtn" data-all="1">${esc(tr('dvShowAll', eps.length))}</button></div>`;
+    if (!sel.all && eps.length > 10) hh += `<div class="btnrow"><button class="pbtn" data-all="1">${esc(tr('dvShowAll', eps.length))}</button></div>`;
   }
   return { html: hh, after: (p) => wirePanel(p) };
 });
@@ -543,30 +507,13 @@ A.registerView({
     el.classList.add('dv');
     const bar = h('div', { class: 'dv-bar' }, el);
     const erBox = h('div', { class: 'dv-er-box' }, el);
-    const mxWrap = h('div', { class: 'dv-mx-wrap' }, el);
-    const mxBox = h('div', { class: 'dv-mx' }, mxWrap);
-    h('div', { class: 'loc dv-legend' }, mxWrap, esc(tr('dvLegend')));
-    V = { el, bar, erBox, mxWrap, mxBox, er: null, mxDone: false, fitted: false };
-    mxBox.addEventListener('click', (ev) => {
-      const more = ev.target.closest('[data-more]');
-      if (more) { S.rows += 250; renderMatrix(); return; }
-      const td = ev.target.closest('td[data-t]');
-      if (td) { const i = +td.parentElement.dataset.i; S.mCell = { ep: i, table: td.dataset.t }; A.select({ t: 'cell', ep: i, table: td.dataset.t }); return; }
-      const rh = ev.target.closest('th.rh');
-      if (rh) { goApi(+rh.parentElement.dataset.i); return; }
-      const ch = ev.target.closest('thead th[data-t]');
-      if (ch) A.select({ t: 'table', id: ch.dataset.t });
-    });
-    mxBox.addEventListener('mouseover', (ev) => {
-      const td = ev.target.closest('td'); const hov = mxBox.querySelector('thead th.hovc'); if (hov) hov.classList.remove('hovc');
-      if (td && td.dataset.t) { const th = mxBox.querySelector(`thead th[data-t="${CSS.escape(td.dataset.t)}"]`); if (th) th.classList.add('hovc'); }
-    });
+    V = { el, bar, erBox, er: null, fitted: false };
     buildToolbar();
     renderER();
     if (HOT === null) { const c = safeCur(); if (c) onStep(c); }
     if (A.apiTarget) { const p = A.apiTarget; A.apiTarget = null; setTimeout(() => openTarget(p), 0); }
   },
-  show() { if (V) { syncTab(); if (S.tab === 'er') requestAnimationFrame(() => { if (V.er && !V.fitted) { V.fitted = true; fitER(); } }); A.renderPanel(); } },
+  show() { if (V) { syncTab(); A.renderPanel(); } },
   onStep,
   onSelect() { paintER(); paintMatrix(); },
   onLang() { rebuildAll(); },
