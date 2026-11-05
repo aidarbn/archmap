@@ -162,7 +162,7 @@ function init() {
   if (!DATA || !DATA.facts) { $('#pane').innerHTML = `<p class="lead">${esc(t('noData'))}</p>`; return; }
   indexData(DATA);
   renderHeader();
-  $('#brand').onclick = () => { if (SOLO) { if (state.run) resetRun(); return; } if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); else setSel(null); };
+  $('#brand').onclick = () => { if (state.run) { closeRun(); return; } if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); else setSel(null); };
   $('#zIn').onclick = () => curCam() && curCam().zoomAt(.5, .5, 0.8);
   $('#zOut').onclick = () => curCam() && curCam().zoomAt(.5, .5, 1.25);
   $('#zFit').onclick = fitCur;
@@ -170,7 +170,7 @@ function init() {
   $('#pPrev').onclick = () => doStep(-1);
   $('#pOv').onclick = () => resetRun();
   $('#pClose').onclick = () => closeRun();
-  setupSide(); setupMenu(); setupZoom(); setupSidePanel();
+  setupSide(); setupMenu(); setupZoom(); setupSidePanel(); setupChrome();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -184,10 +184,10 @@ function init() {
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
   rebuildMap();
   renderPlayer(); // no scenario opens by itself: the run bar stays hidden until the sidebar or a card opens one
-  setView(!SOLO && VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
+  const hk = hashRun(); // a scenario named in the hash (#flow= / #journey= …) opens on the canvas: a reload shows the same
+  setView(!hk && VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
-  // the scenario window: the run of the hash (a reload shows the same); the main window never plays one
-  if (SOLO) { const hk = hashRun(); if (hk) openRunAt(hk.key, hk.step); }
+  if (hk) openRunAt(hk.key, hk.step);
   if (D.live) { setupLive(); watchMarks(); }
 }
 

@@ -15,7 +15,7 @@ addI18n({
     jvAnyOf: (s) => 'одна из: ' + s, jvMore: (n) => '…ещё ' + n, jvFlowsN: (n, p) => n + ' ' + p(['сценарий', 'сценария', 'сценариев']),
     jvPath: 'Путь', jvVariant: 'Вариант', jvFlowOf: (a, b) => 'сценарий ' + a + '/' + b, jvStepOf: (a, b) => 'шаг ' + a + '/' + b,
     jvViaOn: (c) => (c ? '→ по условию «' + c + '»' : '→ по событию'), jvViaQueue: '→ через очередь',
-    jvViaDecl: (n) => 'дальше клиент вызывает ' + n, jvClient: 'дальше вызывает клиент', jvFork: 'Развилка', jvGo: 'Перейти в сценарий', jvGoTip: 'Продолжить проигрывание в сценарии, в который ведёт вариант',
+    jvViaDecl: (n) => 'дальше клиент вызывает ' + n, jvClient: 'дальше вызывает клиент', jvClientShort: 'клиент', jvFork: 'Развилка', jvGo: 'Перейти в сценарий', jvGoTip: 'Продолжить проигрывание в сценарии, в который ведёт вариант',
     jvIcOn: 'по условию (arch:on)', jvIcQueue: 'через очередь', jvIcDecl: 'порядок указан вручную', jvEnd: 'конец варианта',
   },
   en: {
@@ -23,7 +23,7 @@ addI18n({
     jvAnyOf: (s) => 'one of: ' + s, jvMore: (n) => '…' + n + ' more', jvFlowsN: (n, p) => n + ' ' + p(['scenario', 'scenarios']),
     jvPath: 'Path', jvVariant: 'Variant', jvFlowOf: (a, b) => 'flow ' + a + '/' + b, jvStepOf: (a, b) => 'step ' + a + '/' + b,
     jvViaOn: (c) => (c ? '→ on condition “' + c + '”' : '→ on an event'), jvViaQueue: '→ through the queue',
-    jvViaDecl: (n) => 'next the client calls ' + n, jvClient: 'next the client calls', jvFork: 'Fork', jvGo: 'Go to the scenario', jvGoTip: 'Continue the run in the scenario the variant leads to',
+    jvViaDecl: (n) => 'next the client calls ' + n, jvClient: 'next the client calls', jvClientShort: 'client', jvFork: 'Fork', jvGo: 'Go to the scenario', jvGoTip: 'Continue the run in the scenario the variant leads to',
     jvIcOn: 'on a condition (arch:on)', jvIcQueue: 'through the queue', jvIcDecl: 'order written by hand', jvEnd: 'end of the variant',
   },
 });
@@ -38,7 +38,11 @@ function jvJourney(id) { return jvJourneys().find((j) => j.id === id) || null; }
 // the order a path is played in: a walk over the links from the first flow (children in the order of j.flows)
 function jvOrder(j) {
   const pos = {}; (j.flows || []).forEach((id, i) => { pos[id] = i; });
-  const kids = {}; (j.links || []).forEach((l) => { (kids[l.from] = kids[l.from] || []).push(l); });
+  // a fork link ("on <cond>") that also has a queue hand-off between the same flows keeps its condition and is
+  // marked queue: true — the code does hand the next flow over, it is not a client call
+  const qd = new Set((j.links || []).filter((l) => l.via === 'queue').map((l) => l.from + '\0' + l.to));
+  const links = (j.links || []).map((l) => (l.via === 'on' && qd.has(l.from + '\0' + l.to) ? Object.assign({}, l, { queue: true }) : l));
+  const kids = {}; links.forEach((l) => { (kids[l.from] = kids[l.from] || []).push(l); });
   const seen = new Set(), out = [];
   const visit = (id, via) => {
     if (seen.has(id) || !D.flowById[id]) return;
@@ -47,7 +51,7 @@ function jvOrder(j) {
   };
   const ids = (j.flows || []).filter((id) => D.flowById[id]);
   if (ids.length) visit(ids[0], null);
-  ids.forEach((id) => visit(id, (j.links || []).find((l) => l.to === id) || null));
+  ids.forEach((id) => visit(id, links.find((l) => l.to === id) || null));
   return out;
 }
 function jvVariant(id) {
@@ -63,6 +67,7 @@ const jvIcons = {
   queue: '<svg class="jv-ic" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M1 3h6M1 6h6M1 9h6M8.5 4l2.3 2-2.3 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   declared: '<svg class="jv-ic" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M1 6h7M8 3.5 10.8 6 8 8.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
+jvIcons.client = jvIcons.declared; // "client": the order is written by hand, the client calls the next flow
 const jvIcon = (via) => `<span class="jv-lk" title="${esc({ on: t('jvIcOn'), queue: t('jvIcQueue') }[via] || t('jvIcDecl'))}">${jvIcons[via] || jvIcons.declared}</span>`;
 function jvChain(j) {
   const ord = jvOrder(j), MAX = 5;
