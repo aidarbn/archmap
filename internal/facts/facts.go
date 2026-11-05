@@ -203,6 +203,13 @@ type External struct {
 type StateMachine struct {
 	States      []string     `json:"states"`
 	Transitions []Transition `json:"transitions"`
+	// Doc is the first paragraph of the comment above the type or the block of
+	// its constants; Docs holds the comment of each state constant (by state).
+	Doc  string            `json:"doc,omitempty"`
+	Docs map[string]string `json:"docs,omitempty"`
+	// Final lists the states that the code itself calls final: the case list of
+	// a function named IsFinal / IsTerminal… that returns true for them.
+	Final []string `json:"final,omitempty"`
 }
 
 // Transition is a state change made by the function Fid. From is empty when the
@@ -215,6 +222,11 @@ type Transition struct {
 	Source string `json:"source"`
 	// Confirmed is set on a code transition that is also declared with arch:state.
 	Confirmed bool `json:"confirmed,omitempty"`
+	// Via is the setter Fid hands the status to (a function that writes the
+	// status it gets as a parameter: UpdateStatus(ctx, id, StatusPaid)); Insert
+	// marks the status of a new row (INSERT … VALUES (…, 'new')) — a creation.
+	Via    string `json:"via,omitempty"`
+	Insert bool   `json:"insert,omitempty"`
 	// On, Label and Drift come from the .arch specification (see internal/spec):
 	// the trigger and caption of the declared transition; Drift is
 	// "not_implemented" (Source "spec": declared, absent in the code) or

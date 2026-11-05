@@ -264,6 +264,7 @@ func TestGoTransitions(t *testing.T) {
 	}
 	want := []string{
 		"Cancel:new>canceled", "Cancel:paid>canceled", // switch case lists are sources
+		"Create:>new",       // &Order{Status: …}: born in that status, no source
 		"Pay:new>paid",      // != guard is the source
 		"Ship:paid>shipped", // ...IfPaid in the call name is the source
 		"Touch:new>paid",    // SQL SET/WHERE
@@ -421,5 +422,78 @@ func TestVendorOfSegmentAndEnvName(t *testing.T) {
 		if got := envAPIName(env); got != want {
 			t.Errorf("%s -> %q, want %q", env, got, want)
 		}
+	}
+}
+
+func TestGoStateDocsAndFinals(t *testing.T) {
+	cases := []struct {
+		name, src string
+		doc       string
+		docs      map[string]string
+		final     []string
+	}{
+		{"block doc, trailing comments, IsTerminal", `package app
+
+// Статусы заказа: что с ним произошло.
+//
+// Длинное пояснение, которое не берётся.
+const (
+	OrderStatusNew  = "new"  // Создан
+	// Оплачен клиентом
+	OrderStatusPaid = "paid"
+	OrderStatusGone = "gone" // Отменён
+)
+
+func IsTerminalOrderStatus(s string) bool {
+	switch s {
+	case OrderStatusGone:
+		return true
+	}
+	return false
+}
+
+func (r *Repo) Pay() { r.q.Exec("UPDATE orders SET status = 'paid' WHERE status = 'new'") }
+`, "Статусы заказа: что с ним произошло.", map[string]string{"new": "Создан", "paid": "Оплачен клиентом", "gone": "Отменён"}, []string{"gone"}},
+		{"type doc wins, method IsFinal", `package app
+
+// OrderStatus статус заказа
+type OrderStatus string
+
+const (
+	OrderStatusNew  OrderStatus = "new" // Новый
+	OrderStatusPaid OrderStatus = "paid"
+)
+
+func (s OrderStatus) IsFinal() bool {
+	switch s {
+	case OrderStatusPaid:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *Repo) Pay() { r.q.Exec("UPDATE orders SET status = 'paid' WHERE status = 'new'") }
+`, "OrderStatus статус заказа", map[string]string{"new": "Новый"}, []string{"paid"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := goFile(c.src)
+			i := strings.Index(f.Text, "func (r *Repo) Pay")
+			line := strings.Count(f.Text[:i], "\n") + 1
+			st := detectStates([]stFile{f}, []stFunc{{Fid: "Pay", File: f.Path, Start: line, End: line}}, nil)["OrderStatus"]
+			if st == nil {
+				t.Fatal("no OrderStatus machine")
+			}
+			if st.Doc != c.doc {
+				t.Errorf("doc %q, want %q", st.Doc, c.doc)
+			}
+			if !reflect.DeepEqual(st.Docs, c.docs) {
+				t.Errorf("docs %v, want %v", st.Docs, c.docs)
+			}
+			if !reflect.DeepEqual(st.Final, c.final) {
+				t.Errorf("final %v, want %v", st.Final, c.final)
+			}
+		})
 	}
 }
