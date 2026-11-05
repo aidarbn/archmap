@@ -9,8 +9,8 @@
  */
 
 addI18n({
-  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + '/' + n, closeRun: 'Закрыть сценарий, вернуться к карте', backToMap: 'Карта' },
-  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + '/' + n, closeRun: 'Close the scenario, back to the map', backToMap: 'Map' },
+  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + ' из ' + n, closeRun: 'Закрыть сценарий, вернуться к карте', backToMap: 'Карта' },
+  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + ' of ' + n, closeRun: 'Close the scenario, back to the map', backToMap: 'Map' },
 });
 
 /* ---------- runs ---------- */
@@ -124,6 +124,114 @@ function stepAt(i) {
   };
 }
 const curStep = () => (state.step >= 0 ? stepAt(state.step) : null);
+
+/* ---------- what a step does, from the code ----------
+ * The pill of the current leg and the tooltips of the numbers say what happens and what is passed, read from the
+ * code (not the step text of arch:step, that one is in the top bar and the inspector):
+ *   a call — the called function with the key arguments → its result: requestQR(Payment, KaspiDevice) → QRResult
+ *   a queue hand-off — → queue: CheckKaspiPaymentArgs; a client call — client → POST /orders/{id}/kaspi-qr
+ *   data — UPDATE orders; an outside system — → Kaspi: CreateQR; a status — Order: validated → payment_requested */
+addI18n({ ru: { actQueue: 'очередь', actClient: 'клиент' }, en: { actQueue: 'queue', actClient: 'client' } });
+// split s by sep at the top level (outside (), [], {}, <>)
+function splitTop(s, sep = ',') {
+  const out = []; let d = 0, cur = '';
+  for (const ch of s) {
+    if ('([{<'.includes(ch)) d++; else if (')]}>'.includes(ch)) d--;
+    if (ch === sep && d === 0) { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+// the text inside the parenthesis group that starts at i (s[i] === '('): [inner, index after ')']
+function parenAt(s, i) { let d = 0; for (let k = i; k < s.length; k++) { if (s[k] === '(') d++; else if (s[k] === ')' && --d === 0) return [s.slice(i + 1, k), k + 1]; } return [s.slice(i + 1), s.length]; }
+// params of a parameter list: [{n, t}] — Go (`a, b int64`, unnamed types), TS / Python / Kotlin / Swift (`a: T`)
+function paramList(inner, go) {
+  const items = splitTop(inner).filter(Boolean), out = [];
+  if (go) {
+    const named = items.some((x) => /^[\w]+\s+\S/.test(x));
+    let pend = [];
+    items.forEach((x) => {
+      if (!named) { out.push({ n: '', t: x }); return; }
+      const m = x.match(/^([\w]+)\s+(.+)$/);
+      if (!m) { pend.push(x); return; }
+      pend.concat(m[1]).forEach((n) => out.push({ n, t: m[2] })); pend = [];
+    });
+    return out;
+  }
+  items.forEach((x) => {
+    const m = x.replace(/=.*$/, '').match(/^(?:[@\w]+\s+)*?\*{0,2}([\w$]+)\??\s*:\s*(.+)$/);
+    if (m) out.push({ n: m[1], t: m[2].trim() }); else if (!/^(self|cls|this)$/.test(x)) out.push({ n: x.replace(/[=:].*$/, '').trim(), t: '' });
+  });
+  return out;
+}
+// a signature → {params: [{n, t}], res: [t]}; null when it cannot be read
+function sigParts(sig) {
+  if (!sig) return null;
+  const go = /^func\b/.test(sig);
+  let i = 0;
+  if (go) { i = 4; while (sig[i] === ' ') i++; if (sig[i] === '(') i = parenAt(sig, i)[1]; }
+  const p0 = sig.indexOf('(', i); if (p0 < 0) return null;
+  const [inner, after] = parenAt(sig, p0);
+  let rest = sig.slice(after).replace(/\{\s*$/, '').trim(), res = [];
+  if (go) { if (rest.startsWith('(')) res = paramList(parenAt(rest, 0)[0], true).map((x) => x.t); else if (rest) res = [rest]; }
+  else { const m = rest.match(/^(?:->|:)\s*(.+?)\s*(?:\{|=>|:)?$/); if (m) res = [m[1]]; }
+  return { params: paramList(inner, go), res };
+}
+// a type without packages and pointers: *tabletsv2.RequestKaspiQRForOrderRequest → RequestKaspiQRForOrderRequest
+// a queue job river.Job[XArgs] → XArgs
+const shortType = (tp) => String(tp).replace(/\*/g, '').replace(/\b[a-zA-Z_][\w]*\./g, '').replace(/^Job\[(.+)\]$/, '$1').trim();
+// generic method names read better with their type: CheckKaspiPaymentWorker.Work
+const GENERIC_FN = /^(Work|Handle|Run|Execute|Exec|Process|ServeHTTP|Call|Invoke|Do|Start|New|__call__|handle|run|execute|process|invoke)$/;
+const SKIP_T = /^(context\.Context|\*?slog\.Logger|\*?zap\.(Sugared)?Logger|\*?logrus\.\w+|\.\.\..*|\w*\.?Option|\*?http\.Request|http\.ResponseWriter|\*?sql\.Tx|pgx\.Tx)$/;
+const PRIM_T = /^(\*?u?int(8|16|32|64)?|string|bool|float(32|64)|byte|rune|any|interface\{\}|uuid\.UUID|time\.Time|time\.Duration|\[\]byte|number|str|int|float|boolean|String|Int|Long|Bool|Boolean|Double)$/;
+const SKIP_R = /^(error|void|None|Unit|Promise<void>)$/;
+// call text of a function: name(args) → result
+function callText(fid) {
+  const f = D.fns[fid]; if (!f) return fnInfo(fid).short || '';
+  const sp = sigParts(f.sig), nm = (f.cls && GENERIC_FN.test(f.name) ? f.cls + '.' : '') + (f.name || fnInfo(fid).short);
+  if (!sp) return nm + '()';
+  const args = sp.params.filter((p) => !SKIP_T.test(p.t.trim())).map((p) => (!p.t || (PRIM_T.test(p.t.trim()) && p.n) ? p.n : shortType(p.t))).filter(Boolean);
+  const res = sp.res.filter((r) => !SKIP_R.test(r.trim()) && !/^err\b/.test(r)).map(shortType);
+  return nm + '(' + args.join(', ') + ')' + (res.length ? ' → ' + res.join(', ') : '');
+}
+// the type a queue job carries: river.Job[CheckKaspiPaymentArgs] (or an Args parameter) → CheckKaspiPaymentArgs
+function jobType(fid) {
+  const f = D.fns[fid], sp = f && sigParts(f.sig); if (!sp) return null;
+  for (const p of sp.params) { const m = p.t.match(/Job\[(.+)\]/); if (m) return shortType(m[1]); if (/Args$/.test(shortType(p.t))) return shortType(p.t); }
+  return null;
+}
+// an endpoint, short: POST …/orders/{order_id}/kaspi-qr (the whole path in the tooltip)
+const epText = (fid, full) => {
+  const ep = (D.epByFid[fid] || [])[0]; if (!ep) return null;
+  let p = ep.path || (ep.service ? ep.service + '.' : '') + (ep.name || '');
+  if (!full && ep.path && p.length > 26) p = '…/' + p.split('/').filter(Boolean).slice(-2).join('/');
+  return ((ep.method || ep.kind || '') + ' ' + p).trim();
+};
+// stepAction(s) → {short, full}: what step s does and what it passes
+function stepAction(s) {
+  if (!s) return { short: '', full: '' };
+  if (s.planned) return { short: s.label, full: s.label };
+  const mainOf = (full) => (s.kind === 'async' ? '→ ' + t('actQueue') + ': ' + (jobType(s.fid) || callText(s.fid))
+    : s.kind === 'client' ? t('actClient') + ' → ' + (epText(s.fid, full) || callText(s.fid))
+      : s.kind === 'entry' && epText(s.fid) ? epText(s.fid, full) + (full ? ' → ' + callText(s.fid) : '')
+        : callText(s.fid));
+  const main = mainOf(false), mainFull = mainOf(true);
+  const more = [];
+  (s.data || []).forEach((a) => { const op = /^(read|select|get|find|list)/i.test(a.op || '') ? 'SELECT' : String(a.op || 'write').toUpperCase(); more.push(op + ' ' + a.table); });
+  const f = D.fns[s.fid];
+  (s.exts || []).forEach((x) => {
+    if (x.kind === 'db' || x.kind === 'queue') return;
+    const c = ((f && f.callees) || []).find((id) => D.fns[id] && (x.modules || []).includes(D.fns[id].module));
+    more.push('→ ' + x.name + (c ? ': ' + D.fns[c].name : ''));
+  });
+  const st = (s.states || [])[0];
+  if (st) more.push(st.entity.replace(/Status$/, '') + ': ' + (st.from ? st.from + ' → ' : '→ ') + st.to);
+  const uniq = Array.from(new Set(more));
+  let short = main;
+  for (const m of uniq) { if ((short + ' · ' + m).length > 46) break; short += ' · ' + m; }
+  return { short: cut(short, 46), full: [mainFull].concat(uniq).join('\n') };
+}
+const actionAt = (i) => stepAction(stepAt(i));
 // call stack up to step i: a callee is pushed, a return pops to its caller, an async hand-off starts anew
 function framesUpTo(i) {
   const L_ = runList(), out = [];
@@ -463,14 +571,23 @@ function drawPath() {
   // the number pills keep clear of each other, of the band and group titles and of the cards: each pill slides
   // along its leg to the spot that overlaps least (the current leg is placed first, so it keeps the middle)
   const taken = [], hard = pathObstacles(sc), soft = Object.keys(sc.nodes || {}).map((id) => pathRect(sc, id)).filter(Boolean);
-  const placePill = (v, w, h, fallback) => {
+  // ws: the weight of covering a card (a long signed pill keeps off the cards harder)
+  const placePill = (v, w, h, fallback, ws = 1) => {
     const len = v.getTotalLength ? v.getTotalLength() : 0;
     if (!len) return fallback;
     let best = null, bestS = Infinity;
+    // a long signed pill may also sit beside its leg (above, below, to either side) when the leg is short
+    const offs = [[0, 0]];
+    if (ws > 1) [1, 1.8].forEach((m) => { const dy = m * (h / 2 + 4); [0, w / 2 - 20, -(w / 2 - 20)].forEach((dx) => offs.push([dx, -dy], [dx, dy])); });
+    // and inside the part of the scene on screen
+    const vb = ws > 1 && sc.cam ? [sc.cam.vb] : null;
     [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88].forEach((f, k) => {
-      const p = v.getPointAtLength(len * f), r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
-      const s = overArea(r, taken) * 10 + overArea(r, hard) * 8 + overArea(r, soft) + k * 2;
-      if (s < bestS) { bestS = s; best = p; }
+      const q = v.getPointAtLength(len * f);
+      offs.forEach(([dx, dy], j) => {
+        const p = { x: q.x + dx, y: q.y + dy }, r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
+        const s = overArea(r, taken) * 10 + overArea(r, hard) * 8 + overArea(r, soft) * ws + k * 2 + j * 12 + (vb ? (w * h - overArea(r, vb)) * 8 : 0);
+        if (s < bestS) { bestS = s; best = p; }
+      });
     });
     taken.push({ x: best.x - w / 2, y: best.y - h / 2, w, h });
     return best;
@@ -478,7 +595,9 @@ function drawPath() {
   const drawn = [];
   // the number of a step that stays inside its node sits on the node's corner: keep the pills off it too
   const here0 = ov ? null : pathNode(lvl, cur);
-  if (here0 && !legs.some((l) => l.steps.includes(cur))) { const r = pathRect(sc, here0); if (r) taken.push({ x: r.x + r.w - 3 - 16 * zk, y: r.y - 16 * zk, w: 32 * zk, h: 32 * zk }); }
+  // its pill says what the step does too: "3 · validateOrderItems(Order)"
+  const inAct = here0 ? actionAt(cur).short : '', inTxt = String(cur + 1) + (inAct ? ' · ' + inAct : ''), inW = inAct ? inTxt.length * 6.9 + 18 : 26;
+  if (here0 && !legs.some((l) => l.steps.includes(cur))) { const r = pathRect(sc, here0); if (r) taken.push({ x: r.x + r.w - 16 * zk, y: r.y - 16 * zk, w: (inW + 6) * zk, h: 32 * zk }); }
   const seen = new Set();
   legs.sort((p, q) => order[stOf(q)] - order[stOf(p)]).forEach((l) => {
     const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
@@ -488,20 +607,24 @@ function drawPath() {
     let o = pv.legs.get(key); if (!o) { o = legEl(pv.gl); pv.legs.set(key, o); }
     seen.add(key);
     const d = hop(ra, rb, back ? 0.22 : cl ? 0.32 : 0.1); // a client leg bends away from the entry leg it may share ends with
-    setA(o.grp, 'class', 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : ''));
     setA(o.grp, 'display', null);
     const shown = ov ? Math.min(...l.steps) : st === 'cur' ? cur : st === 'done' ? Math.max(...l.steps.filter((i) => i <= cur)) : Math.min(...l.steps);
-    const tip = l.steps.map((i) => t('pathStep', i + 1, stepLabel(i))).join('\n');
+    // the tooltip: every step of the leg — what it does and what it passes (the code), then its text
+    const tip = l.steps.map((i) => stepTip(i)).join('\n\n');
     setA(o.v, 'd', d); setA(o.v, 'marker-end', st === 'next' ? 'url(#arrM)' : 'url(#arrA)');
     setA(o.hit, 'd', d); setT(o.hitT, tip);
-    const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 3 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
-    // a client call is signed short ("client"); the full "next the client calls" is in the tooltip
-    const big = st === 'cur', txt = (big ? String(cur + 1) : txt0) + (cl ? ' · ' + t('jvClientShort') : '');
-    const w = Math.max(big ? 26 : 20, txt.length * (cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + 10), h = big ? 26 : 20;
-    const mid = placePill(o.v, w * zk, h * zk, ctr(ra));
+    // several steps on one leg: "13…17" (the list is in the tooltip)
+    const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 2 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
+    // the current leg says what happens: "3 · requestQR(Payment) → QRResult"; a client call of another leg is
+    // signed short ("client")
+    const big = st === 'cur', act = big ? actionAt(cur).short : '', lbl = !!act;
+    const txt = big ? String(cur + 1) + (lbl ? ' · ' + act : cl ? ' · ' + t('jvClientShort') : '') : txt0 + (cl ? ' · ' + t('jvClientShort') : '');
+    const w = Math.max(big ? 26 : 20, txt.length * (lbl ? 6.9 : cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + (lbl ? 18 : 10)), h = big ? 26 : 20;
+    setA(o.grp, 'class', 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : '') + (lbl ? ' lbl' : ''));
+    const mid = placePill(o.v, w * zk, h * zk, ctr(ra), lbl ? 2 : 1);
     setA(o.num, 'transform', zoomAround(mid));
     setA(o.rect, 'x', mid.x - w / 2); setA(o.rect, 'y', mid.y - h / 2); setA(o.rect, 'width', w); setA(o.rect, 'height', h); setA(o.rect, 'rx', h / 2);
-    setA(o.text, 'x', mid.x); setA(o.text, 'y', mid.y + (big ? 5 : 4)); setT(o.text, txt);
+    setA(o.text, 'x', mid.x); setA(o.text, 'y', mid.y + (big && !lbl ? 5 : 4)); setT(o.text, txt);
     setT(o.numT, cl ? t('jvClient') + '\n' + tip : tip);
     o.go = st === 'cur' ? cur : shown;
     markNode(l.a, st === 'next' ? 'next' : 'done'); markNode(l.b, st);
@@ -527,13 +650,13 @@ function drawPath() {
     let o = pv.inside;
     if (!o) {
       const grp = S_('g', { class: 'pleg cur inside' }, pv.gi), num = S_('g', { class: 'pnum' }, grp);
-      o = pv.inside = { grp, num, rect: S_('rect', { width: 26, height: 26, rx: 13 }, num), text: S_('text', { 'text-anchor': 'middle' }, num, ' '), tt: S_('title', {}, grp, ' ') };
+      o = pv.inside = { grp, num, rect: S_('rect', { height: 26, rx: 13 }, num), text: S_('text', { 'text-anchor': 'middle' }, num, ' '), tt: S_('title', {}, grp, ' ') };
     }
-    setA(o.grp, 'display', null);
+    setA(o.grp, 'display', null); setA(o.grp, 'class', 'pleg cur inside' + (inAct ? ' lbl' : ''));
     setA(o.num, 'transform', zoomAround({ x: ir.x + ir.w - 3, y: ir.y }));
-    setA(o.rect, 'x', ir.x + ir.w - 16); setA(o.rect, 'y', ir.y - 13);
-    setA(o.text, 'x', ir.x + ir.w - 3); setA(o.text, 'y', ir.y + 5); setT(o.text, String(cur + 1));
-    setT(o.tt, t('pathStep', cur + 1, stepLabel(cur)));
+    setA(o.rect, 'x', ir.x + ir.w - 16); setA(o.rect, 'y', ir.y - 13); setA(o.rect, 'width', inW);
+    setA(o.text, 'x', ir.x + ir.w - 16 + inW / 2); setA(o.text, 'y', ir.y + (inAct ? 4 : 5)); setT(o.text, inTxt);
+    setT(o.tt, stepTip(cur));
   } else if (pv.inside) setA(pv.inside.grp, 'display', 'none');
   if (lvl === 0 && sc.nodes.svc) markNode('svc', ov ? 'done' : 'cur');
   drawBranches(sc, pv.gb, lvl, here, zoomAround, zk);
@@ -642,8 +765,11 @@ function renderPlayer() {
   $('#scName').textContent = r.name; $('#scName').title = r.name + (r.desc ? '\n' + r.desc : '');
   const ov = state.step < 0; // the overview: "Overview · N steps  Start →"
   $('#pOv').textContent = t('ovOverview'); $('#pOv').setAttribute('aria-pressed', String(ov)); $('#pOv').title = t('ovOverview') + ' (Home)';
-  $('#capNo').textContent = ov ? t('pkStepsN', list.length) : r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', state.step + 1, list.length);
-  $('#capNo').title = s ? s.label + (D.fns[s.fid] ? '\n' + fnInfo(s.fid).name : '') : list.length ? '' : t('noPlay');
+  // "Step 8 of 25 · <the step text>": a path is one story numbered through; its flow (the chapter) small in front
+  const cap = $('#capNo'), ch = s && r.fixed ? jvChapter() : '';
+  if (ov || !s) cap.textContent = t('pkStepsN', list.length);
+  else cap.innerHTML = (ch ? `<small class="ch">${esc(cut(ch, 30))} ·</small> ` : '') + esc(t('stepOf', state.step + 1, list.length)) + (s.label ? ` · <span class="sl">${esc(cut(s.label, 40))}</span>` : '');
+  cap.title = s ? (ch ? ch + '\n' : '') + s.label + '\n' + actionAt(state.step).full : list.length ? '' : t('noPlay');
   $('#pPrev').disabled = ov;
   $('#pStep').textContent = ov && list.length ? t('ovStart') + ' →' : '→';
   $('#pStep').classList.toggle('primary', ov && !!list.length);
@@ -663,6 +789,11 @@ function showPlate() {
   const c = $('#choice'); c.classList.add('on');
   H('span', { class: 'jv-plate ' + p.tone, title: p.text }, c, (p.kind ? jvIcon(p.kind) : '') + esc(cut(p.text, 60)));
   if (p.jump) { const b = H('button', { class: 'pbtn', title: t('jvGoTip') }, c, '↪ ' + esc(cut(t('jvGo'), 30))); b.onclick = () => jvJump(); }
+}
+// the tooltip of a step number: "Step k: <what it does>", the rest of what it does, then the step text
+function stepTip(i) {
+  const lines = actionAt(i).full.split('\n').filter(Boolean), lab = stepLabel(i);
+  return t('pathStep', i + 1, lines[0] || lab) + (lines.length > 1 ? '\n' + lines.slice(1).join('\n') : '') + (lab && lines.length && lab !== lines[0] ? '\n' + lab : '');
 }
 function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = state.run.segs[it.seg].flow; return (fl && fl.labels && fl.labels[it.fid]) || fnInfo(it.fid).name; }
 
@@ -710,7 +841,7 @@ function previewRun(key) {
 
 Object.assign(AM, {
   play: {
-    preview: previewRun,
+    preview: previewRun, action: stepAction,
     load: loadRun, open: openRun, close: closeRun, step: doStep, stepIn, stepOut, reset: resetRun, playFrom,
     go: (i) => { if (state.busy || !state.run) return; state.step = Math.max(0, Math.min(runList().length - 1, i)); trimSegs(); return replay(); },
     choose: (b) => takeBranch(b), branches: () => (atBranch() ? branchesHere() : null),

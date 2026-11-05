@@ -46,8 +46,8 @@
 .pf-in.stepping .pv-node:not(.cur):not(.done):not(.touch) { opacity: .45; }
 .pv-leg.done .ln { stroke: color-mix(in oklab, var(--accent) 40%, var(--edge)); }
 .pv-leg.cur .ln { stroke: var(--accent); stroke-width: 2.5; }
-.pv-leg.cur .pill { fill: var(--accent); stroke: var(--accent); }
-.pv-leg.cur .no { fill: var(--on-accent); }
+.pv-leg.cur .pill { fill: color-mix(in oklab, var(--accent-soft) 88%, var(--surface)); stroke: var(--accent); }
+.pv-leg.cur .no { fill: var(--accent-text); font-family: var(--mono); font-size: 10.5px; }
 .pf-in .pv-sub { font: 600 13px var(--mono); fill: var(--text-2); }
 
 /* state machines in a frame: the rules of views/status.css that its .sv-svg scopes */

@@ -142,10 +142,12 @@ function scenarioFrame(key, fr) {
         else { const x1 = a.x + NW, y1 = a.y + NH / 2, y2 = b.y + NH / 2, xr = x1 + 34; d = `M${x1},${y1} C${xr},${y1} ${xr},${y2} ${x1 + 2},${y2}`; mx = xr - 8; my = (y1 + y2) / 2; }
         const lg = sv('g', { class: 'pv-leg ' + l.kind }, gl);
         sv('path', { d, class: 'ln', 'marker-end': 'url(#arr)' }, lg);
-        const txt = l.steps.slice(0, 3).map((x) => x + 1).join(', ') + (l.steps.length > 3 ? '…' : ''), tw = txt.length * 6.4 + 12;
-        sv('rect', { x: mx - tw / 2, y: my - 9, width: tw, height: 18, rx: 9, class: 'pill' }, lg);
-        sv('text', { x: mx, y: my + 4, 'text-anchor': 'middle', class: 'no' }, lg, txt);
-        sv('title', null, lg, l.steps.map((x) => tr('pvStep') + ' ' + (x + 1) + ': ' + steps[x].label).join('\n'));
+        // several steps on one leg: "13…17", the list in the tooltip (what each step does, from the code)
+        const n1 = l.steps.map((x) => x + 1), txt = n1.length > 2 ? n1[0] + '…' + n1[n1.length - 1] : n1.join(', '), tw = txt.length * 6.4 + 12;
+        const pill = sv('rect', { x: mx - tw / 2, y: my - 9, width: tw, height: 18, rx: 9, class: 'pill' }, lg);
+        const no = sv('text', { x: mx, y: my + 4, 'text-anchor': 'middle', class: 'no' }, lg, txt);
+        sv('title', null, lg, l.steps.map((x) => tr('pvStep') + ' ' + (x + 1) + ': ' + (A.play.action(steps[x]).full.split('\n')[0] || steps[x].label) + '\n' + steps[x].label).join('\n\n'));
+        lg.pv = { pill, no, txt, tw, mx }; // paintAll signs the current leg with what its step does
         P_.legs[l.k] = lg;
       });
       nodes.forEach((n) => {
@@ -390,7 +392,9 @@ function drawFrame(f) {
 // the buttons of a scenario frame: Overview · ‹ k/N › (or "▶ Step through" on the overview)
 function drawPlayBar(f, g) {
   const bar = sv('g', { class: 'pf-bar' }, g), y = PAD - 4;
-  sv('text', { x: PAD, y: y + 19, class: 'pf-title' }, bar, A.cut(f.run ? f.run.name : f.refs[0], Math.floor((f.fw - 300) / 7.6)));
+  // the title: the scenario; while stepping — the chapter and the text of the current step
+  const tg = sv('g', {}, bar), title = sv('text', { x: PAD, y: y + 19, class: 'pf-title' }, tg, A.cut(f.run ? f.run.name : f.refs[0], Math.floor((f.fw - 300) / 7.6)));
+  const titleT = sv('title', null, tg, f.run ? f.run.name : f.refs[0]);
   const btn = (x, w, label, fn, cls) => {
     const b = sv('g', { class: 'pbtn-s' + (cls ? ' ' + cls : ''), role: 'button' }, bar);
     sv('rect', { x, y, width: w, height: 26, rx: 7 }, b);
@@ -401,6 +405,7 @@ function drawPlayBar(f, g) {
   };
   const R = f.fw - PAD;
   f.ui = {
+    title, titleT,
     next: btn(R - 30, 30, '›', () => stepFrame(f.i, 1)),
     no: btn(R - 100, 66, '', () => {}, 'ro'),
     prev: btn(R - 134, 30, '‹', () => stepFrame(f.i, -1)),
@@ -441,7 +446,14 @@ function paintAll() {
         const cur = on && (f.stepLegs[i] || []).includes(k), done = on && f.stepLegs.slice(0, i).some((ls) => ls.includes(k));
         pt.legs[k].classList.toggle('cur', !!cur); pt.legs[k].classList.toggle('done', !cur && !!done);
         const ln = pt.legs[k].querySelector('.ln'); if (ln) ln.setAttribute('marker-end', cur ? 'url(#arrA)' : 'url(#arr)');
+        signLeg(pt.legs[k], cur ? i : -1, cur ? step : null);
       });
+      if (f.ui && f.ui.title) {
+        const ch = on && f.run && f.run.segs.length > 1 && f.run.segs[step.seg] && f.run.segs[step.seg].flow ? f.run.segs[step.seg].flow.name + ' · ' : '';
+        const tt = on ? ch + step.label : f.run ? f.run.name : f.refs[0];
+        const tx = A.cut(tt, Math.floor((f.fw - 300) / 7.6)), tip = on ? ch + step.label + '\n' + A.play.action(step).full : tt;
+        [[f.ui.title, tx], [f.ui.titleT, tip]].forEach(([e, s]) => { const n = e.firstChild; if (n && n.nodeType === 3 && !n.nextSibling) { if (n.data !== s) n.data = s; } else e.textContent = s; });
+      }
       const svgEl = f.g.querySelector('.pf-in'); if (svgEl) svgEl.classList.toggle('stepping', !!on);
       paintBar(f, on ? i : -1);
     } else if (f.kind === 'states') {
@@ -459,6 +471,23 @@ function paintAll() {
   paintSel();
   if (A.renderPages) A.renderPages();
   const n = document.getElementById('hName'); if (n && A.state.view === 'page' && !A.state.run) n.textContent = label(null) || n.textContent;
+}
+// signLeg(lg, i, step): the current leg of a scenario frame says what its step does — "8 · requestQR(Payment)" —
+// when the pill is readable at the scale the frame is shown at; else only the number (the step text is in the frame
+// title). i < 0 — back to the plain step numbers.
+function signLeg(lg, i, step) {
+  const p = lg.pv; if (!p) return;
+  let txt = p.txt, tw = p.tw;
+  if (i >= 0 && step) {
+    const k = (p.pill.getBoundingClientRect().height || 0) / 18, act = A.play.action(step).short;
+    txt = String(i + 1) + (k >= 0.7 && act ? ' · ' + A.cut(act, 40) : '');
+    tw = txt.length * (txt.length > 4 ? 6.6 : 6.4) + 14;
+  }
+  const tn = p.no.firstChild; // the text node is kept: only its data changes
+  if (tn && tn.nodeType === 3) { if (tn.data !== txt) tn.data = txt; } else p.no.textContent = txt;
+  const x = String(p.mx - tw / 2), w = String(tw);
+  if (p.pill.getAttribute('x') !== x) p.pill.setAttribute('x', x);
+  if (p.pill.getAttribute('width') !== w) p.pill.setAttribute('width', w);
 }
 function paintBar(f, i) {
   const u = f.ui; if (!u) return;

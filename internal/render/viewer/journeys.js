@@ -13,7 +13,7 @@ addI18n({
   ru: {
     jvTitle: 'Сквозные пути', jvVariantsTip: 'Варианты сценария: развилки по условиям', jvMain: 'основной путь',
     jvAnyOf: (s) => 'одна из: ' + s, jvMore: (n) => '…ещё ' + n, jvFlowsN: (n, p) => n + ' ' + p(['сценарий', 'сценария', 'сценариев']),
-    jvPath: 'Путь', jvVariant: 'Вариант', jvFlowOf: (a, b) => 'сценарий ' + a + '/' + b, jvStepOf: (a, b) => 'шаг ' + a + '/' + b,
+    jvPath: 'Путь', jvVariant: 'Вариант', jvStepOf: (a, b) => 'шаг ' + a + ' из ' + b, jvStepsRange: (a, b) => (a === b ? 'шаг ' + a : 'шаги ' + a + '–' + b),
     jvViaOn: (c) => (c ? '→ по условию «' + c + '»' : '→ по событию'), jvViaQueue: '→ через очередь',
     jvViaDecl: (n) => 'дальше клиент вызывает ' + n, jvClient: 'дальше вызывает клиент', jvClientShort: 'клиент', jvFork: 'Развилка', jvGo: 'Перейти в сценарий', jvGoTip: 'Продолжить проигрывание в сценарии, в который ведёт вариант',
     jvIcOn: 'по условию (arch:on)', jvIcQueue: 'через очередь', jvIcDecl: 'порядок указан вручную', jvEnd: 'конец варианта',
@@ -21,7 +21,7 @@ addI18n({
   en: {
     jvTitle: 'Through paths', jvVariantsTip: 'Scenario variants: forks by conditions', jvMain: 'main path',
     jvAnyOf: (s) => 'one of: ' + s, jvMore: (n) => '…' + n + ' more', jvFlowsN: (n, p) => n + ' ' + p(['scenario', 'scenarios']),
-    jvPath: 'Path', jvVariant: 'Variant', jvFlowOf: (a, b) => 'flow ' + a + '/' + b, jvStepOf: (a, b) => 'step ' + a + '/' + b,
+    jvPath: 'Path', jvVariant: 'Variant', jvStepOf: (a, b) => 'step ' + a + ' of ' + b, jvStepsRange: (a, b) => (a === b ? 'step ' + a : 'steps ' + a + '–' + b),
     jvViaOn: (c) => (c ? '→ on condition “' + c + '”' : '→ on an event'), jvViaQueue: '→ through the queue',
     jvViaDecl: (n) => 'next the client calls ' + n, jvClient: 'next the client calls', jvClientShort: 'client', jvFork: 'Fork', jvGo: 'Go to the scenario', jvGoTip: 'Continue the run in the scenario the variant leads to',
     jvIcOn: 'on a condition (arch:on)', jvIcQueue: 'through the queue', jvIcDecl: 'order written by hand', jvEnd: 'end of the variant',
@@ -171,13 +171,23 @@ async function jvJump() {
 }
 
 /* ---------- progress and label ---------- */
+// A path is one story: its steps are numbered through the whole path ("Step 8 of 25"), the flow a step is in is
+// only its chapter, named small in front. Never "flow k/N · step k/N".
+function jvChapter() {
+  const r = state.run; if (!r || !r.fixed || r.segs.length < 2 || state.step < 0) return '';
+  const it = runList()[state.step], fl = it && r.segs[it.seg].flow;
+  return fl ? fl.name : '';
+}
 function jvProgress() {
   const r = state.run; if (!r || !r.fixed) return '';
-  const L_ = runList(), it = L_[Math.max(0, state.step)]; if (!it) return '';
-  const sg = r.segs[it.seg];
-  let k = 0; for (let i = 0; i < L_.length; i++) if (L_[i].seg === it.seg && i <= Math.max(0, state.step)) k++;
-  const step = state.step < 0 ? 0 : k;
-  return (r.segs.length > 1 ? t('jvFlowOf', it.seg + 1, r.segs.length) + ' · ' : '') + t('jvStepOf', step, sg.steps.length);
+  const n = runList().length, ch = jvChapter();
+  return (ch ? ch + ' · ' : '') + (state.step < 0 ? t('pkStepsN', n) : t('stepOf', state.step + 1, n));
+}
+// the steps of chapter (segment) si of the run: [first, last], 1-based
+function jvChapterRange(si) {
+  const r = state.run; let at = 0;
+  for (let i = 0; i < si; i++) at += r.segs[i].steps.length;
+  return [at + 1, at + r.segs[si].steps.length];
 }
 function jvTagHTML() {
   const r = state.run; if (!r || !r.fixed) return '';
@@ -190,4 +200,4 @@ function jvPaintTags() {
   $$('.jv-tag').forEach((el) => { el.hidden = !h; el.innerHTML = h; el.title = state.run ? state.run.name : ''; });
 }
 
-Object.assign(AM, { jv: { open: JV.open, toggle: jvToggle, journeyRows: jvJourneyRows, variantRows: jvVariantRows, tog: jvTog, flowHit: jvFlowHit, plate: jvPlate, end: jvEnd, jump: jvJump, viaText: jvViaText, viaKind: jvViaKind, progress: jvProgress, tag: jvTagHTML, paintTags: jvPaintTags, journeys: jvJourneys, icon: jvIcon } });
+Object.assign(AM, { jv: { open: JV.open, toggle: jvToggle, journeyRows: jvJourneyRows, variantRows: jvVariantRows, tog: jvTog, flowHit: jvFlowHit, plate: jvPlate, end: jvEnd, jump: jvJump, viaText: jvViaText, viaKind: jvViaKind, progress: jvProgress, chapter: jvChapter, chapterRange: jvChapterRange, tag: jvTagHTML, paintTags: jvPaintTags, journeys: jvJourneys, icon: jvIcon } });
