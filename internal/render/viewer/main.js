@@ -1,5 +1,5 @@
 /* main.js — start-up: the header (brand, ⋯ — nav.js), the scenario list (side.js), views from the registry, theme,
- * language, keyboard, data swap, the run from the #journey=<id> / #flow=<id> hash. */
+ * language, keyboard, data swap, the place named in the hash (nav.js hashPlace). */
 
 window.__errs = window.__errs || [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -187,12 +187,12 @@ function init() {
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
   rebuildMap();
   renderPlayer(); // no scenario opens by itself: the run bar stays hidden until the sidebar or a card opens one
-  const hk = hashRun(); // a scenario named in the hash (#flow= / #journey= …) opens on the canvas: a reload shows the same
-  const hp = hashPage(); // or a page of arch/pages (#page=<id>)
-  setView(!hk && VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
+  // the place named in the hash (nav.js hashPlace: a scenario and its step, the map level, module, function, a page,
+  // a view) opens as it was: a reload or a shared link shows the same
+  const hs = hashPlace();
+  setView(!hs && VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
-  if (hk) openRunAt(hk.key, hk.step);
-  else if (hp) AM.pages.open(hp);
+  if (hs) navRestore(hs);
   if (D.live) { setupLive(); watchMarks(); }
 }
 

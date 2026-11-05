@@ -207,8 +207,16 @@ const epText = (fid, full) => {
   if (!full && ep.path && p.length > 26) p = '…/' + p.split('/').filter(Boolean).slice(-2).join('/');
   return ((ep.method || ep.kind || '') + ' ' + p).trim();
 };
-// stepAction(s) → {short, full}: what step s does and what it passes
-function stepAction(s) {
+// the data a step touches: ['UPDATE orders', 'SELECT payments']
+const dataOps = (s) => Array.from(new Set((s.data || []).map((a) => (/^(read|select|get|find|list)/i.test(a.op || '') ? 'SELECT' : String(a.op || 'write').toUpperCase()) + ' ' + a.table)));
+// the function of an outside system that step s calls (its client in the system's modules), null when unknown
+function extCallee(s, x) {
+  const f = D.fns[s.fid], c = ((f && f.callees) || []).find((id) => D.fns[id] && (x.modules || []).includes(D.fns[id].module));
+  return c ? D.fns[c].name : null;
+}
+// stepAction(s, skip) → {short, full}: what step s does and what it passes. skip: ids of the outside systems whose
+// own legs say what the step does there (auxAction) — the short text does not repeat them
+function stepAction(s, skip) {
   if (!s) return { short: '', full: '' };
   if (s.planned) return { short: s.label, full: s.label };
   const mainOf = (full) => (s.kind === 'async' ? '→ ' + t('actQueue') + ': ' + (jobType(s.fid) || callText(s.fid))
@@ -216,20 +224,38 @@ function stepAction(s) {
       : s.kind === 'entry' && epText(s.fid) ? epText(s.fid, full) + (full ? ' → ' + callText(s.fid) : '')
         : callText(s.fid));
   const main = mainOf(false), mainFull = mainOf(true);
-  const more = [];
-  (s.data || []).forEach((a) => { const op = /^(read|select|get|find|list)/i.test(a.op || '') ? 'SELECT' : String(a.op || 'write').toUpperCase(); more.push(op + ' ' + a.table); });
-  const f = D.fns[s.fid];
+  const sk = new Set(skip || []), skDb = (s.exts || []).some((x) => x.kind === 'db' && sk.has(x.id));
+  const more = [], shortMore = [];
+  dataOps(s).forEach((op) => { more.push(op); if (!skDb) shortMore.push(op); });
   (s.exts || []).forEach((x) => {
     if (x.kind === 'db' || x.kind === 'queue') return;
-    const c = ((f && f.callees) || []).find((id) => D.fns[id] && (x.modules || []).includes(D.fns[id].module));
-    more.push('→ ' + x.name + (c ? ': ' + D.fns[c].name : ''));
+    const c = extCallee(s, x), m = '→ ' + x.name + (c ? ': ' + c : '');
+    more.push(m); if (!sk.has(x.id)) shortMore.push(m);
   });
   const st = (s.states || [])[0];
-  if (st) more.push(st.entity.replace(/Status$/, '') + ': ' + (st.from ? st.from + ' → ' : '→ ') + st.to);
-  const uniq = Array.from(new Set(more));
+  if (st) { const m = st.entity.replace(/Status$/, '') + ': ' + (st.from ? st.from + ' → ' : '→ ') + st.to; more.push(m); shortMore.push(m); }
   let short = main;
-  for (const m of uniq) { if ((short + ' · ' + m).length > 46) break; short += ' · ' + m; }
-  return { short: cut(short, 46), full: [mainFull].concat(uniq).join('\n') };
+  for (const m of shortMore) { if ((short + ' · ' + m).length > 46) break; short += ' · ' + m; }
+  return { short: cut(short, 46), full: [mainFull].concat(more).join('\n') };
+}
+// auxAction(s, id, kind): what step s does on a secondary leg of its own — into the database, an outside system or the
+// queue (the leg to node id): 'UPDATE orders', 'CreateQR', '→ queue: CheckKaspiPaymentArgs'; '' when the code does
+// not say (the leg shows the step number only). The main leg of the step (the call / the entry) says the rest.
+function auxAction(s, id, kind) {
+  if (!s || s.planned) return '';
+  const x = (s.exts || []).find((e) => e.id === id) || D.externals.find((e) => e.id === id);
+  if (x && x.kind === 'db') return cut(dataOps(s).join(' · '), 34);
+  if ((x && x.kind === 'queue') || kind === 'async') { const j = s.kind === 'async' ? jobType(s.fid) : null; return j ? '→ ' + t('actQueue') + ': ' + cut(j, 28) : ''; }
+  if (x) { const c = extCallee(s, x); return c ? cut(c, 34) : ''; }
+  return '';
+}
+// the legs of a step on a level: one main leg — the call into the step or its entry (the first of those the step
+// has; a step without one: its first leg to the database / an outside system), the others secondary (the database,
+// an outside system, the queue); main is null when the step has no leg on the level (its pill sits on its node)
+function stepLegRoles(legs, i) {
+  const own = legs.filter((l) => l.steps.includes(i));
+  const main = own.find((l) => (l.kinds ? l.kinds[i] : l.kind) !== 'ext') || own[0] || null;
+  return { main, aux: own.filter((l) => l !== main) };
 }
 const actionAt = (i) => stepAction(stepAt(i));
 // call stack up to step i: a callee is pushed, a return pops to its caller, an async hand-off starts anew
@@ -347,7 +373,7 @@ async function hopTo(s) {
       if (state.mod !== u) state.fnAll = false;
       state.mod = u; buildFns(u); fitFns(); renderCrumbs();
       const sc = $('#sc2');
-      if (sc.animate && !RM) await sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' }).finished.catch(() => {});
+      if (sc.animate && !RM) await hurryable(sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' }));
     }
     if (fv && !fv.nodes[s.fid]) { buildFns(fv.mod); fitFns(); }
     await fnHop(s);
@@ -356,16 +382,43 @@ async function hopTo(s) {
     buildCode(s.fid, s.next, framesUpTo(state.step)); renderCrumbs();
   }
 }
-async function doStep(delta = 1) {
-  if (state.busy || !state.run) return false;
+// move the step index by one (delta ±1) without drawing: 'step', 'ov' (back before step 1: the overview) or false
+// when it cannot move (the ends, a fork that waits for a choice)
+function stepIdx(delta) {
   if (delta > 0 && atBranch()) { showChoice(true); return false; }
   const n = state.step + delta, total = runList().length;
-  if (n === -1 && delta < 0) { state.step = -1; trimSegs(); showOverview(); return true; } // back before step 1: the overview
+  if (n === -1 && delta < 0) { state.step = -1; trimSegs(); return 'ov'; }
   if (n < 0 || n >= total) return false;
   state.step = n;
   if (delta < 0) trimSegs();
-  state.busy = true;
-  try { await showStep(); } finally { state.busy = false; }
+  return 'step';
+}
+// PLAY.on: the steps are being shown (one animates); PLAY.want: the presses that came meanwhile (+1 / −1 each)
+const PLAY = { on: false, want: 0 };
+// show the step reached (r: 'step' | 'ov'); presses that come while it animates cut the animation short (hurry:
+// the dot jumps to its end) and are walked through all at once — only the step they end at is animated
+async function playSteps(r) {
+  state.busy = true; PLAY.on = true;
+  try {
+    while (r) {
+      HURRY.on = false;
+      if (r === 'ov') showOverview(); else await showStep();
+      r = null;
+      while (PLAY.want) {
+        const d = Math.sign(PLAY.want); PLAY.want -= d;
+        const x = stepIdx(d);
+        if (x) r = x; else PLAY.want = 0;
+      }
+    }
+  } finally { state.busy = false; PLAY.on = false; PLAY.want = 0; HURRY.on = false; HURRY.anims.clear(); }
+}
+async function doStep(delta = 1) {
+  if (!state.run) return false;
+  // a press while a step animates: that animation ends at once and the step goes on from where it ends
+  if (state.busy) { if (!PLAY.on) return false; PLAY.want += Math.sign(delta); hurry(); return true; }
+  const r = stepIdx(Math.sign(delta) || 1);
+  if (!r) return false;
+  await playSteps(r);
   return true;
 }
 // stepping back before a taken branch forgets it
@@ -376,7 +429,7 @@ function trimSegs() {
   for (let si = 0; si < r.segs.length; si++) { if (si > 0 && state.step < start && (!r.fixed || r.segs[si].extra)) { r.segs.length = si; break; } start += r.segs[si].steps.length; }
   if (r.segs.length !== n0) applyFocus(); // the dropped flow's participants leave the map
 }
-async function replay() { if (state.busy) return; state.busy = true; try { await showStep(); } finally { state.busy = false; } }
+async function replay() { if (state.busy) return; await playSteps('step'); }
 async function stepIn() {
   if (state.view !== 'map') setView('map');
   if (state.step < 0) { await doStep(1); return; }
@@ -448,7 +501,8 @@ function pathNode(level, i) {
 function pathLegs(level) {
   const L_ = runList(), legs = new Map();
   // a client call (the next flow of a path the code does not call) is a leg of its own: dashed, signed
-  const add = (a, b, i, kind) => { if (!a || !b || a === b) return; const k = a + '\0' + b + (kind === 'client' ? '\0c' : ''); if (!legs.has(k)) legs.set(k, { a, b, steps: [], kind }); legs.get(k).steps.push(i); };
+  // kinds: the kind of the leg for each of its steps (a leg is the main one of a step or a secondary one: stepLegRoles)
+  const add = (a, b, i, kind) => { if (!a || !b || a === b) return; const k = a + '\0' + b + (kind === 'client' ? '\0c' : ''); if (!legs.has(k)) legs.set(k, { a, b, steps: [], kind, kinds: {} }); const l = legs.get(k); if (!l.steps.includes(i)) l.steps.push(i); l.kinds[i] = kind; };
   for (let i = 0; i < L_.length; i++) {
     const s = stepAt(i); if (!s || s.planned) continue;
     if (level === 0) {
@@ -523,11 +577,13 @@ function restack(parent, want) {
     next = el;
   }
 }
-// the elements of one leg, made once: the line, a wide hit line, the number pill
+// the elements of one leg, made once: the line, a wide hit line, the leader of a pill put beside the line (hidden
+// while the pill sits on it), the number pill
 function legEl(g) {
   const grp = S_('g', {}, g), v = S_('path', { class: 'v' }, grp), hit = S_('path', { class: 'hit' }, grp), hitT = S_('title', {}, hit, ' ');
+  const lead = S_('path', { class: 'lead', display: 'none' }, grp);
   const num = S_('g', { class: 'pnum' }, grp), rect = S_('rect', {}, num), text = S_('text', { 'text-anchor': 'middle' }, num, ' '), numT = S_('title', {}, num, ' ');
-  const o = { grp, v, hit, hitT, num, rect, text, numT, go: 0 };
+  const o = { grp, v, hit, hitT, lead, num, rect, text, numT, go: 0 };
   grp.addEventListener('click', (e) => { e.stopPropagation(); AM.play.go(o.go); });
   return o;
 }
@@ -538,15 +594,6 @@ function pathObstacles(sc) {
     try { const b = e.getBBox(); if (b.width) out.push({ x: b.x - 8, y: b.y - 6, w: b.width + 16, h: b.height + 12 }); } catch (er) { /* not rendered */ }
   });
   return out;
-}
-// the area a rect r shares with the rects of a list
-function overArea(r, list) {
-  let s = 0;
-  list.forEach((q) => {
-    const w = Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x), h = Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y);
-    if (w > 0 && h > 0) s += w * h;
-  });
-  return s;
 }
 function drawPath() {
   if (!state.run || state.view !== 'map' || state.level > 2) { clearPath(); return; }
@@ -568,38 +615,44 @@ function drawPath() {
   // future legs first, the current one last: on top
   const stOf = (l) => (ov ? 'done' : l.steps.includes(cur) ? 'cur' : l.steps.some((i) => i < cur) ? 'done' : 'next');
   const order = { next: 0, done: 1, cur: 2 };
-  // the number pills keep clear of each other, of the band and group titles and of the cards: each pill slides
-  // along its leg to the spot that overlaps least (the current leg is placed first, so it keeps the middle)
-  const taken = [], hard = pathObstacles(sc), soft = Object.keys(sc.nodes || {}).map((id) => pathRect(sc, id)).filter(Boolean);
-  // ws: the weight of covering a card (a long signed pill keeps off the cards harder)
-  const placePill = (v, w, h, fallback, ws = 1) => {
-    const len = v.getTotalLength ? v.getTotalLength() : 0;
-    if (!len) return fallback;
-    let best = null, bestS = Infinity;
-    // a long signed pill may also sit beside its leg (above, below, to either side) when the leg is short
-    const offs = [[0, 0]];
-    if (ws > 1) [1, 1.8].forEach((m) => { const dy = m * (h / 2 + 4); [0, w / 2 - 20, -(w / 2 - 20)].forEach((dx) => offs.push([dx, -dy], [dx, dy])); });
-    // and inside the part of the scene on screen
-    const vb = ws > 1 && sc.cam ? [sc.cam.vb] : null;
-    [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88].forEach((f, k) => {
-      const q = v.getPointAtLength(len * f);
-      offs.forEach(([dx, dy], j) => {
-        const p = { x: q.x + dx, y: q.y + dy }, r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
-        const s = overArea(r, taken) * 10 + overArea(r, hard) * 8 + overArea(r, soft) * ws + k * 2 + j * 12 + (vb ? (w * h - overArea(r, vb)) * 8 : 0);
-        if (s < bestS) { bestS = s; best = p; }
-      });
+  // One pill per step: the main leg of the current step (its call / entry — stepLegRoles) says what the step does,
+  // "3 · requestQR(Payment) → QRResult"; its secondary legs (the database, an outside system, the queue) say only what
+  // the step does there ("UPDATE orders"), or nothing but the number; a step with no call leg here has its pill on
+  // its node. The other legs carry their step numbers.
+  const S = ov ? null : stepAt(cur), roles = S ? stepLegRoles(legs, cur) : { main: null, aux: [] };
+  const act = S ? stepAction(S, roles.aux.map((l) => l.b)).short : '';
+  // The pills keep clear of each other, of the band and group titles, of the cards and of the step numbers, and stay
+  // in the part of the scene on screen. The pills of the current step go first (the main one first): each takes the
+  // spot that covers least — on its leg, or beside it (above, below, left, right) with a thin leader to the leg when
+  // the leg is too short or crowded. The numbers of the other legs only slide along their legs.
+  // (the cards with a small margin: a pill does not touch a card's edge)
+  const taken = [], hard = pathObstacles(sc);
+  const cards = Object.keys(sc.nodes || {}).map((id) => pathRect(sc, id)).concat(Object.values(sc.ports || {}).map((p) => p.r))
+    .filter(Boolean).map((r) => ({ x: r.x - 4 * zk, y: r.y - 4 * zk, w: r.w + 8 * zk, h: r.h + 8 * zk, r }));
+  const fr = sc.cam && sc.cam.freeRect ? sc.cam.freeRect() : null, m6 = 6 * zk;
+  const view = fr ? { x: fr.x + m6, y: fr.y + m6, w: fr.w - 2 * m6, h: fr.h - 2 * m6 } : null;
+  const drawn = [], seen = new Set(), items = [];
+  const here0 = S ? pathNode(lvl, cur) : null;
+  // the pill of a step with no leg here (it stays inside its node) sits on the node: at its top right corner, or
+  // around the node where that covers less; placed first, the other pills keep off it
+  const inTxt = String(cur + 1) + (act ? ' · ' + act : ''), inW = act ? inTxt.length * 6.9 + 18 : 26;
+  let inPos = null;
+  const inR = here0 && !roles.main ? pathRect(sc, here0) : null;
+  if (inR) {
+    const W = inW * zk, H = 26 * zk, r = inR, c = { x: r.x + r.w - 16 * zk + W / 2, y: r.y };
+    const others = cards.filter((q) => q.r !== r && !(q.r.x === r.x && q.r.y === r.y));
+    inPos = placeLabel({
+      w: W, h: H, gap: 8 * zk,
+      // just above the card (at its right, in the middle), then on its top edge, below it
+      along: [{ x: c.x, y: r.y - H / 2 - 3 * zk }, { x: r.x + r.w / 2, y: r.y - H / 2 - 3 * zk }, c, { x: r.x + r.w / 2, y: r.y }, { x: r.x + r.w / 2, y: r.y + r.h + H / 2 + 3 * zk }],
+      anchors: [c],
+      // its own card a little (a corner is fine), the name on it not
+      avoid: [{ rects: hard, k: 6 }, { rects: others, k: 8 }, { rects: [r], k: 1.5 }], view,
     });
-    taken.push({ x: best.x - w / 2, y: best.y - h / 2, w, h });
-    return best;
-  };
-  const drawn = [];
-  // the number of a step that stays inside its node sits on the node's corner: keep the pills off it too
-  const here0 = ov ? null : pathNode(lvl, cur);
-  // its pill says what the step does too: "3 · validateOrderItems(Order)"
-  const inAct = here0 ? actionAt(cur).short : '', inTxt = String(cur + 1) + (inAct ? ' · ' + inAct : ''), inW = inAct ? inTxt.length * 6.9 + 18 : 26;
-  if (here0 && !legs.some((l) => l.steps.includes(cur))) { const r = pathRect(sc, here0); if (r) taken.push({ x: r.x + r.w - 16 * zk, y: r.y - 16 * zk, w: (inW + 6) * zk, h: 32 * zk }); }
-  const seen = new Set();
-  legs.sort((p, q) => order[stOf(q)] - order[stOf(p)]).forEach((l) => {
+    taken.push({ x: inPos.x - W / 2 - 3 * zk, y: inPos.y - H / 2 - 3 * zk, w: W + 6 * zk, h: H + 6 * zk });
+  }
+  const rank = (l) => (l === roles.main ? 0 : stOf(l) === 'cur' ? 1 : 2);
+  legs.sort((p, q) => order[stOf(q)] - order[stOf(p)] || rank(p) - rank(q)).forEach((l) => {
     const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
     const st = stOf(l), back = pairs.has(l.b + '\0' + l.a);
     const cl = l.kind === 'client';
@@ -615,21 +668,42 @@ function drawPath() {
     setA(o.hit, 'd', d); setT(o.hitT, tip);
     // several steps on one leg: "13…17" (the list is in the tooltip)
     const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 2 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
-    // the current leg says what happens: "3 · requestQR(Payment) → QRResult"; a client call of another leg is
-    // signed short ("client")
-    const big = st === 'cur', act = big ? actionAt(cur).short : '', lbl = !!act;
-    const txt = big ? String(cur + 1) + (lbl ? ' · ' + act : cl ? ' · ' + t('jvClientShort') : '') : txt0 + (cl ? ' · ' + t('jvClientShort') : '');
-    const w = Math.max(big ? 26 : 20, txt.length * (lbl ? 6.9 : cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + (lbl ? 18 : 10)), h = big ? 26 : 20;
-    setA(o.grp, 'class', 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : '') + (lbl ? ' lbl' : ''));
-    const mid = placePill(o.v, w * zk, h * zk, ctr(ra), lbl ? 2 : 1);
-    setA(o.num, 'transform', zoomAround(mid));
-    setA(o.rect, 'x', mid.x - w / 2); setA(o.rect, 'y', mid.y - h / 2); setA(o.rect, 'width', w); setA(o.rect, 'height', h); setA(o.rect, 'rx', h / 2);
-    setA(o.text, 'x', mid.x); setA(o.text, 'y', mid.y + (big && !lbl ? 5 : 4)); setT(o.text, txt);
+    const big = st === 'cur', main = big && l === roles.main, aux = big && !main;
+    const ax = aux ? auxAction(S, l.b, l.kinds ? l.kinds[cur] : l.kind) : '';
+    const lbl = main && !!act;
+    // a client call of another leg is signed short ("client")
+    const txt = main ? String(cur + 1) + (act ? ' · ' + act : cl ? ' · ' + t('jvClientShort') : '') : aux ? ax || String(cur + 1) : txt0 + (cl ? ' · ' + t('jvClientShort') : '');
+    const w = ax ? txt.length * 6.3 + 16 : Math.max(big ? 26 : 20, txt.length * (lbl ? 6.9 : cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + (lbl ? 18 : 10));
+    const h = ax ? 22 : big ? 26 : 20;
+    setA(o.grp, 'class', 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : '') + (lbl ? ' lbl' : '') + (aux ? ' aux' : '') + (ax ? ' albl' : ''));
     setT(o.numT, cl ? t('jvClient') + '\n' + tip : tip);
     o.go = st === 'cur' ? cur : shown;
     markNode(l.a, st === 'next' ? 'next' : 'done'); markNode(l.b, st);
     PATH.legs.push({ a: l.a, b: l.b, steps: l.steps, st });
     drawn.push({ o, st });
+    items.push({ o, w, h, txt, big, lbl: lbl || !!ax, ra, len: o.v.getTotalLength ? o.v.getTotalLength() : 0 });
+  });
+  // where the plain numbers of the other legs would sit (the middle of their legs): the signed pills keep off them
+  const at = (it, f) => it.o.v.getPointAtLength(it.len * f);
+  const numSpots = items.filter((it) => !it.big && it.len).map((it) => { const p = at(it, 0.5); return { x: p.x - it.w * zk / 2, y: p.y - it.h * zk / 2, w: it.w * zk, h: it.h * zk }; });
+  items.forEach((it) => {
+    const { o, w, h, txt, big, lbl } = it, W = w * zk, H = h * zk;
+    let pos = { x: it.ra.x + it.ra.w / 2, y: it.ra.y + it.ra.h / 2, off: false };
+    if (it.len) {
+      const along = (lbl ? [0.5, 0.42, 0.58, 0.34, 0.66] : [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88]).map((f) => at(it, f));
+      pos = placeLabel({
+        // a plain number leaves its leg only when it would cover another pill (it keeps its leader then)
+        w: W, h: H, gap: 10 * zk, along, anchors: [0.5, 0.35, 0.65].map((f) => at(it, f)), offPen: lbl ? 0 : 120,
+        avoid: [{ rects: taken, k: 8 }, { rects: hard, k: 6 }, { rects: cards, k: lbl ? 12 : 0.6 }].concat(big ? [{ rects: numSpots, k: 8 }] : []),
+        view: big ? view : null,
+      });
+    }
+    taken.push({ x: pos.x - W / 2 - 3 * zk, y: pos.y - H / 2 - 3 * zk, w: W + 6 * zk, h: H + 6 * zk }); // with a small gap
+    const ld = pos.off && pos.a ? leader(pos.a, pos, W, H, 3 * zk) : null;
+    setA(o.lead, 'display', ld ? null : 'none'); if (ld) setA(o.lead, 'd', ld);
+    setA(o.num, 'transform', zoomAround(pos));
+    setA(o.rect, 'x', pos.x - w / 2); setA(o.rect, 'y', pos.y - h / 2); setA(o.rect, 'width', w); setA(o.rect, 'height', h); setA(o.rect, 'rx', h / 2);
+    setA(o.text, 'x', pos.x); setA(o.text, 'y', pos.y + (big && !lbl ? 5 : 4)); setT(o.text, txt);
   });
   // a leg that is not on the path now is hidden, not removed: it comes back as it was
   pv.legs.forEach((o, k) => { if (!seen.has(k)) setA(o.grp, 'display', 'none'); });
@@ -645,17 +719,20 @@ function drawPath() {
   }
   const here = ov ? null : pathNode(lvl, cur); if (here) markNode(here, 'cur');
   // the step stays inside the node (a call within one module): its number sits on the node
-  const ir = here && !legs.some((l) => l.steps.includes(cur)) ? pathRect(sc, here) : null;
+  const ir = here && inPos ? inPos : null;
   if (ir) {
     let o = pv.inside;
     if (!o) {
-      const grp = S_('g', { class: 'pleg cur inside' }, pv.gi), num = S_('g', { class: 'pnum' }, grp);
-      o = pv.inside = { grp, num, rect: S_('rect', { height: 26, rx: 13 }, num), text: S_('text', { 'text-anchor': 'middle' }, num, ' '), tt: S_('title', {}, grp, ' ') };
+      const grp = S_('g', { class: 'pleg cur inside' }, pv.gi), lead = S_('path', { class: 'lead', display: 'none' }, grp), num = S_('g', { class: 'pnum' }, grp);
+      o = pv.inside = { grp, lead, num, rect: S_('rect', { height: 26, rx: 13 }, num), text: S_('text', { 'text-anchor': 'middle' }, num, ' '), tt: S_('title', {}, grp, ' ') };
     }
-    setA(o.grp, 'display', null); setA(o.grp, 'class', 'pleg cur inside' + (inAct ? ' lbl' : ''));
-    setA(o.num, 'transform', zoomAround({ x: ir.x + ir.w - 3, y: ir.y }));
-    setA(o.rect, 'x', ir.x + ir.w - 16); setA(o.rect, 'y', ir.y - 13); setA(o.rect, 'width', inW);
-    setA(o.text, 'x', ir.x + ir.w - 16 + inW / 2); setA(o.text, 'y', ir.y + (inAct ? 4 : 5)); setT(o.text, inTxt);
+    setA(o.grp, 'display', null); setA(o.grp, 'class', 'pleg cur inside' + (act ? ' lbl' : ''));
+    // put away from its node: a leader to the node's edge
+    const ld = ir.off && ir.a ? leader(ir.a, ir, inW * zk, 26 * zk, 3 * zk) : null;
+    setA(o.lead, 'display', ld ? null : 'none'); if (ld) setA(o.lead, 'd', ld);
+    setA(o.num, 'transform', zoomAround(ir));
+    setA(o.rect, 'x', ir.x - inW / 2); setA(o.rect, 'y', ir.y - 13); setA(o.rect, 'width', inW);
+    setA(o.text, 'x', ir.x); setA(o.text, 'y', ir.y + (act ? 4 : 5)); setT(o.text, inTxt);
     setT(o.tt, stepTip(cur));
   } else if (pv.inside) setA(pv.inside.grp, 'display', 'none');
   if (lvl === 0 && sc.nodes.svc) markNode('svc', ov ? 'done' : 'cur');
@@ -849,7 +926,7 @@ function previewRun(key) {
 
 Object.assign(AM, {
   play: {
-    preview: previewRun, action: stepAction,
+    preview: previewRun, action: stepAction, aux: auxAction, legRoles: stepLegRoles,
     load: loadRun, open: openRun, close: closeRun, step: doStep, stepIn, stepOut, reset: resetRun, playFrom,
     go: (i) => { if (state.busy || !state.run) return; state.step = Math.max(0, Math.min(runList().length - 1, i)); trimSegs(); return replay(); },
     choose: (b) => takeBranch(b), branches: () => (atBranch() ? branchesHere() : null),

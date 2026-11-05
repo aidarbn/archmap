@@ -36,6 +36,12 @@ const tr = (k, ...a) => A.t(k, ...a);
 
 /* ---------- index ---------- */
 const OPL = { read: 'R', insert: 'I', update: 'U', delete: 'D', upsert: 'UP' };
+// the op badge of a card ("U", "R I"): its one text node stays, only the data changes — a step adds or removes no
+// DOM node
+function setOpb(el, s) {
+  const n = el.firstChild;
+  if (n && n.nodeType === 3 && !n.nextSibling) { if (n.data !== s) n.data = s; } else { el.textContent = ''; el.appendChild(document.createTextNode(s)); }
+}
 const OPORD = { insert: 0, update: 1, upsert: 2, delete: 3, read: 4 };
 const isW = (op) => op !== 'read' && op !== 'select';
 let IDX = null;
@@ -275,7 +281,7 @@ function paintCards(er, hot) {
     c.g.classList.toggle('hot', !!x);
     Object.keys(c.rows).forEach((f) => c.rows[f].classList.toggle('hot', !!(x && x.fields.has(f))));
     if (c.more) c.more.classList.toggle('hot', !!(x && Array.from(x.fields).some((f) => c.moreSet.has(f))));
-    c.opb.textContent = x ? Array.from(x.ops).map((o) => OPL[o] || o).join(' ') : '';
+    setOpb(c.opb, x ? Array.from(x.ops).map((o) => OPL[o] || o).join(' ') : '');
   });
 }
 // the page frames (views/pages.js) draw a part of the schema with the same code: layout(names) → {pos, w, h}
@@ -308,7 +314,7 @@ function paintER() {
     c.g.classList.toggle('hit', !!q && n.toLowerCase().includes(q));
     Object.keys(c.rows).forEach((f) => c.rows[f].classList.toggle('hot', !!(hot && hot.fields.has(f))));
     if (c.more) c.more.classList.toggle('hot', !!(hot && Array.from(hot.fields).some((f) => c.moreSet.has(f))));
-    c.opb.textContent = hot ? Array.from(hot.ops).map((o) => OPL[o] || o).join(' ') : '';
+    setOpb(c.opb, hot ? Array.from(hot.ops).map((o) => OPL[o] || o).join(' ') : '');
   });
   er.edges.forEach((e) => { e.el.classList.toggle('on', !!st && (e.a === st || e.b === st)); });
 }

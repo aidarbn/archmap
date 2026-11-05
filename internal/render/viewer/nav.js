@@ -62,7 +62,8 @@ function setupMenu() {
  * step. Each push is a history entry, so Back and Forward of the browser walk the same stack.
  * A detail picked in the inspector on top (a function, a module…) is closed by the first Esc. */
 addI18n({ ru: { navBack: (s) => 'Назад: ' + s + ' (Esc)' }, en: { navBack: (s) => 'Back: ' + s + ' (Esc)' } });
-const BACK = { stack: [], restoring: false, hold: 0, hist: false, base: '', ptr: null };
+// fwd: the places of the history entries after the current one (Back went there from them): Forward comes back
+const BACK = { stack: [], fwd: [], restoring: false, hold: 0, hist: false, base: '', ptr: null };
 const navSelKey = (s) => (s ? JSON.stringify(s) : '');
 const navKey = (s) => [s.view, s.page, s.run, s.run ? s.step : '', s.view === 'map' ? s.level : '', s.view === 'map' && s.level >= 2 ? s.mod : '', s.view === 'map' && s.level >= 3 ? s.fn : ''].join('|');
 const navCam = () => (state.view === 'map' ? curCam() : null);
@@ -99,7 +100,10 @@ function navPush() {
   const s = navSnap(); s.rect = navFrom();
   const top = BACK.stack[BACK.stack.length - 1];
   if (top && navKey(top) === navKey(s)) { top.cam = s.cam; top.sel = s.sel; if (s.rect) top.rect = s.rect; return; }
-  BACK.stack.push(s);
+  BACK.stack.push(s); BACK.fwd = [];
+  // the entry we leave keeps the URL of its place (written now, not left to the pending writeHash); the new entry starts
+  // with it too and writeHash puts the new place in it as soon as it is there
+  writeHashNow();
   if (BACK.hist) try { history.pushState({ amNav: BACK.stack.length }, '', location.href); } catch (e) { BACK.hist = false; }
   renderPlayer();
 }
@@ -140,20 +144,110 @@ async function navRestore(s) {
     if (state.view !== 'map') setView('map');
     const rk = state.run ? state.run.key : null;
     if (rk !== s.run) { if (s.run) { loadRun(s.run); if (s.step < 0) showOverview(); } else closeRun(); }
-    if (state.level > s.level) await up(s.level);
-    else if (state.level < s.level && s.level >= 2 && s.mod) { if (s.level === 3 && s.fn) await jumpToFn(s.fn, 3); else await goModule(s.mod); }
-    if (s.level === 2 && s.mod && fv && fv.mod !== s.mod && D.byMod[s.mod]) { state.mod = s.mod; buildFns(s.mod); fitFns(); afterLevel(); }
+    // level null (an old link: #journey=<id>): the level the scenario opens on
+    const lv = s.level == null ? state.level : s.level;
+    if (state.level > lv) await up(lv);
+    else if (state.level < lv && lv === 1) await drill(1, { from: sys.nodes.svc.el }, true);
+    else if (state.level < lv && lv >= 2 && s.mod) { if (lv === 3 && s.fn) await jumpToFn(s.fn, 3); else await goModule(s.mod); }
+    if (lv === 2 && s.mod && fv && fv.mod !== s.mod && D.byMod[s.mod]) { state.mod = s.mod; buildFns(s.mod); fitFns(); afterLevel(); }
     if (s.run && state.run) {
       if (s.step >= 0 && state.step !== s.step) await AM.play.go(s.step);
       else if (s.step < 0 && state.step >= 0) { state.step = -1; trimSegs(); showOverview(); }
     }
+    // the code of a function other than the step's own (opened from the step): back to it
+    if (lv === 3 && s.fn && state.level === 3 && state.fn !== s.fn && D.fns[s.fn]) { state.fn = s.fn; state.mod = D.fns[s.fn].module; buildCode(s.fn, null, defaultFrames(s.fn)); renderCrumbs(); }
     const cam = navCam(); if (cam && s.cam) cam.set(s.cam);
     if (s.sel && navSelKey(s.sel) !== navSelKey(state.sel)) setSel(s.sel);
     if (fromRun) navZoom(navScene(), s.rect, 'out');
   } finally {
     BACK.restoring = false; BACK.base = navSelKey(state.sel);
     renderPlayer();
+    writeHashNow(); // the place restored, once (the writes while restoring were held back)
   }
+}
+/* ---------- the URL hash: the current place of the stack ----------
+ * Written in one place (writeHash) and read in one place (hashPlace). It names what navKey names — the view, the page,
+ * the scenario and its step, the map level, the module and the function:
+ *   #journey=<id>&step=4&lvl=2&mod=<module>      a path at step 5 on the functions of a module
+ *   #flow=<id> · #fn=<fid> (a run from a function) · #run=<key> (changes / overview)   + the same &step / &lvl / …
+ *   #lvl=3&mod=<module>&func=<fid>                 the map without a scenario (no hash — the system level)
+ *   #page=<id> · #view=<id>                         a page of arch/pages, another view (API, Data, Statuses)
+ * step is 0-based (as the links before); lvl / mod / func only on the map. A link with such a hash opens at that
+ * place (navRestore); old links (#journey=<id>, #flow=<id>&step=3, #page=<id>) open as before. */
+const BASE_TITLE = document.title;
+const flowHashId = (fl) => fl.id || String(fl.i);
+function keyHash(key) {
+  if (!key) return '';
+  if (key.startsWith('journey:')) return '#journey=' + encodeURIComponent(key.slice(8));
+  if (key.startsWith('flow:')) { const fl = D.flows.find((x) => x.i === +key.slice(5)); return fl ? '#flow=' + encodeURIComponent(flowHashId(fl)) : ''; }
+  if (key.startsWith('fn:')) return '#fn=' + encodeURIComponent(key.slice(3));
+  return '#run=' + encodeURIComponent(key);
+}
+const hashDec = (s) => { try { return decodeURIComponent(s); } catch (e) { return s; } };
+// the parts of the hash: {name: value}
+function hashParts() {
+  const out = {};
+  (location.hash || '').replace(/^#/, '').split('&').filter(Boolean).forEach((kv) => { const i = kv.indexOf('='); out[i < 0 ? kv : kv.slice(0, i)] = i < 0 ? '' : hashDec(kv.slice(i + 1)); });
+  return out;
+}
+// the run the hash names and the step to start at: {key, step}; null when it names nothing known
+function hashRun() {
+  const h = location.hash || '', m = /^#(journey|flow|fn|run)=([^&]+)/.exec(h);
+  if (!m) return null;
+  const id = hashDec(m[2]), st = /&step=(\d+)/.exec(h), step = st ? +st[1] : -1;
+  let key = null;
+  if (m[1] === 'journey') key = jvJourney(id) ? 'journey:' + id : null;
+  else if (m[1] === 'flow') { const fl = D.flows.find((x) => x.id === id) || (/^\d+$/.test(id) ? D.flows.find((x) => x.i === +id) : null); key = fl ? flowKey(fl) : null; }
+  else if (m[1] === 'fn') key = D.fns[id] ? 'fn:' + id : null;
+  else key = buildRun(id) ? id : null;
+  return key ? { key, step } : null;
+}
+// the page of arch/pages the hash names (#page=<id>), when it exists
+function hashPage() {
+  const m = /^#page=([^&]+)/.exec(location.hash || '');
+  const id = m ? hashDec(m[1]) : null;
+  return id && AM.pages && AM.pages.has(id) ? id : null;
+}
+// the hash of a place (a navSnap)
+function placeHash(s) {
+  if (s.view === 'page') return s.page ? '#page=' + encodeURIComponent(s.page) : '';
+  if (s.view !== 'map') return '#view=' + encodeURIComponent(s.view);
+  const q = [];
+  if (s.run) { const h = keyHash(s.run); if (h) q.push(h.slice(1)); if (h && s.step >= 0) q.push('step=' + s.step); }
+  if (s.level > 0 || (s.run && q.length)) q.push('lvl=' + s.level);
+  // paths stay readable: / and : are fine in a fragment
+  const enc = (x) => encodeURIComponent(x).replace(/%2F/gi, '/').replace(/%3A/gi, ':');
+  if (s.level >= 2 && s.mod) q.push('mod=' + enc(s.mod));
+  if (s.level >= 3 && s.fn) q.push('func=' + enc(s.fn));
+  return q.length ? '#' + q.join('&') : '';
+}
+// the place the hash names, as a navSnap for navRestore; null when it names nothing known
+function hashPlace() {
+  const p = hashParts(), keys = Object.keys(p);
+  if (!keys.length) return null;
+  const s = { view: 'map', page: null, run: null, step: -1, level: null, mod: null, fn: null, cam: null, sel: null, rect: null, pcam: null };
+  if ('page' in p) { const id = hashPage(); return id ? Object.assign(s, { view: 'page', page: id }) : null; }
+  if ('view' in p) return VIEWS.some((v) => v.id === p.view && v.id !== 'map' && v.id !== 'page') ? Object.assign(s, { view: p.view }) : null;
+  if (/^(journey|flow|fn|run)$/.test(keys[0])) { const r = hashRun(); if (!r) return null; s.run = r.key; s.step = r.step; }
+  if (/^[0-3]$/.test(p.lvl || '')) s.level = +p.lvl;
+  if (s.level >= 2 && !(p.mod && (D.byMod[p.mod] || unitFor(p.mod)))) s.level = 1;
+  if (s.level >= 2) s.mod = p.mod;
+  if (s.level === 3) { if (p.func && D.fns[p.func]) s.fn = p.func; else s.level = 2; }
+  if (!s.run && s.level == null) return null;
+  return s;
+}
+// writeHash(): put the current place in the hash of the current history entry (and the title) — at the end of this
+// turn, once however many changes come; while a place is being restored the write waits for its end
+let HASHQ = 0;
+function writeHash() { if (!HASHQ) HASHQ = setTimeout(writeHashNow, 0); }
+function writeHashNow() {
+  clearTimeout(HASHQ); HASHQ = 0;
+  if (BACK.restoring) return;
+  const s = navSnap(), want = placeHash(s);
+  const pg = s.view === 'page' && s.page ? curPage() : null;
+  document.title = state.run ? state.run.name + ' — ' + BASE_TITLE : pg ? pg.name + ' — ' + BASE_TITLE : BASE_TITLE;
+  if ((location.hash || '') === want) return;
+  try { history.replaceState(history.state, '', want || location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
 }
 // go back to snapshot n (the stack keeps what is above it no more); through the browser history when it is ours
 function navBackTo(n) {
@@ -162,16 +256,43 @@ function navBackTo(n) {
   const s = BACK.stack[n]; BACK.stack.length = n; navRestore(s);
 }
 function setupNav() {
-  try { history.replaceState(history.state, '', location.href); BACK.hist = true; } catch (e) { BACK.hist = false; }
-  // other code rewrites the URL of the current entry (the hash of the open scenario / page) with a null state: the
-  // depth of the entry is kept
+  // the entry the page opened in is the bottom of the stack (depth 0; a reload starts the stack anew)
+  try { history.replaceState({ amNav: 0 }, '', location.href); BACK.hist = true; } catch (e) { BACK.hist = false; }
+  // a URL written for the current entry with a null state keeps the depth of the entry
   const rs = history.replaceState.bind(history);
   history.replaceState = (st, title, url) => rs(st == null && history.state && history.state.amNav != null ? history.state : st, title, url);
   window.addEventListener('popstate', (e) => {
-    const d = e.state && e.state.amNav != null ? e.state.amNav : 0;
-    if (d >= BACK.stack.length) return; // forward: nothing remembered there
-    const s = BACK.stack[d]; BACK.stack.length = d; navRestore(s);
+    const d = e.state && e.state.amNav != null ? e.state.amNav : null;
+    if (d == null) return; // an entry of a hash typed by hand: hashchange restores it
+    const n = BACK.stack.length;
+    if (d < n) { // Back: the places above stay in fwd for Forward
+      BACK.fwd = BACK.stack.slice(d + 1).concat([navSnap()], BACK.fwd);
+      const s = BACK.stack[d]; BACK.stack.length = d; navRestore(s);
+      return;
+    }
+    if (d === n) { // the same depth: only when the hash names another place
+      const s = hashPlace();
+      if (s && placeHash(navSnap()) !== (location.hash || '')) navRestore(s);
+      return;
+    }
+    // Forward: the entries in between are the places Back left (fwd); the target one is fwd's, else its own hash
+    const add = [navSnap()].concat(BACK.fwd), s = add[d - n] || hashPlace();
+    for (let k = 0; k < d - n; k++) BACK.stack.push(add[k] || add[0]);
+    BACK.fwd = add.slice(d - n + 1);
+    if (s) navRestore(s);
   });
+  // a hash typed or pasted by hand (a new entry without our state): a step to the place it names — the place we were
+  // at goes on the stack, so Back returns to it
+  window.addEventListener('hashchange', () => {
+    if (history.state && history.state.amNav != null) return; // our own entry: popstate has it
+    const s = hashPlace();
+    if (!s && !(!location.hash && state.run)) { try { rs({ amNav: BACK.stack.length }, '', location.href); } catch (e) { /* ignore */ } return; }
+    BACK.stack.push(navSnap()); BACK.fwd = [];
+    try { rs({ amNav: BACK.stack.length }, '', location.href); } catch (e) { /* ignore */ }
+    if (s) navRestore(s); else closeRun();
+  });
+  // every change of the place rewrites the hash of the current entry (once per turn of the event loop)
+  ['flow', 'step', 'level', 'view'].forEach((ev) => bus.on(ev, writeHash));
   document.addEventListener('pointerdown', (e) => {
     const el = e.target.closest && (e.target.closest('g.n, g.pf, .pv-node, .pleg, .slist .ti, .pgs .pg, li, tr, button') || e.target);
     if (el && el.getBoundingClientRect) BACK.ptr = { r: el.getBoundingClientRect(), t: performance.now() };

@@ -107,15 +107,20 @@ class Cam {
     return r.x >= v.x + m && r.y >= top + m && r.x + r.w <= v.x + v.w - this.insetRPx() * k - m && r.y + r.h <= v.y + v.h - this.insetBPx() * k - m;
   }
   insetWorld(w) { return this.insetPx() * w / this.size().W; }
+  // the part of the scene on screen that no overlay covers (world)
+  freeRect() {
+    const v = this.vb, k = v.w / this.size().W, t = this.insetPx() * k;
+    return { x: v.x, y: v.y + t, w: v.w - this.insetRPx() * k, h: v.h - t - this.insetBPx() * k };
+  }
   animTo(r, pad = 40, minW = 0, dur = DUR) { return this.animToVB(this.rectFor(r, pad, minW), dur); }
   animToVB(to, dur = DUR) {
     const from = { ...this.vb };
     cancelAnimationFrame(this.raf);
-    if (!dur) { this.set(to); return Promise.resolve(); }
+    if (!dur || HURRY.on) { this.set(to); return Promise.resolve(); }
     return new Promise((res) => {
       const t0 = performance.now();
       const tick = (tm) => {
-        const k = ease(Math.min(1, (tm - t0) / dur));
+        const k = HURRY.on ? 1 : ease(Math.min(1, (tm - t0) / dur)); // a hurried step ends at once
         this.set({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k, w: from.w + (to.w - from.w) * k, h: from.h + (to.h - from.h) * k });
         if (k < 1) this.raf = requestAnimationFrame(tick); else res();
       };
@@ -146,10 +151,98 @@ const bbox = (rs) => {
   return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
 };
 
+// the area a rect r shares with the rects of a list
+function overArea(r, list) {
+  let s = 0;
+  list.forEach((q) => {
+    const w = Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x), h = Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y);
+    if (w > 0 && h > 0) s += w * h;
+  });
+  return s;
+}
+// placeLabel(o): the spot of a label w x h (the pill of a step) that belongs to a line. Candidates: on the line
+// (o.along — points on it, in the order they are preferred) and around it (o.anchors — points on the line; above,
+// below, to the left and to the right of each at growing distances). Each is scored by what it covers — o.avoid:
+// [{rects, k}], k = the cost of covering a rect whole — and by how much of it is outside o.view; a spot off
+// the line costs more (it needs a leader line to its anchor), the farther the more (o.offPen: extra for any spot
+// off the line). → {x, y (centre), a (the
+// anchor on the line), off}
+function placeLabel(o) {
+  const { w, h } = o, g0 = o.gap || 8, A0 = w * h || 1, cands = [];
+  (o.along || []).forEach((p, k) => cands.push({ x: p.x, y: p.y, a: p, pen: k * 2, off: false }));
+  (o.anchors || []).forEach((a, k) => {
+    [0.5, 1, 2, 3.5, 5, 7, 10, 14].forEach((m, mi) => {
+      const g = g0 * m, base = 30 + (o.offPen || 0) + k * 10 + mi * 14;
+      [-1, 1].forEach((sy) => [0, 0.45, -0.45, 0.25, -0.25].forEach((fx, n) => cands.push({ x: a.x + fx * w, y: a.y + sy * (h / 2 + g), a, pen: base + n * 4, off: true })));
+      [-1, 1].forEach((sx) => [0, -1, 1, -2, 2].forEach((fy, n) => cands.push({ x: a.x + sx * (w / 2 + g), y: a.y + fy * (h / 2 + g0), a, pen: base + 8 + n * 4, off: true })));
+    });
+  });
+  let best = null, bs = Infinity;
+  const score = (c) => {
+    const r = { x: c.x - w / 2, y: c.y - h / 2, w, h };
+    let s = c.pen;
+    // each covered rect counts by the share of the smaller of the two that is covered: a small number under a long
+    // pill costs as much as a long pill over a card
+    // (plus a fixed cost per touched rect: a far clean spot beats a near one that clips a corner)
+    (o.avoid || []).forEach((av) => av.rects.forEach((q) => { const a = overArea(r, [q]); if (a > 0) s += (a / Math.min(A0, q.w * q.h || A0)) * 100 * av.k + 15 * av.k; }));
+    // off screen (even a sliver) is worse than anything else on screen
+    if (o.view) { const out = A0 - overArea(r, [o.view]); if (out > 0.5) s += 300 + (out / A0) * 100 * (o.viewK || 8); }
+    return s;
+  };
+  const scored = cands.map((c) => ({ c, s: score(c) })).sort((p, q) => p.s - q.s);
+  if (scored.length) { best = scored[0].c; bs = scored[0].s; }
+  // the best few that still cover something: slide each just clear of what it covers (above / below / beside the
+  // rect), twice — a narrow free strip between rows of cards is found this way
+  const hard = (o.avoid || []).filter((av) => av.k >= 1).flatMap((av) => av.rects);
+  const covers = (c) => { const r = { x: c.x - w / 2, y: c.y - h / 2, w, h }; return hard.some((q) => overArea(r, [q]) > 0); };
+  let seeds = best && covers(best) ? scored.slice(0, 12).map((x) => x.c) : [];
+  for (let round = 0; round < 2 && seeds.length; round++) {
+    const next = [];
+    seeds.forEach((c) => {
+      const r = { x: c.x - w / 2, y: c.y - h / 2, w, h };
+      hard.forEach((q) => {
+        if (overArea(r, [q]) <= 0) return;
+        [{ x: c.x, y: q.y - h / 2 - 1 }, { x: c.x, y: q.y + q.h + h / 2 + 1 }, { x: q.x - w / 2 - 1, y: c.y }, { x: q.x + q.w + w / 2 + 1, y: c.y }].forEach((p) => {
+          const d = Math.hypot(p.x - c.a.x, p.y - c.a.y), v = { x: p.x, y: p.y, a: c.a, pen: 30 + (o.offPen || 0) + d / Math.max(1, g0), off: true }, s = score(v);
+          next.push(v);
+          if (s < bs) { bs = s; best = v; }
+        });
+      });
+    });
+    seeds = next.sort((p, q) => score(p) - score(q)).slice(0, 12);
+  }
+  // a spot beside the line may still clip an edge: nudge it a little where that covers less
+  if (best && best.off) {
+    const b0 = best;
+    [-1, 1].forEach((sy) => [0.15, 0.3, 0.5].forEach((f) => [0, -0.06, 0.06].forEach((fx) => {
+      const c = { x: b0.x + fx * w, y: b0.y + sy * f * h, a: b0.a, pen: b0.pen + 1, off: true }, s = score(c);
+      if (s < bs) { bs = s; best = c; }
+    })));
+  }
+  return best;
+}
+// the leader of a label put off its line: from the anchor a to the nearest point of the label rect (centre p, w x h);
+// null when the anchor is (almost) under the label
+function leader(a, p, w, h, min = 3) {
+  const x = Math.max(p.x - w / 2, Math.min(a.x, p.x + w / 2)), y = Math.max(p.y - h / 2, Math.min(a.y, p.y + h / 2));
+  return Math.hypot(x - a.x, y - a.y) < min ? null : `M${a.x},${a.y} L${x},${y}`;
+}
+
 /* ---------- playback marks ---------- */
+// HURRY.on: a step was pressed while the previous one still animates — every animation of that step ends at once
+// (the dot jumps to its end, the camera to its target); HURRY.anims: the running Web Animations of the step
+const HURRY = { on: false, anims: new Set() };
+function hurry() { HURRY.on = true; HURRY.anims.forEach((a) => { try { a.finish(); } catch (e) { /* no end: infinite */ } }); HURRY.anims.clear(); }
+// a Web Animation the next press may cut short; resolves when it ends
+function hurryable(anim) {
+  if (!anim) return Promise.resolve();
+  if (HURRY.on) { try { anim.finish(); } catch (e) { /* ignore */ } return Promise.resolve(); }
+  HURRY.anims.add(anim);
+  return anim.finished.catch(() => {}).finally(() => HURRY.anims.delete(anim));
+}
 // runDot(layer, d, {async, label}): animates the accent dot along path d; async — dotted line
 // with a pause mid-way (the job waits in the queue); ghost — the line is not drawn (the path overlay already shows
-// the leg), only the dot runs. Resolves when the dot arrives.
+// the leg), only the dot runs. Resolves when the dot arrives (at once when the step is hurried).
 function runDot(layer, d, opt = {}) {
   const p = opt.ghost ? S_('path', { d, class: 'e ghost' }, layer) : S_('path', { d, class: 'e hot' + (opt.async ? ' dash' : ''), 'marker-end': 'url(#arrA)' }, layer);
   const c = S_('circle', { r: 6, class: 'dot' }, layer);
@@ -157,14 +250,15 @@ function runDot(layer, d, opt = {}) {
   const D_ = RM ? 0 : (opt.dur || 650) / state.speed;
   const put = (k) => { const q = p.getPointAtLength(len * k); c.setAttribute('cx', q.x); c.setAttribute('cy', q.y); return q; };
   if (opt.async) { const q = p.getPointAtLength(len / 2); S_('text', { x: q.x, y: q.y - 12, 'text-anchor': 'middle', class: 'qtag' }, layer, '⏸ ' + t('queue')); }
-  if (!D_) { put(1); return Promise.resolve(); }
+  if (!D_ || HURRY.on) { put(1); return Promise.resolve(); }
   const leg = (k0, k1, dur) => new Promise((res) => {
     const t0 = performance.now();
-    const tick = (tm) => { const k = ease(Math.min(1, (tm - t0) / dur)); put(k0 + (k1 - k0) * k); if (k < 1) requestAnimationFrame(tick); else res(); };
+    const tick = (tm) => { const k = HURRY.on ? 1 : ease(Math.min(1, (tm - t0) / dur)); put(k0 + (k1 - k0) * k); if (k < 1) requestAnimationFrame(tick); else res(); };
     requestAnimationFrame(tick);
   });
   if (!opt.async) return leg(0, 1, D_);
-  return leg(0, .5, D_ / 2).then(() => sleep(450 / state.speed)).then(() => leg(.5, 1, D_ / 2));
+  // the pause in the queue is a leg that stays: a hurried step skips it too
+  return leg(0, .5, D_ / 2).then(() => leg(.5, .5, 450 / state.speed)).then(() => leg(.5, 1, D_ / 2));
 }
 function pulse(layer, r) {
   const e = S_('rect', { x: r.x - 6, y: r.y - 6, width: r.w + 12, height: r.h + 12, rx: 14, class: 'pulse flash' }, layer);
@@ -205,4 +299,4 @@ async function zoomSwap(fromIdx, toIdx, rect, dir) {
   A.classList.add('hidden');
 }
 
-Object.assign(AM, { Cam, curve, clip, ctr, hop, bbox, runDot, pulse });
+Object.assign(AM, { Cam, curve, clip, ctr, hop, bbox, runDot, pulse, overArea, placeLabel, leader });

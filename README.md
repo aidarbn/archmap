@@ -102,9 +102,11 @@ nodes as white cards on a soft shadow, one typeface; and a dark theme.
   navigation stays and marks it, the inspector shows the overview and then the
   step, the toolbar reads **‹ Map · name · Overview ← Step k/N →**. **‹ Map**,
   Esc, another row of the tree or the same scenario again bring the whole map
-  back where it was. The hash keeps the open scenario (`#journey=<id>` /
-  `#flow=<id>`): a reload or a shared link opens it (old links with `&solo=1`
-  too).
+  back where it was. The hash keeps where you are — the open scenario and its
+  step, the map level, module and function (`#journey=<id>&step=4&lvl=2&mod=…`,
+  `#flow=<id>`, `#page=<id>`): a reload or a shared link opens the same place
+  (old links with `&solo=1` too), Back and Forward of the browser walk the same
+  levels as Esc.
 - **Breadcrumbs** "where I am" sit small in the top-left corner of the canvas
   (system › modules › module › function — a click goes back up; on a view:
   system › API).

@@ -48,6 +48,11 @@
 .pv-leg.cur .ln { stroke: var(--accent); stroke-width: 2.5; }
 .pv-leg.cur .pill { fill: color-mix(in oklab, var(--accent-soft) 88%, var(--surface)); stroke: var(--accent); }
 .pv-leg.cur .no { fill: var(--accent-text); font-family: var(--mono); font-size: 10.5px; }
+/* a secondary leg of the step (database, outside system, queue): what the step does there, quieter */
+.pv-leg.cur.aux .pill { fill: var(--surface); stroke-dasharray: 3 2; }
+.pv-leg.cur.aux .no { font-weight: 500; }
+/* the leader of a signed pill put beside its leg */
+.pv-leg .lead { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; opacity: .8; pointer-events: none; }
 .pf-in .pv-sub { font: 600 13px var(--mono); fill: var(--text-2); }
 
 /* state machines in a frame: the rules of views/status.css that its .sv-svg scopes */

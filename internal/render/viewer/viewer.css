@@ -607,6 +607,13 @@ svg.pathmode .elabel { opacity: .2; }
 /* the current step signed with what it does: a soft pill, the accent rim */
 .pleg.cur.lbl .pnum rect { fill: color-mix(in oklab, var(--accent-soft) 88%, var(--surface)); stroke: var(--accent); stroke-width: 1.2; }
 .pleg.cur.lbl .pnum text { fill: var(--accent-text); font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+/* a secondary leg of the current step (the database, an outside system, the queue): what the step does there, quieter
+ * than the main pill; or only the number */
+.pleg.cur.aux .pnum rect { fill: var(--surface); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; }
+.pleg.cur.aux .pnum text { fill: var(--accent-text); font-size: 11px; }
+.pleg.cur.aux.albl .pnum text { font-family: var(--mono); font-size: 10.5px; font-weight: 500; }
+/* the leader of a pill put beside its leg (the leg is too short or crowded): a thin line to the leg */
+.pleg .lead { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 2; opacity: .8; pointer-events: none; vector-effect: non-scaling-stroke; }
 .pleg.br .pnum rect { stroke-dasharray: 3 2; }
 .pleg.br .pnum text { fill: var(--text-2); font-size: 10.5px; }
 .pleg.br:hover .pnum rect { stroke: var(--accent); }
