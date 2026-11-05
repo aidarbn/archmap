@@ -27,6 +27,8 @@ func TestTechnical(t *testing.T) {
 		{"root catch-all", facts.Function{Name: "index", Entry: entry("http", "GET /{$}"), Doc: "index"}, Flow{Kind: "http", Steps: two, Top: true}, false, true},
 		{"metrics", facts.Function{Name: "Handler", Cls: strp("MetricsServer"), Entry: entry("http"), Doc: "x"}, Flow{Kind: "http", Steps: two, Top: true}, false, true},
 		{"cleanup worker", facts.Function{Name: "Work", Cls: strp("CleanupTestRestaurantsWorker"), Entry: entry("task"), Doc: "deletes"}, Flow{Kind: KindDeclared, Steps: two}, false, true},
+		{"declared cleanup task is business", facts.Function{Name: "Work", Cls: strp("OrderCleanupWorker"), Entry: entry("task"), Doc: "cancels expired orders"}, Flow{ID: "task-order-cleanup", Kind: KindDeclared, Steps: two}, false, false},
+		{"declared health task is business", facts.Function{Name: "Work", Cls: strp("TabletHealthCheckWorker"), Entry: entry("task"), Doc: "marks tablets offline"}, Flow{ID: "task-tablet-health-check", Kind: KindDeclared, Steps: two}, false, false},
 		{"bootstrap by flow id", facts.Function{Name: "Run", Entry: entry("task"), Doc: "x"}, Flow{ID: "keycloak-bootstrap", Kind: KindDeclared, Steps: two}, false, true},
 		{"technical but on a through path", facts.Function{Name: "Health", Entry: entry("http"), Doc: "x"}, Flow{Kind: KindDeclared, Steps: two}, true, false},
 		{"one step without a description", facts.Function{Name: "ListLanguages", Entry: entry("grpc")}, Flow{Kind: KindDeclared, Steps: []string{"e"}}, false, true},

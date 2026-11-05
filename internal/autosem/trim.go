@@ -28,6 +28,9 @@ var techTokens = map[string]bool{
 	"readiness": true, "readyz": true, "livez": true, "pprof": true,
 }
 
+// declaredTaskTech are the technical words for a hand-declared background task.
+var declaredTaskTech = map[string]bool{"test": true, "tests": true, "bootstrap": true, "metrics": true, "pprof": true}
+
 // techAlone are technical only as the whole name (Version, Ping, Doc): a
 // GetStateVersion is business, a Version handler is not.
 var techAlone = map[string]bool{"version": true, "ping": true, "doc": true, "docs": true, "ready": true, "live": true}
@@ -73,9 +76,16 @@ func Technical(fl Flow, f *facts.Facts, inJourney bool) bool {
 	if fn.Entry != nil {
 		routes = fn.Entry.Labels
 	}
+	// A background task someone declared by hand (arch:flow) is business even
+	// when named "cleanup" or "health": cancel expired orders, mark tablets
+	// offline. Only test / bootstrap / metrics tasks stay technical there.
+	words := techTokens
+	if fl.Kind == KindDeclared && fn.Entry != nil && fn.Entry.Kind == "task" {
+		words = declaredTaskTech
+	}
 	for _, n := range append(names, routes...) {
 		for _, w := range tokens(n) {
-			if techTokens[w] {
+			if words[w] {
 				return true
 			}
 		}
