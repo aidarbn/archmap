@@ -58,9 +58,17 @@ controls come back only when they prove necessary.
   actor, an outside system, a module or a function shows one short line of its
   description when the code has one (an actor: `61 scenarios · Admin service…`;
   the count leaves out technical scenarios).
+- **First what it does, then the details.** On the system level with nothing
+  selected a compact card under the crumbs says what the system does (the
+  project description), the counts, who uses it and which outside systems it
+  talks to (a name opens its card); the system card (the service node) lists
+  them with a line of description each.
 - **Details panel**: appears only when something is selected (actor, outside
   system, module, function, step, endpoint, table, status) and floats over the
-  right side. The first line under the name is the description. ✕, `]` or
+  right side. It starts with what the element does, in a larger font. Where the
+  code has no description, a module or function card shows a **summary of the
+  structure** instead, marked as such (entry points, called from, calls, tables
+  written and read, outside systems) — facts only, no guessed meaning. ✕, `]` or
   Cmd/Ctrl+. hide it until the next selection; drag its left edge to resize. An
   **actor** card says what it is (protocol, service, where it is defined
   `file:line`, the implementing type), lists its through paths and scenarios and
@@ -80,15 +88,22 @@ controls come back only when they prove necessary.
   into the step before them. A through path does not replay a step an earlier
   flow of it already played. The rules are in `internal/autosem/trim.go`.
 - **Scenarios** go only by hand: there is no auto play and nothing starts by
-  itself. Pick a path or scenario in the list, or in an actor, module or function card: the map shows
-  its first step and a bar appears at the bottom: `<name>  ← Step k/N →  <the
-  step>  ✕`. The whole path is drawn on the level you are on. The current leg is
+  itself. Pick a path or scenario in the list, or in an actor, module or
+  function card: it opens on its **overview** (step 0). The panel says what it
+  does (the description of `arch:flow` / the doc of the entry point / the rpc
+  comment), who starts it, the entry (endpoint or task), how it ends, the
+  number of steps and forks, and its participants — modules and outside systems
+  with a line of description each, then the tables; a path lists its scenarios
+  in order, each with its line (a click goes to its first step). The map shows
+  the whole path evenly, no step lit, and the bar reads `<name>  Overview · N
+  steps  → Start`. → (or Start) goes to step 1, then the bar is `<name>  ← Step
+  k/N →  <the step>  ✕`; ← from step 1 returns to the overview. The whole path is drawn on the level you are on. The current leg is
   bright with a bigger number and glows once, passed legs are a calm accent, the
   coming ones pale and dashed with their numbers, the rest of the map is dimmed;
   on the modules the module of the step lights up, inside a module the function.
   → and ← (or the arrows of the bar) step, a click on a leg or its number goes
   to that step (the tooltip says `Step k: …`), a click on the node of the next
-  step steps forward. Home goes back to the first step, Esc closes it. The camera
+  step steps forward. Home goes back to the overview, Esc closes it. The camera
   moves smoothly and only when the step is off screen. At a fork the branches
   that go on in another flow are pale legs (and buttons in the bar): a click
   takes one. Outcomes that end the story (an `arch:on` without a flow: an error,
@@ -385,11 +400,13 @@ It also prints, as information that never fails the run, how much of the system 
 the code:
 
 ```
-info: descriptions: modules 54/56, entry points 127/149, endpoints 144/150, actors 6/8, externals 9/9
+info: descriptions: modules 54/56, entry points 127/149, endpoints 144/150, actors 6/8, externals 9/9, scenarios 143/146
 ```
 
 (modules with functions, functions that are entry points, endpoints and tasks, actors grouped as on
-the map, before the "other roles" fold, and outside systems). `--missing-docs` lists every place
+the map, before the "other roles" fold, outside systems, and declared scenarios — an `arch:flow` is
+described by the doc comment of its entry function or the description of its endpoint, e.g. the
+rpc comment). `--missing-docs` lists every place
 without a description as `file:line: no description (kind name)`, ready to fill in; the JSON format
 has the same under `docs`. `archmap map` prints the summary line to stderr.
 

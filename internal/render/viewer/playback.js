@@ -240,6 +240,7 @@ async function doStep(delta = 1) {
   if (state.busy || !state.run) return false;
   if (delta > 0 && atBranch()) { showChoice(true); return false; }
   const n = state.step + delta, total = runList().length;
+  if (n === -1 && delta < 0) { state.step = -1; trimSegs(); showOverview(); return true; } // back before step 1: the overview
   if (n < 0 || n >= total) return false;
   state.step = n;
   if (delta < 0) trimSegs();
@@ -289,12 +290,21 @@ function takeBranch(b) {
     renderPlayer(); bus.emit('step', curStep()); drawPath();
   }
 }
-// back to the first step of the scenario (Home)
+// back to the overview of the scenario (Home)
 async function resetRun() {
   if (!state.run || state.busy) return;
   state.run = buildRun(state.run.key); state.step = -1; state.exitText = null;
   applyFocus();
-  await doStep(1);
+  showOverview();
+}
+// the overview (step 0, state.step = -1): no step is lit, the whole path is drawn evenly, the panel says what the
+// run does (panel.js runOverviewHTML), the bar offers "→ Start"
+function showOverview() {
+  state.exitText = null;
+  [sys, map, fv].forEach((x) => { if (x) { clearPlay(x.svg); x.fx.innerHTML = ''; } });
+  showChoice(false); renderPlayer(); setSel({ t: 'run' });
+  bus.emit('step', null);
+  drawPath();
 }
 
 /* ---------- the whole path on the current map level ----------
@@ -352,9 +362,9 @@ function clearPath() {
 }
 function drawPath() {
   clearPath();
-  if (!state.run || state.view !== 'map' || state.level > 2 || state.step < 0) return;
+  if (!state.run || state.view !== 'map' || state.level > 2) return;
   const lvl = state.level, sc = [sys, map, fv][lvl]; if (!sc) return;
-  const g = pathLayer(sc), cur = state.step, legs = pathLegs(lvl);
+  const g = pathLayer(sc), cur = state.step, ov = cur < 0, legs = pathLegs(lvl); // ov: the overview — every leg calm, none current
   // the numbers keep a readable size on screen when the level is zoomed out (fixed when drawn)
   const sw = sc.svg.getBoundingClientRect().width || 1000, zk = Math.max(1, Math.min(3, (sc.cam ? sc.cam.vb.w : sw) / sw));
   const zoomAround = (p) => (zk === 1 ? null : `translate(${p.x},${p.y}) scale(${zk}) translate(${-p.x},${-p.y})`);
@@ -362,14 +372,14 @@ function drawPath() {
   const markNode = (id, st) => { const n = sc.nodes[id] || (sc.ports && sc.ports[String(id).replace(/^port:/, '')]); if (!n || !n.el) return; n.el.classList.add('pn'); if (st === 'cur' || !n.el.classList.contains('pn-cur')) { n.el.classList.remove('pn-done', 'pn-next'); n.el.classList.add('pn-' + st); } };
   const pairs = new Set(legs.map((l) => l.a + '\0' + l.b));
   // future legs first, the current one last: on top
-  const stOf = (l) => (l.steps.includes(cur) ? 'cur' : l.steps.some((i) => i < cur) ? 'done' : 'next');
+  const stOf = (l) => (ov ? 'done' : l.steps.includes(cur) ? 'cur' : l.steps.some((i) => i < cur) ? 'done' : 'next');
   const order = { next: 0, done: 1, cur: 2 };
   legs.sort((p, q) => order[stOf(p)] - order[stOf(q)]).forEach((l) => {
     const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
     const st = stOf(l), back = pairs.has(l.b + '\0' + l.a);
     const d = hop(ra, rb, back ? 0.22 : 0.1);
     const grp = S_('g', { class: 'pleg ' + st + (l.kind === 'async' ? ' async' : '') }, g);
-    const shown = st === 'cur' ? cur : st === 'done' ? Math.max(...l.steps.filter((i) => i <= cur)) : Math.min(...l.steps);
+    const shown = ov ? Math.min(...l.steps) : st === 'cur' ? cur : st === 'done' ? Math.max(...l.steps.filter((i) => i <= cur)) : Math.min(...l.steps);
     const tip = l.steps.map((i) => t('pathStep', i + 1, stepLabel(i))).join('\n');
     const v = S_('path', { d, class: 'v', 'marker-end': st === 'next' ? 'url(#arrM)' : 'url(#arrA)' }, grp);
     const hit = S_('path', { d, class: 'hit' }, grp);
@@ -385,7 +395,9 @@ function drawPath() {
     PATH.legs.push({ a: l.a, b: l.b, steps: l.steps, st });
   });
   // the node of the current step even when no leg reaches it on this level (the first step, a step inside a module)
-  const here = pathNode(lvl, cur); if (here) markNode(here, 'cur');
+  // the overview keeps the outside systems of every step in view (a step shows only its own one — pathLegs)
+  if (ov && lvl === 1) for (let i = 0; i < runList().length; i++) { const s = stepAt(i); if (s && !s.planned) s.exts.forEach((x) => markNode(x.id, 'done')); }
+  const here = ov ? null : pathNode(lvl, cur); if (here) markNode(here, 'cur');
   // the step stays inside the node (a call within one module): its number sits on the node
   if (here && !legs.some((l) => l.steps.includes(cur))) {
     const r = pathRect(sc, here);
@@ -396,7 +408,7 @@ function drawPath() {
       S_('title', {}, grp, t('pathStep', cur + 1, stepLabel(cur)));
     }
   }
-  if (lvl === 0 && sc.nodes.svc) markNode('svc', 'cur');
+  if (lvl === 0 && sc.nodes.svc) markNode('svc', ov ? 'done' : 'cur');
   if (here) drawBranches(sc, g, lvl, here, zoomAround);
   // the glow of the current leg plays once, when it appears
   g.querySelectorAll('.pleg.cur').forEach((x) => x.classList.add('flash'));
@@ -485,10 +497,13 @@ function renderPlayer() {
   if (!r) { showChoice(false); jvPaintTags(); return; }
   const list = runList(), s = curStep(), br = atBranch(), fe = r.fixed ? jvEnd() : null;
   $('#scName').textContent = r.name; $('#scName').title = r.name + (r.desc ? '\n' + r.desc : '');
-  $('#capNo').textContent = r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', Math.max(0, state.step + 1), list.length);
+  const ov = state.step < 0; // the overview: "Overview · N steps  → Start"
+  $('#capNo').textContent = ov ? t('ovOverview') + ' · ' + t('pkStepsN', list.length) : r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', state.step + 1, list.length);
   $('#capTx').textContent = s ? s.label + (state.exitText && state.step === list.length - 1 ? ' → ' + t('exit') + ': ' + state.exitText : '') : list.length ? '' : t('noPlay');
   $('#capTx').title = s && D.fns[s.fid] ? fnInfo(s.fid).name : '';
-  $('#pPrev').disabled = state.step <= 0;
+  $('#pPrev').disabled = ov;
+  $('#pStep').textContent = ov && list.length ? '→ ' + t('ovStart') : '→';
+  $('#pStep').classList.toggle('primary', ov && !!list.length);
   $('#pStep').disabled = !list.length || (state.step >= list.length - 1 && !br && !(fe && fe.jump));
   $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').title = t('closeRun') + ' (Esc)';
   showChoice(br);
@@ -516,12 +531,12 @@ function loadRun(key) {
   showChoice(false); renderPlayer(); renderCrumbs();
   bus.emit('flow', state.run); bus.emit('step', null);
 }
-// openRun(key): open a scenario on its first step (the map shows where it starts; the next steps by hand)
+// openRun(key): open a scenario on its overview (what it does, the whole path on the map); the steps by hand
 async function openRun(key) {
   if (state.view !== 'map') setView('map');
   for (let i = 0; i < 40 && state.busy; i++) await sleep(100);
   loadRun(key);
-  if (state.run) await doStep(1);
+  if (state.run) showOverview();
 }
 function closeRun() {
   if (!state.run) return;

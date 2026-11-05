@@ -235,7 +235,7 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("auto play left in the page: %q", s)
 		}
 	}
-	for _, id := range []string{`id="side"`, `id="sideList"`, `id="sideTog"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`} {
+	for _, id := range []string{`id="side"`, `id="sideList"`, `id="sideTog"`, `id="about"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`} {
 		if strings.Count(v, id) != 1 {
 			t.Errorf("the page must have exactly one %s", id)
 		}

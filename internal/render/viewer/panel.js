@@ -17,6 +17,106 @@ addI18n({
     dsToApi: 'API ↘', dsToData: 'Data ↘', dsToStatus: 'Statuses ↘', dsTables: 'Tables', scenN: (n) => n + (n === 1 ? ' scenario' : ' scenarios'),
   },
 });
+addI18n({
+  ru: {
+    ovOverview: 'Обзор', ovFlow: 'Сценарий', ovPath: 'Сквозной путь', ovWho: 'Кто запускает', ovEntry: 'Вход', ovExit: 'Чем заканчивается',
+    ovSteps: 'Шагов', ovForks: 'Ветвлений', ovFlowsN: 'Сценариев', ovParts: 'Участники', ovFlows: 'Сценарии пути по порядку', ovStart: 'Начать',
+    ovNoDesc: 'Описания нет — его даёт doc-комментарий точки входа или комментарий rpc', ovSys: 'О системе', ovActors: 'Кто пользуется',
+    ovExts: 'Внешние системы', ovScen: 'Сценариев',
+    smKick: 'Сводка по структуре — описания в коде нет', smFrom: 'вызывается из', smCalls: 'вызывает', smWrites: 'пишет таблицы',
+    smReads: 'читает таблицы', smExt: 'внешние системы', smEntries: 'точек входа', smEps: 'ручки',
+  },
+  en: {
+    ovOverview: 'Overview', ovFlow: 'Scenario', ovPath: 'Through path', ovWho: 'Started by', ovEntry: 'Entry', ovExit: 'Ends with',
+    ovSteps: 'Steps', ovForks: 'Forks', ovFlowsN: 'Scenarios', ovParts: 'Participants', ovFlows: 'Scenarios of the path in order', ovStart: 'Start',
+    ovNoDesc: 'No description — the doc comment of the entry point or the rpc comment gives one', ovSys: 'About the system', ovActors: 'Who uses it',
+    ovExts: 'Outside systems', ovScen: 'Scenarios',
+    smKick: 'A summary of the structure — the code has no description', smFrom: 'called from', smCalls: 'calls', smWrites: 'writes tables',
+    smReads: 'reads tables', smExt: 'outside systems', smEntries: 'entry points', smEps: 'endpoints',
+  },
+});
+// a list cut to n names: "a, b, c +4"
+const nameList = (a, n = 4) => a.slice(0, n).join(', ') + (a.length > n ? ' +' + (a.length - n) : '');
+const isReadOp = (op) => /^(read|select|get|query)/i.test(String(op || ''));
+// the facts summary shown where the code has no description: never a guessed meaning, only what the structure says
+function sumHTML(rows) {
+  const r = rows.filter((x) => x[1]);
+  return `<div class="summ"><div class="summ-k">${esc(t('smKick'))}</div>${r.length ? `<dl class="kv">${r.map(([k, v]) => `<dt>${esc(k.charAt(0).toUpperCase() + k.slice(1))}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : ''}</div>`;
+}
+function modSummary(m) {
+  const fids = D.byMod[m] || [], from = new Set(), to = new Set(), wr = new Set(), rd = new Set();
+  let entries = 0;
+  fids.forEach((id) => {
+    const f = D.fns[id]; if (!f) return;
+    if (f.entry) entries++;
+    (D.callers[id] || []).forEach((c) => { const cm = (D.fns[c] || {}).module; if (cm && cm !== m) from.add(short(cm)); });
+    fnInfo(id).out.forEach((c) => { const cm = (D.fns[c] || {}).module; if (cm && cm !== m) to.add(short(cm)); });
+    (f.data || []).forEach((a) => (isReadOp(a.op) ? rd : wr).add(a.table));
+  });
+  wr.forEach((x) => rd.delete(x));
+  return sumHTML([[t('smEntries'), entries ? String(entries) : ''], [t('smFrom'), nameList(Array.from(from))], [t('smCalls'), nameList(Array.from(to))],
+    [t('smWrites'), nameList(Array.from(wr))], [t('smReads'), nameList(Array.from(rd))], [t('smExt'), nameList((D.extByMod[m] || []).map((x) => x.name))]]);
+}
+function fnSummary(id) {
+  const f = fnInfo(id), wr = new Set(), rd = new Set();
+  (f.data || []).forEach((a) => (isReadOp(a.op) ? rd : wr).add(a.table));
+  wr.forEach((x) => rd.delete(x));
+  const eps = (D.epByFid[id] || []).map((e) => ((e.method || e.kind) + ' ' + (e.path || e.name || '')).trim());
+  return sumHTML([[t('smEps'), nameList(eps, 2)], [t('smFrom'), nameList(f.in.map((c) => fnInfo(c).name), 3)], [t('smCalls'), nameList(f.out.map((c) => fnInfo(c).name), 3)],
+    [t('smWrites'), nameList(Array.from(wr))], [t('smReads'), nameList(Array.from(rd))], [t('smExt'), nameList(extsOfFn(id).map((x) => x.name))]]);
+}
+// rows of participants: modules and outside systems with one line of their description
+const modRow = (m) => `<li class="dsc" data-mod="${esc(m)}" title="${esc(modLabel(m))}"><span class="fn"><i class="lsq" style="background:${LCOLOR[layerOf(m)]}"></i>${esc(short(m))}</span><span class="ds">${esc(cut(modDesc(m) || modRole(m), 110))}</span></li>`;
+const extRow = (x) => `<li class="dsc" data-ext="${esc(x.id)}"><span class="fn" style="font-family:inherit">↗ ${esc(x.name)}</span>${extDesc(x) ? `<span class="ds">${esc(cut(extDesc(x), 110))}</span>` : ''}</li>`;
+// what takes part in a run: the modules, the outside systems and the tables of its steps, in the order reached
+function runParts(r) {
+  const mods = [], exts = [], fids = [];
+  r.segs.forEach((sg) => sg.steps.forEach((fid) => {
+    const f = D.fns[fid]; if (!f) return;
+    fids.push(fid);
+    if (!mods.includes(f.module)) mods.push(f.module);
+    extsOfFn(fid).forEach((x) => { if (!exts.includes(x)) exts.push(x); });
+  }));
+  return { mods, exts, fids };
+}
+// the overview of an open run (step 0): what it does, who starts it, the entry, the outcome, the participants
+function runOverviewHTML() {
+  const r = state.run; if (!r) return '';
+  const L_ = runList(), P = runParts(r), j = r.kind === 'journey' ? r.journey : null;
+  const fl0 = r.segs[0] && r.segs[0].flow, subj = j || r.baseFlow || fl0;
+  const first = L_.length ? L_[0].fid : null;
+  const desc = subj ? realDesc(subj) || (!j && first ? fnDesc(first) : '') : '';
+  let h = `<div class="kicker">${esc(t('ovOverview'))} · ${esc(j ? t('ovPath') : t('ovFlow'))}</div><h2>${esc(j ? pathName(j) : r.name)}</h2>`;
+  // a path has no description of its own (arch:journey has none): its scenarios below say what it does
+  h += desc ? `<p class="lead what">${esc(desc)}</p>` : j ? '' : `<p class="nodesc" style="margin-top:6px">${esc(t('ovNoDesc'))}</p>`;
+  const actor = j ? j.actor : fl0 ? flowActor(fl0) : '';
+  const ep = first && (D.epByFid[first] || [])[0];
+  const entry = ep ? ((ep.method || ep.kind) + ' ' + (ep.path || (ep.service ? ep.service + '.' : '') + (ep.name || ''))).trim() : first && D.fns[first] ? (D.fns[first].entry ? D.fns[first].entry.kind + ' · ' : '') + fnInfo(first).name : '';
+  const exit = j ? j.exit || (r.segs[r.segs.length - 1].flow || {}).exit : subj && subj.exit;
+  const forks = r.segs.reduce((n, sg) => n + (sg.flow ? uniqBr(sg.flow.branches).length : 0), 0);
+  h += '<dl class="kv">';
+  if (actor) h += `<dt>${esc(t('ovWho'))}</dt><dd>${esc(actor)}</dd>`;
+  if (entry) h += `<dt>${esc(t('ovEntry'))}</dt><dd class="mono" style="font-size:11.5px">${esc(entry)}</dd>`;
+  if (exit) h += `<dt>${esc(t('ovExit'))}</dt><dd>${esc(L(exit))}</dd>`;
+  if (j) h += `<dt>${esc(t('ovFlowsN'))}</dt><dd>${r.segs.length}</dd>`;
+  h += `<dt>${esc(t('ovSteps'))}</dt><dd>${L_.length}</dd>`;
+  if (forks) h += `<dt>${esc(t('ovForks'))}</dt><dd>${forks}</dd>`;
+  h += '</dl>';
+  h += `<div class="btnrow"><button class="pbtn primary" data-act="start">${esc(t('ovStart'))} →</button></div>`;
+  if (j) {
+    let at = 0;
+    h += `<h3>${esc(t('ovFlows'))}</h3><ul class="rel-list">` + r.segs.map((sg, i) => {
+      const s0 = at; at += sg.steps.length;
+      const fl = sg.flow, line = fl ? realDesc(fl) || (fl.exit ? '→ ' + fl.exit : '') : '';
+      return `<li class="dsc" data-step="${s0}" title="${esc(t('dsRunTip'))}"><span class="fn" style="font-family:inherit">${i + 1}. ${esc(fl ? fl.name : r.name)}</span><span class="md">${esc(t('pkStepsN', sg.steps.length))}</span>${line ? `<span class="ds">${esc(cut(line, 120))}</span>` : ''}</li>`;
+    }).join('') + '</ul>';
+  }
+  if (P.mods.length || P.exts.length) {
+    h += `<h3>${esc(t('ovParts'))} (${P.mods.length + P.exts.length})</h3><ul class="rel-list">${P.mods.map(modRow).join('')}${P.exts.map(extRow).join('')}</ul>`;
+  }
+  h += tableChips(P.fids);
+  return h;
+}
 // flows that start at a function / pass through it / through a module
 // (technical scenarios — flow.hidden — are not listed: see autosem/trim.go)
 const flowsFrom = (fid) => visibleFlows().filter((fl) => fl.steps && fl.steps[0] === fid);
@@ -106,7 +206,8 @@ function fnSection(id, target, opt = {}) {
   let h = `<div class="kicker">${f.mod ? chipMod(f.mod) : ''}${f.status ? `<span class="chip ${f.status === 'added' ? 'a' : 'm'}">${esc(t('st_' + f.status))}${f.uncommitted ? ' · ' + esc(t('uncommitted')) : ''}</span>` : ''}${f.entry ? `<span class="chip" title="${esc((f.entry.labels || []).join(', '))}">⚑ ${esc(f.entry.kind)}</span>` : ''}</div>`;
   h += `<h2 class="mono">${esc(f.name)}</h2>`;
   const fd = f.full ? fnDesc(id) : '';
-  if (fd) h += `<p class="lead">${esc(fd)}</p>`;
+  if (fd) h += `<p class="lead what">${esc(fd)}</p>`;
+  else if (f.full && !opt.noSum) h += fnSummary(id);
   if (f.sig) h += `<h3>${esc(t('sig'))}</h3><div class="sig">${hlLine(f.sig, f.lang)}</div>`;
   if (f.file) h += `<div class="loc">${esc(f.file)}:${f.s}–${f.e}</div>`;
   const eps = D.epByFid[id] || [];
@@ -119,10 +220,45 @@ function fnSection(id, target, opt = {}) {
   h += `<h3>${esc(t('code'))}</h3><div class="code"${opt.codeId ? ` id="${opt.codeId}"` : ''}>${c.html}</div>`;
   return { h, hlIdx: c.hlIdx, loading: c.loading };
 }
-// no selection: no panel (the overview is never shown on its own)
-function overviewHTML() { return ''; }
+// the system with nothing selected: a compact card in the top-left corner of the map under the crumbs — what the
+// system does, the counts, who uses it and what it talks to (a name opens its card). The map nodes carry the one
+// line of each; the system card (a click on the service or the brand… then the service) has them all with their
+// descriptions (overviewHTML). No selection — no panel: the map keeps its width.
+function aboutHTML() {
+  const PJ = D.F.project || {}, desc = plainDoc(PJ.description || D.M.summary || '');
+  const nm = (s) => esc(s), n = visibleFlows().length, jn = jvJourneys().length;
+  let h = desc ? `<p class="ab-d">${esc(desc)}</p>` : '';
+  h += `<p class="ab-m">${esc(t('scenN', n))}${jn ? ' · ' + esc(t('jvTitle')).toLowerCase() + ' ' + jn : ''} · ${esc(t('modules'))} ${D.allMods.length}${Object.keys(D.tables).length ? ' · ' + esc(t('tables')) + ' ' + Object.keys(D.tables).length : ''}</p>`;
+  if (D.actors.length) h += `<p class="ab-l"><b>${esc(t('ovActors'))}:</b> ${D.actors.map((a) => `<button type="button" data-actor="${esc(a.id)}" title="${esc(actorDesc(a).desc || actorSub(a))}">${nm(actorName(a))}</button>`).join(', ')}</p>`;
+  if (D.externals.length) h += `<p class="ab-l"><b>${esc(t('ovExts'))}:</b> ${D.externals.map((x) => `<button type="button" data-ext="${esc(x.id)}" title="${esc(extDesc(x))}">${nm(x.name)}</button>`).join(', ')}</p>`;
+  return h;
+}
+function renderAbout() {
+  const el = $('#about'); if (!el || !D.F) return;
+  const on = state.view === 'map' && state.level === 0 && !state.run && !state.sel;
+  if (on && !el.childElementCount) {
+    el.innerHTML = aboutHTML();
+    el.querySelectorAll('[data-actor]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'actor', id: e.getAttribute('data-actor') })));
+    el.querySelectorAll('[data-ext]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'ext', id: e.getAttribute('data-ext') })));
+  }
+  el.hidden = !on;
+}
+const resetAbout = () => { const el = $('#about'); if (el) el.innerHTML = ''; renderAbout(); };
+// the system card: what it does, who uses it, what it talks to (each one line), the button into the modules
+function overviewHTML(svc) {
+  if (!D.F || !svc) return '';
+  const cap = (s) => esc(String(s).charAt(0).toUpperCase() + String(s).slice(1));
+  const PJ = D.F.project || {}, desc = plainDoc(PJ.description || D.M.summary || '');
+  let h = `<div class="kicker">${esc(t('ovSys'))}</div><h2>${esc(PJ.name || D.M.title || D.F.repo || '')}</h2>`;
+  h += desc ? `<p class="lead what">${esc(desc)}</p>` : '';
+  h += `<dl class="kv"><dt>${esc(t('ovScen'))}</dt><dd>${visibleFlows().length}${jvJourneys().length ? ' · ' + esc(t('jvTitle')).toLowerCase() + ': ' + jvJourneys().length : ''}</dd><dt>${cap(t('modules'))}</dt><dd>${D.allMods.length}</dd><dt>${cap(t('entries'))}</dt><dd>${D.entries.length}</dd>${Object.keys(D.tables).length ? `<dt>${cap(t('tables'))}</dt><dd>${Object.keys(D.tables).length}</dd>` : ''}</dl>`;
+  h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>`;
+  if (D.actors.length) h += `<h3>${esc(t('ovActors'))}</h3><ul class="rel-list">${D.actors.map((a) => { const d = actorDesc(a).desc; return `<li class="dsc" data-actor="${esc(a.id)}"><span class="fn" style="font-family:inherit">${esc(actorName(a))}</span><span class="md">${esc(t('scenN', visibleOfActor(a).length))}</span><span class="ds">${esc(cut(d ? plainDoc(d) : actorSub(a), 110))}</span></li>`; }).join('')}</ul>`;
+  if (D.externals.length) h += `<h3>${esc(t('ovExts'))}</h3><ul class="rel-list">${D.externals.map(extRow).join('')}</ul>`;
+  return h;
+}
 function stepHTML() {
-  const s = curStep(); if (!s) return { h: overviewHTML() };
+  const s = curStep(); if (!s) return { h: runOverviewHTML() };
   if (s.planned) {
     const from = s.prev ? fnInfo(s.prev).name : '—';
     let h = `<div class="kicker">${esc(t('stepN'))} ${s.i + 1} · ${esc(cut(state.run.name, 40))} <span class="chip">⌁ ${esc(t('planTag'))}</span></div><h2>${esc(s.label)}</h2>`;
@@ -142,8 +278,8 @@ function stepHTML() {
     const c = codeHTML(s.prev, s.fid);
     h += `<h3>${esc(t('callSite'))} · ${esc(fnInfo(s.prev).name)}</h3><div class="code" id="pcode">${c.html}</div>`;
     hlIdx = c.hlIdx; loading = c.loading;
-    h += `<h3 style="margin-top:22px">${esc(t('callee'))}</h3>` + fnSection(s.fid, s.next).h;
-  } else { const sec = fnSection(s.fid, s.next, { codeId: 'pcode' }); h += sec.h; hlIdx = sec.hlIdx; loading = sec.loading; }
+    h += `<h3 style="margin-top:22px">${esc(t('callee'))}</h3>` + fnSection(s.fid, s.next, { noSum: true }).h;
+  } else { const sec = fnSection(s.fid, s.next, { codeId: 'pcode', noSum: true }); h += sec.h; hlIdx = sec.hlIdx; loading = sec.loading; }
   return { h, hlIdx, loading, fids: [s.prev, s.fid] };
 }
 function renderPanel() {
@@ -153,6 +289,7 @@ function renderPanel() {
     const r = PANELS[s.t](s, AM);
     if (r && typeof r === 'object') { h = r.html || ''; after = r.after; } else h = r || '';
   } else if (!s) h = overviewHTML();
+  else if (s.t === 'run') h = runOverviewHTML();
   else if (s.t === 'step') { const r = stepHTML(); h = r.h; hlIdx = r.hlIdx; loading = r.loading; fids = r.fids || []; }
   else if (s.t === 'fn') {
     const sec = fnSection(s.id, null, { codeId: 'pcode' }); loading = sec.loading; fids = [s.id];
@@ -162,7 +299,7 @@ function renderPanel() {
     const m = s.id, c = D.modChg[m], imps = ((D.mods[m] || {}).imports || []).filter((x) => D.mods[x]), by = D.importedBy[m] || [];
     const inRun = runList().map((x, i) => [x, i]).filter(([x]) => (D.fns[x.fid] || {}).module === m);
     h = `<div class="kicker"><span class="chip"><i style="background:${LCOLOR[layerOf(m)]}"></i>${esc(t('layers')[layerOf(m)])}</span></div><h2 class="mono">${esc(modLabel(m))}</h2>`;
-    const d = modDesc(m); h += `<p class="lead">${esc(d || modRole(m))}</p>`;
+    const d = modDesc(m); h += d ? `<p class="lead what">${esc(d)}</p>` : modSummary(m);
     h += `<dl class="kv"><dt>${esc(t('fns'))}</dt><dd>${(D.byMod[m] || []).length}</dd><dt>files</dt><dd>${((D.mods[m] || {}).files || []).length}</dd><dt>${esc(t('imports'))}</dt><dd>${imps.length}</dd><dt>${esc(t('importedBy'))}</dt><dd>${by.length}</dd>${hasChg(c) ? `<dt>${esc(t('st_modified'))}</dt><dd>${esc(chgText(c))}</dd>` : ''}</dl>`;
     if (D.extByMod[m]) h += `<div class="btnrow">${D.extByMod[m].map((x) => `<span class="chip">↗ ${esc(x.name)}</span>`).join('')}</div>`;
     h += `<h3>${esc(t('imports'))}</h3><div class="tbl-pills">${imps.slice(0, 30).map(chipMod).join('') || '—'}</div>`;
@@ -175,16 +312,13 @@ function renderPanel() {
     const n = G.TN[s.id]; if (!n) { state.sel = null; return renderPanel(); }
     const c = chgOf(n.mods), info = modelFor(n.path);
     h = `<div class="kicker">${esc(t('group'))}${info ? ` · ${esc(t('layers')[info.layer] || '')}` : ''}</div><h2 class="mono">${esc((n.path || t('root')) + '/')}</h2>`;
-    if (info && info.desc) h += `<p class="lead">${esc(info.desc)}</p>`;
+    if (info && info.desc) h += `<p class="lead what">${esc(info.desc)}</p>`;
     h += `<dl class="kv"><dt>${esc(t('modules'))}</dt><dd>${n.mods.length}</dd><dt>${esc(t('fns'))}</dt><dd>${n.n}</dd>${hasChg(c) ? `<dt>${esc(t('st_modified'))}</dt><dd>${esc(chgText(c))}</dd>` : ''}</dl>`;
     h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${n.mods.slice(0, 40).map(chipMod).join('')}${n.mods.length > 40 ? ` +${n.mods.length - 40}` : ''}</div>`;
     h += `<div class="btnrow">${isOpen(n) ? '' : `<button class="pbtn primary" data-act="expand">${esc(t('expand'))}</button>`}${G.userOpen.has(n.id) ? `<button class="pbtn" data-act="collapse">${esc(t('collapse'))}</button>` : ''}</div>`;
   } else if (s.t === 'svc') {
-    const PJ = D.F.project || {};
-    h = `<div class="kicker">${esc(t('lv')[0])}</div><h2>${esc(PJ.name || D.F.repo || '')}</h2><p class="lead">${esc(PJ.description || D.M.summary || '')}</p>`;
-    h += `<dl class="kv"><dt>${esc(t('modules'))}</dt><dd>${D.allMods.length}</dd><dt>${esc(t('fns'))}</dt><dd>${D.fids.length}</dd><dt>${esc(t('entries'))}</dt><dd>${D.entries.length}</dd>${Object.keys(D.tables).length ? `<dt>${esc(t('tables'))}</dt><dd>${Object.keys(D.tables).length}</dd>` : ''}</dl>`;
+    h = overviewHTML(true);
     h += `<h3>${esc(t('layer'))}</h3><div class="tbl-pills">${LAYERS.filter((l) => D.allMods.some((m) => layerOf(m) === l)).map((l) => `<span class="chip"><i style="background:${LCOLOR[l]}"></i>${esc(t('layers')[l])} · ${D.allMods.filter((m) => layerOf(m) === l).length}</span>`).join('')}</div>`;
-    h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>`;
   } else if (s.t === 'actor') {
     const a = D.actors.find((x) => x.id === s.id); if (!a) { state.sel = null; return renderPanel(); }
     h = actorHTML(a);
@@ -215,9 +349,11 @@ function wirePanel(p, s) {
   p.querySelectorAll('[data-fn]').forEach((e) => e.addEventListener('click', () => openFn(e.getAttribute('data-fn'))));
   p.querySelectorAll('[data-mod]').forEach((e) => e.addEventListener('click', () => openMod(e.getAttribute('data-mod'))));
   p.querySelectorAll('[data-step]').forEach((e) => e.addEventListener('click', () => AM.play.go(+e.getAttribute('data-step'))));
-  p.querySelectorAll('[data-run]').forEach((e) => e.addEventListener('click', () => { if (state.view !== 'map') setView('map'); openRun(e.getAttribute('data-run')); }));
+  p.querySelectorAll('[data-actor]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'actor', id: e.getAttribute('data-actor') })));
+  p.querySelectorAll('[data-ext]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'ext', id: e.getAttribute('data-ext') })));  p.querySelectorAll('[data-run]').forEach((e) => e.addEventListener('click', () => { if (state.view !== 'map') setView('map'); openRun(e.getAttribute('data-run')); }));
   const act = (a, f) => { const b = p.querySelector(`[data-act="${a}"]`); if (b) b.onclick = f; };
   act('code', () => jumpToFn(s.id, 3));
+  act('start', () => doStep(1));
   act('playfn', () => playFrom(s.id));
   act('intomod', () => goModule(s.id));
   act('todata', () => setView('data'));
@@ -299,6 +435,9 @@ function setupSidePanel() {
   });
   paintPanelBtn(); paintPanelShown();
   bus.on('lang', paintPanelBtn);
+  ['select', 'level', 'view', 'flow'].forEach((e) => bus.on(e, renderAbout));
+  ['lang', 'data'].forEach((e) => bus.on(e, resetAbout));
+  renderAbout();
 }
 
 Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel, panel: { setHidden: setPanelHidden, setWidth: setPanelWidth, get hidden() { return $('main').classList.contains('nopanel'); }, get width() { return PNL.w; } } });

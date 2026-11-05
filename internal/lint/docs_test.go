@@ -17,8 +17,9 @@ func TestDocsCoverage(t *testing.T) {
 		Functions: map[string]facts.Function{
 			"srv/a.go::TabletsServer.Pay": {Name: "Pay", Cls: &cls, File: "srv/a.go", Start: 10, Module: "srv", Doc: "Pay charges.", Entry: &facts.Entry{Kind: "http"},
 				Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "pay", Name: "Pay", Actor: "Планшет"}}}},
-			"srv/a.go::TabletsServer.Menu": {Name: "Menu", Cls: &cls, File: "srv/a.go", Start: 20, Module: "srv", Entry: &facts.Entry{Kind: "http"}},
-			"cmd/main.go::main":            {Name: "main", File: "cmd/main.go", Start: 3, Module: "cmd", Entry: &facts.Entry{Kind: "main"}},
+			"srv/a.go::TabletsServer.Menu": {Name: "Menu", Cls: &cls, File: "srv/a.go", Start: 20, Module: "srv", Entry: &facts.Entry{Kind: "http"},
+				Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "menu", Name: "Меню"}}}},
+			"cmd/main.go::main": {Name: "main", File: "cmd/main.go", Start: 3, Module: "cmd", Entry: &facts.Entry{Kind: "main"}},
 		},
 		Endpoints: []facts.Endpoint{
 			{Kind: "grpc", Service: "TabletsService", Name: "Pay", Fid: "srv/a.go::TabletsServer.Pay", Auth: "role:tablet", Source: "proto", Line: 5, Desc: "Оплатить"},
@@ -43,6 +44,7 @@ func TestDocsCoverage(t *testing.T) {
 		{"endpoints", d.Endpoints, Count{1, 3}},
 		{"actors", d.Actors, Count{2, 3}}, // Планшет (markup), tablet (service), admin (none)
 		{"externals", d.Externals, Count{1, 2}},
+		{"flows", d.Flows, Count{1, 2}},
 	}
 	for _, c := range cases {
 		if c.got != c.want {
@@ -60,6 +62,7 @@ func TestDocsCoverage(t *testing.T) {
 		"api/t.proto:7: no description (endpoint TabletsService.Menu)",
 		"srv/a.go:20: no description (function TabletsServer.Menu)",
 		"out/cache: no description (external Redis)",
+		"srv/a.go:20: no description (flow menu «Меню»)",
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("missing %q in\n%s", want, all)

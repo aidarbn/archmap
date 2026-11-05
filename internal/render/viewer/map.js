@@ -181,7 +181,7 @@ function applyFocus(toModules) {
   SC().forEach((e, i) => e.classList.toggle('hidden', i !== lvl));
   const sc = SC()[lvl];
   if (sc && sc.animate && !RM) sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' });
-  if (state.sel && state.sel.t !== 'step') { state.sel = null; renderPanel(); }
+  if (state.sel && state.sel.t !== 'step' && state.sel.t !== 'run') { state.sel = null; renderPanel(); }
   afterLevel();
   return true;
 }
@@ -831,7 +831,12 @@ function fitMap(focus) {
   else map.cam.fitTop({ ...map.extent }, 40);
 }
 function fitFns() { fv.cam.fit(fv.extent, 10); }
-function fitSys() { sys.cam.fit(sys.extent, 30); }
+// the system is framed below the "about the system" card in the top-left corner when it is shown (panel.js)
+function fitSys() {
+  const ab = $('#about'), st = $('#stage');
+  sys.cam.insetTop = ab && !ab.hidden && st ? Math.max(INSET, ab.getBoundingClientRect().bottom - st.getBoundingClientRect().top + 8) : INSET;
+  sys.cam.fit(sys.extent, 30);
+}
 function defaultFrames(fn) {
   const fr = [fn]; let cur = fn;
   for (let i = 0; i < 3; i++) { const c = (D.callers[cur] || [])[0]; if (!c || fr.includes(c)) break; fr.unshift(c); cur = c; }
@@ -975,7 +980,8 @@ function reapplySel() {
 }
 // play marks of the current step on the visible level (no camera move, no dot)
 function restorePlay() {
-  const s = curStep(); if (!s || state.view !== 'map') return;
+  if (state.view !== 'map') return;
+  const s = curStep(); if (!s) { if (state.run) drawPath(); return; } // the overview: the whole path, no step lit
   const sc = [sys, map, fv][state.level]; if (!sc) return;
   clearSel(sc.svg); sc.svg.classList.add('play');
   if (state.level === 0) hotOn(sys.nodes, 'svc');

@@ -17,7 +17,7 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 	format := fs.String("format", "text", "output format: text | json")
 	tests := fs.Bool("tests", false, "include test files")
 	strict := fs.Bool("strict", false, "count warnings as errors (for CI)")
-	missing := fs.Bool("missing-docs", false, "list the modules, entry points, endpoints, actors and externals without a description")
+	missing := fs.Bool("missing-docs", false, "list the modules, entry points, endpoints, actors, externals and scenarios (arch:flow) without a description")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0

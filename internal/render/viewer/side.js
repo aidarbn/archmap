@@ -35,7 +35,8 @@ function realDesc(x) {
 const pathName = (j) => String(j.name || j.id).replace(/\s*→\s*….*$/, '');
 const flowLine2 = (fl) => realDesc(fl) || (fl.exit ? '→ ' + fl.exit : '');
 const pathLine = (j) => realDesc(j) || (j.exit ? '→ ' + j.exit : '');
-const pathSteps = (j) => j.fls.reduce((n, f) => n + flowSteps(f).length, 0);
+// the steps the path plays (a step an earlier flow already played is not repeated — journeys.js)
+const pathSteps = (j) => { const r = jvBuildJourney('journey:' + j.id); return r ? r.segs.reduce((n, sg) => n + sg.steps.length, 0) : 0; };
 
 /* ---------- groups ---------- */
 // the visible scenarios by the actor that starts them, in the order of D.actors; the rest go to "other roles"

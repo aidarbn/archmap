@@ -168,7 +168,7 @@ function init() {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'Escape') { e.preventDefault(); goBack(); }
-    else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.step >= 0 ? stepIn() : intoSelected()); }
+    else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.run ? stepIn() : intoSelected()); }
     else if (!state.run) return; // the arrows step only through an open scenario
     else if (e.key === 'ArrowRight' || (e.key === ' ' && tg !== 'BUTTON')) { e.preventDefault(); doStep(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); doStep(-1); }
