@@ -44,3 +44,6 @@
 .api-tbls .mono { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
 .api-op { font: 700 10.5px var(--mono); display: inline-block; min-width: 24px; text-align: center; border-radius: 4px; padding: 1px 3px; border: 1px solid var(--line-2); flex: none; }
 .api-op.o-R { color: var(--in); } .api-op.o-W { color: var(--ad); } .api-op.o-RW { color: var(--ad); border-color: var(--ad); }
+/* the description of an endpoint in its row (instead of the path) and of a service in its header */
+.api-pth.ds { font-family: inherit; font-size: 12px; color: var(--text-2); }
+.api-grp .api-gd { font-size: 12px; color: var(--muted); margin-left: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

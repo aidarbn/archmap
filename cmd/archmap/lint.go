@@ -17,6 +17,7 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 	format := fs.String("format", "text", "output format: text | json")
 	tests := fs.Bool("tests", false, "include test files")
 	strict := fs.Bool("strict", false, "count warnings as errors (for CI)")
+	missing := fs.Bool("missing-docs", false, "list the modules, entry points, endpoints, actors and externals without a description")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -33,6 +34,11 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	res := lint.Run(*root, f)
+	docs := lint.Docs(f)
+	if !*missing {
+		docs.Missing = nil
+	}
+	res.Docs = &docs
 	failed := len(res.Problems)
 	if *strict {
 		failed += len(res.Warnings)
@@ -54,6 +60,10 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 			} else {
 				fmt.Fprintln(stdout, "warning:", p)
 			}
+		}
+		fmt.Fprintln(stdout, "info: "+docs.Line())
+		for _, m := range docs.Missing {
+			fmt.Fprintln(stdout, "info:", m)
 		}
 		if res.Planned > 0 {
 			fmt.Fprintf(stdout, "info: %d planned steps in the spec (no code yet)\n", res.Planned)

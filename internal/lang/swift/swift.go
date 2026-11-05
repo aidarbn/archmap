@@ -361,14 +361,14 @@ func (p *parser) doc(n *sitter.Node) string {
 		txt := p.t.Text(c)
 		switch {
 		case strings.HasPrefix(txt, "///"):
-			if l := strings.TrimSpace(strings.TrimPrefix(txt, "///")); l != "" {
+			if l := strings.TrimSpace(strings.TrimPrefix(txt, "///")); l != "" && !lang.IsDirectiveLine(l) {
 				return truncate(l, 200)
 			}
 		case strings.HasPrefix(txt, "/**"):
 			for _, l := range strings.Split(txt, "\n") {
 				l = strings.TrimSpace(l)
 				l = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(l, "/**"), "*"), "*/"))
-				if l != "" {
+				if l != "" && !lang.IsDirectiveLine(l) {
 					return truncate(l, 200)
 				}
 			}

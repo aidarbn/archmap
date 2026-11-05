@@ -27,6 +27,11 @@ type Facts struct {
 	States    map[string]*StateMachine `json:"states,omitempty"`
 	Endpoints []Endpoint               `json:"endpoints,omitempty"`
 	Data      *DataModel               `json:"data,omitempty"`
+	// Services are the endpoint groups (gRPC services, handler types) with
+	// their descriptions, keyed by Endpoint.Service.
+	Services map[string]Service `json:"services,omitempty"`
+	// Actors are the actor descriptions given in the markup.
+	Actors []ActorDoc `json:"actors,omitempty"`
 }
 
 // Project describes the analysed repository as a whole.
@@ -84,6 +89,8 @@ type ArchNote struct {
 	// to a journey declared elsewhere.
 	Journeys []JourneyDecl `json:"journeys,omitempty"`
 	Then     []ThenNote    `json:"then,omitempty"`
+	// Actors are `arch:actor <Name> "description"` lines (File is not set here).
+	Actors []ActorDoc `json:"actors,omitempty"`
 }
 
 // JourneyDecl declares a journey (`arch:journey`). Flows holds the flows named
@@ -133,7 +140,7 @@ type StateNote struct {
 
 // Empty reports a note with no content.
 func (a *ArchNote) Empty() bool {
-	return a == nil || len(a.Flows)+len(a.Steps)+len(a.Ext)+len(a.On)+len(a.State)+len(a.Journeys)+len(a.Then) == 0
+	return a == nil || len(a.Flows)+len(a.Steps)+len(a.Ext)+len(a.On)+len(a.State)+len(a.Journeys)+len(a.Then)+len(a.Actors) == 0
 }
 
 // Entry marks a function as an entry point.
@@ -188,6 +195,8 @@ type External struct {
 	Modules []string `json:"modules"`
 	// Functions are the fids of functions outside Modules that call into them.
 	Functions []string `json:"functions"`
+	// Desc is the package doc of the client module of the system, when it has one.
+	Desc string `json:"desc,omitempty"`
 }
 
 // StateMachine is a set of states and the transitions seen in the code.

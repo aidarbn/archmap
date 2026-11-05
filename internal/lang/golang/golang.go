@@ -262,7 +262,7 @@ func doc(t *ts.Tree, n *sitter.Node) string {
 			break
 		}
 		row = c.StartPosition().Row
-		if !strings.HasPrefix(txt, "//go:") && !lang.IsArchLine(txt[2:]) {
+		if !lang.IsDirectiveLine(txt[2:]) {
 			lines = append([]string{strings.TrimSpace(txt[2:])}, lines...)
 		}
 	}

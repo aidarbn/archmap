@@ -229,7 +229,35 @@ function modRole(m) {
   if (i && i.role) return i.role;
   return short(m).split('/').pop();
 }
-const modDesc = (m) => { const i = D.MM[m]; return (i && i.desc) || ((D.mods[m] || {}).doc) || ''; };
+// a package comment reads as a description: "Package kaspi — клиент Kaspi Pay" → "Клиент Kaspi Pay"
+function plainDoc(s) {
+  let d = String(s || '').trim();
+  const m = d.match(/^(?:Package|Command|Module)\s+[\w./-]+\s*(?:[—–:-]\s*|,\s*)(.+)$/s);
+  if (m) d = m[1];
+  else { const v = d.match(/^(?:Package|Command)\s+[\w./-]+\s+([a-zа-яё].*)$/s); if (v) d = v[1]; }
+  return d ? d[0].toUpperCase() + d.slice(1) : '';
+}
+const modDesc = (m) => { const i = D.MM[m]; return plainDoc((i && i.desc) || ((D.mods[m] || {}).doc) || ''); };
+// description of a function: its doc comment (no arch: markup), else the description of its endpoint
+function fnDesc(fid) {
+  const f = D.fns[fid]; if (!f) return '';
+  const d = cleanDoc(f.doc); if (d) return d;
+  const e = (D.epByFid[fid] || []).find((x) => x.desc);
+  return e ? e.desc : '';
+}
+const extDesc = (x) => plainDoc(x && x.desc);
+// description of an actor: `arch:actor Name "…"`, else the service most of its endpoints belong to
+// → {desc, from: 'arch'|'proto'|'type'|'package'|'', file, line, svc, svcInfo}
+function actorDesc(a) {
+  const nm = actorName(a).trim().toLowerCase();
+  const doc = (D.F.actors || []).find((x) => x.name.trim().toLowerCase() === nm);
+  const cnt = {}; a.eps.forEach((e) => { if (e.service) cnt[e.service] = (cnt[e.service] || 0) + 1; });
+  const svcs = Object.keys(cnt).sort((p, q) => cnt[q] - cnt[p] || (p < q ? -1 : 1));
+  const top = svcs[0], si = top ? (D.F.services || {})[top] : null;
+  if (doc) return { desc: doc.desc, from: 'arch', file: doc.file, line: doc.line, svc: top || '', svcInfo: si, svcs };
+  if (si && si.desc) return { desc: plainDoc(si.desc), from: si.descFrom || 'proto', file: si.file || si.implFile, line: si.file ? si.line : si.implLine, svc: top, svcInfo: si, svcs };
+  return { desc: '', from: '', file: si ? si.file || si.implFile : '', line: si ? (si.file ? si.line : si.implLine) : 0, svc: top || '', svcInfo: si, svcs };
+}
 const chgOf = (mods) => {
   const o = { added: 0, modified: 0, deleted: 0, local: 0 };
   mods.forEach((m) => { const c = D.modChg[m]; if (c) for (const k in o) o[k] += c[k]; });
@@ -475,6 +503,6 @@ function registerPanel(kind, fn) { PANELS[kind] = fn; }
 const AM = window.AM = {
   version: 3, D, state, bus, t, L, addI18n, plural, registerView, registerPanel,
   h: H, svg: S_, esc, cut, cutL, fnInfo, fname, short, modLabel, layerOf, modRole, modDesc, LAYERS, LCOLOR,
-  isAsync, isCall, extsOfFn, actorName, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath, isPlan, flowSteps,
+  isAsync, isCall, extsOfFn, actorName, actorDesc, fnDesc, extDesc, plainDoc, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath, isPlan, flowSteps,
   get lang() { return LANG; }, get RM() { return RM; }, get DUR() { return DUR; },
 };

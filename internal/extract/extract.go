@@ -400,7 +400,8 @@ func Run(opts Options) (*facts.Facts, error) {
 	}
 	entries := findEntries(files, read, fns, order, byName, defaultExport, func(p string) string { return fileLang[p] })
 
-	apiEndpoints, apiData, apiAccess := analyzeAPIData(newAPICtx(root, fns, order, entries))
+	apiCtx := newAPICtx(root, fns, order, entries)
+	apiEndpoints, apiData, apiAccess := analyzeAPIData(apiCtx)
 
 	var base, baseName string
 	base, baseName = gitstat.ResolveBase(root, opts.Base)
@@ -476,6 +477,7 @@ func Run(opts Options) (*facts.Facts, error) {
 		out.Modules[m] = facts.Module{Imports: sortedKeys(modImports[m]), Files: mf, Doc: moduleDoc(root, m, mf, fileDoc)}
 	}
 	addSystemContext(out, fns, order, rawImports, texts, sqlQueries(root))
+	describe(out, apiCtx.services, fns, order, texts)
 	return out, nil
 }
 

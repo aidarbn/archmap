@@ -338,7 +338,12 @@ func (w *walker) doc(n *sitter.Node) string {
 		for q := first.PrevSibling(); q != nil && q.Kind() == "line_comment" && int(first.StartPosition().Row)-int(q.EndPosition().Row) == 1; q = q.PrevSibling() {
 			first = q
 		}
-		return clip(strings.TrimSpace(strings.TrimLeft(w.t.Text(first), "/")))
+		for q := first; q != nil && q.Kind() == "line_comment" && q.StartPosition().Row <= p.StartPosition().Row; q = q.NextSibling() {
+			if l := strings.TrimSpace(strings.TrimLeft(w.t.Text(q), "/")); l != "" && !lang.IsDirectiveLine(l) {
+				return clip(l)
+			}
+		}
+		return ""
 	}
 	txt := w.t.Text(p)
 	if !strings.HasPrefix(txt, "/**") {
@@ -348,7 +353,7 @@ func (w *walker) doc(n *sitter.Node) string {
 		l = strings.TrimSpace(l)
 		l = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(l, "/**"), "*"), "*/"))
 		l = strings.TrimSpace(strings.TrimPrefix(l, "*"))
-		if l != "" && !strings.HasPrefix(l, "@") {
+		if l != "" && !strings.HasPrefix(l, "@") && !lang.IsDirectiveLine(l) {
 			return clip(l)
 		}
 	}

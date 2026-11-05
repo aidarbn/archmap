@@ -93,7 +93,7 @@ function searchFlows(toks) {
 }
 function searchData(toks) {
   const eps = [], tbls = [], sts = [];
-  (D.endpoints || []).forEach((e, i) => { const sc = hits([e.path, e.name, e.service, e.method], toks); if (sc) eps.push({ k: 'ep', id: i, sc }); });
+  (D.endpoints || []).forEach((e, i) => { const sc = hits([e.path, e.name, e.service, e.method, e.desc], toks); if (sc) eps.push({ k: 'ep', id: i, sc }); });
   Object.keys(D.tables).forEach((n) => { const tb = D.tables[n], sc = hits([n, tb.desc], toks); if (sc) tbls.push({ k: 'table', id: n, sc }); });
   Object.keys(D.states).forEach((n) => { const sc = hits([n], toks); if (sc) sts.push({ k: 'status', id: n, sc }); });
   return { eps, tbls, sts };
@@ -133,10 +133,10 @@ function srRow(o, i) {
   if (o.k === 'fn') {
     const f = fnInfo(o.id); ico = 'ƒ'; nm = f.name; sub = `${short(f.mod)} · ${(f.file || '').split('/').pop()}:${f.s}`; code = true;
     if (f.status) st = `<span class="st-${f.status === 'added' ? 'a' : 'm'}">${f.status === 'added' ? '+' : '~'}</span>`;
-  } else if (o.k === 'mod') { ico = '▢'; nm = short(o.id); sub = (D.byMod[o.id] || []).length + ' ' + t('fnShort'); code = true; }
+  } else if (o.k === 'mod') { ico = '▢'; nm = short(o.id); sub = cut(modDesc(o.id), 60) || (D.byMod[o.id] || []).length + ' ' + t('fnShort'); code = true; }
   else if (o.k === 'file') { ico = '▤'; nm = o.id.split('/').pop(); sub = cutL(o.id, 46); code = true; }
   else if (o.k === 'run') { ico = '▶'; nm = o.nm; sub = o.sb; }
-  else if (o.k === 'ep') { const e = D.endpoints[o.id]; ico = '⇄'; nm = (e.method ? e.method + ' ' : '') + (e.path || e.name || ''); sub = e.service || e.kind || ''; code = true; }
+  else if (o.k === 'ep') { const e = D.endpoints[o.id]; ico = '⇄'; nm = (e.method ? e.method + ' ' : '') + (e.path || e.name || ''); sub = e.desc ? cut(e.desc, 70) : e.service || e.kind || ''; code = true; }
   else if (o.k === 'table') { const tb = D.tables[o.id]; ico = '▦'; nm = o.id; sub = cut(tb.desc || '', 60) || t('pkColsN', (tb.fields || []).length); code = true; }
   else if (o.k === 'status') { const m = D.states[o.id] || {}; ico = '◎'; nm = o.id; sub = t('pkStatesN', (m.states || []).length); code = true; }
   else { ico = '›'; nm = o.nm; sub = o.kbd ? `<kbd>${esc(o.kbd)}</kbd>` : o.cur ? '✓' : ''; }

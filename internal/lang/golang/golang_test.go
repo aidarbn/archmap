@@ -190,3 +190,19 @@ func TestDocSkipsArchMarkup(t *testing.T) {
 		t.Errorf("doc = %q", d)
 	}
 }
+
+func TestDocSkipsDirectives(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"nolint after prose", "package p\n\n// Pay charges the cart.\n//nolint:gocyclo\nfunc Pay() {}\n", "Pay charges the cart."},
+		{"nolint before prose", "package p\n\n// nolint:funlen\n// Pay charges the cart.\nfunc Pay() {}\n", "Pay charges the cart."},
+		{"go directive", "package p\n\n// Pay charges the cart.\n//go:noinline\nfunc Pay() {}\n", "Pay charges the cart."},
+		{"lint ignore and arch", "package p\n\n//lint:ignore U1000 kept\n// arch:flow pay \"Pay\"\nfunc Pay() {}\n", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if d := byName(parse(t, c.src), "Pay").Doc; d != c.want {
+				t.Errorf("doc = %q, want %q", d, c.want)
+			}
+		})
+	}
+}

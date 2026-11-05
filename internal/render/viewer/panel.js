@@ -3,6 +3,68 @@
  * {t:'mod', id}, {t:'group', id}, {t:'fn', id, why?}, {t:'step'}. Views add kinds with
  * registerPanel(kind, render) and select them with AM.select({t: kind, …}). */
 
+addI18n({
+  ru: {
+    dsWho: 'Кто это', dsWhere: 'Где определён', dsImpl: 'Реализация', dsNone: 'В коде нет описания — его можно дать разметкой',
+    dsScen: 'Сценарии', dsThrough: 'Сценарии через этот узел', dsEps: 'Ручки', dsRunTip: 'Открыть сценарий', dsFnTip: 'Открыть функцию',
+    dsEpOf: 'Ручка', dsSrc: { arch: 'из разметки arch:actor', proto: 'из комментария .proto', type: 'из комментария типа', package: 'из описания пакета' },
+  },
+  en: {
+    dsWho: 'What it is', dsWhere: 'Defined in', dsImpl: 'Implemented by', dsNone: 'No description in the code — the markup can give one',
+    dsScen: 'Scenarios', dsThrough: 'Scenarios through this node', dsEps: 'Endpoints', dsRunTip: 'Open the scenario', dsFnTip: 'Open the function',
+    dsEpOf: 'Endpoint', dsSrc: { arch: 'from arch:actor markup', proto: 'from the .proto comment', type: 'from the type comment', package: 'from the package doc' },
+  },
+});
+// flows that start at a function / pass through it / through a module
+const flowsFrom = (fid) => D.flows.filter((fl) => fl.steps && fl.steps[0] === fid);
+const flowsThrough = (pred) => D.flows.filter((fl) => flowSteps(fl).some((s) => D.fns[s] && pred(s)));
+const flowLine = (fl) => fl.exit || fl.desc || t('pkStepsN', flowSteps(fl).length);
+// a list of scenarios: name and one line (exit / description / steps); a click opens the run
+function flowList(fls, title, max = 12) {
+  if (!fls.length) return '';
+  const top = fls.slice().sort((a, b) => (b.kind === 'declared') - (a.kind === 'declared') || (b.top ? 1 : 0) - (a.top ? 1 : 0)).slice(0, max);
+  return `<h3>${esc(title)} (${fls.length})</h3><ul class="rel-list">` + top.map((fl) => `<li class="dsc" data-run="flow:${fl.i}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(fl.name || '')}</span><span class="ds">${esc(cut(flowLine(fl), 90))}</span></li>`).join('') + (fls.length > max ? `<li class="md">+${fls.length - max}</li>` : '') + '</ul>';
+}
+// the actor card: who it is, where it is defined, its scenarios and its endpoints by service with descriptions
+function actorHTML(a) {
+  const ad = actorDesc(a);
+  let h = `<div class="kicker">${esc(t('kinds').actor)}</div><h2>${esc(actorName(a))}</h2>`;
+  if (ad.desc) h += `<p class="lead">${esc(ad.desc)}</p>`;
+  else h += `<p class="lead">${esc(actorSub(a))}</p><p class="nodesc">${esc(t('dsNone'))}: <code>arch:actor ${esc(actorName(a))} "…"</code></p>`;
+  const si = ad.svcInfo, protos = Array.from(a.protos).join(', ');
+  const who = [protos, ad.svcs.slice(0, 3).join(', ') + (ad.svcs.length > 3 ? ' +' + (ad.svcs.length - 3) : '')].filter(Boolean).join(' · ') || actorSub(a);
+  h += `<dl class="kv"><dt>${esc(t('dsWho'))}</dt><dd>${esc(who)}${a.eps.length ? ' · ' + esc(t('epsN', a.eps.length)) : ''}</dd>`;
+  if (ad.file) h += `<dt>${esc(t('dsWhere'))}</dt><dd class="mono" style="font-size:11.5px">${esc(ad.file)}${ad.line ? ':' + ad.line : ''}${ad.from ? ` <span class="md" style="color:var(--muted)">· ${esc(t('dsSrc')[ad.from] || '')}</span>` : ''}</dd>`;
+  if (si && si.impl) h += `<dt>${esc(t('dsImpl'))}</dt><dd class="mono" style="font-size:11.5px">${esc(si.impl)}${si.implFile ? ' · ' + esc(si.implFile.split('/').pop()) + ':' + si.implLine : ''}</dd>`;
+  h += '</dl>';
+  // scenarios of the actor: through paths first, then flows that do not start at one of its endpoints (those are
+  // run from the endpoint rows below: ▶)
+  const me = actorName(a).trim().toLowerCase(), epF = new Set(a.eps.map((e) => e.fid).filter(Boolean));
+  const own = D.flows.filter((fl) => ((fl.actor && fl.actor.trim().toLowerCase() === me) || (fl.steps && a.fids.includes(fl.steps[0]))) && !(fl.steps && epF.has(fl.steps[0])));
+  const paths = jvJourneys().filter((j) => (j.actor || '').trim().toLowerCase() === me || (j.fls[0] && j.fls[0].steps && a.fids.includes(j.fls[0].steps[0])));
+  if (paths.length || own.length) {
+    h += `<h3>${esc(t('dsScen'))} (${paths.length + own.length})</h3><ul class="rel-list">`;
+    h += paths.slice(0, 12).map((j) => `<li class="dsc" data-run="journey:${esc(j.id)}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(j.name || j.id)}</span><span class="md">${esc(t('pkPath'))}</span><span class="ds">${esc(cut(j.exit || j.fls.map((f) => f.name).join(' → '), 90))}</span></li>`).join('');
+    h += own.slice(0, 12).map((fl) => `<li class="dsc" data-run="flow:${fl.i}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(fl.name || '')}</span><span class="ds">${esc(cut(flowLine(fl), 90))}</span></li>`).join('');
+    h += '</ul>';
+  }
+  if (a.eps.length) {
+    const by = new Map();
+    a.eps.forEach((e) => { const k = e.service || (e.kind === 'grpc' ? 'gRPC' : 'HTTP'); if (!by.has(k)) by.set(k, []); by.get(k).push(e); });
+    Array.from(by).sort((p, q) => q[1].length - p[1].length).forEach(([svc, eps]) => {
+      const s = (D.F.services || {})[svc], sd = s && s.desc ? plainDoc(s.desc) : '';
+      h += `<h3>${esc(svc)} · ${eps.length}${sd ? `<span class="hs">${esc(sd)}</span>` : ''}</h3><ul class="rel-list">`;
+      h += eps.slice(0, 200).map((e) => {
+        const fl = e.fid ? flowsFrom(e.fid)[0] : null, at = fl ? ` data-run="flow:${fl.i}" title="${esc(t('dsRunTip'))}: ${esc(fl.name)}"` : e.fid && D.fns[e.fid] ? ` data-fn="${esc(e.fid)}" title="${esc(t('dsFnTip'))}"` : '';
+        return `<li class="dsc"${at}>${fl ? '<span class="run">▶</span>' : ''}<span class="verb">${esc(e.method || e.kind)}</span><span class="fn">${esc(e.name || e.path)}</span>${e.desc ? `<span class="ds">${esc(e.desc)}</span>` : ''}</li>`;
+      }).join('') + '</ul>';
+    });
+  } else if (a.fids.length) h += relList(a.fids, t('entries'), 'out', '');
+  h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${Array.from(a.mods).map(chipMod).join('') || '—'}</div>`;
+  if (a.mods.size) h += `<div class="btnrow"><button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button></div>`;
+  return h;
+}
+
 let QUIET = false; // reapplying marks after a live update: no panel redraw, no select event
 function setSel(sel) {
   state.sel = sel || null;
@@ -24,11 +86,14 @@ function fnSection(id, target, opt = {}) {
   const f = fnInfo(id);
   let h = `<div class="kicker">${f.mod ? chipMod(f.mod) : ''}${f.status ? `<span class="chip ${f.status === 'added' ? 'a' : 'm'}">${esc(t('st_' + f.status))}${f.uncommitted ? ' · ' + esc(t('uncommitted')) : ''}</span>` : ''}${f.entry ? `<span class="chip" title="${esc((f.entry.labels || []).join(', '))}">⚑ ${esc(f.entry.kind)}</span>` : ''}</div>`;
   h += `<h2 class="mono">${esc(f.name)}</h2>`;
-  if (f.doc) h += `<p class="lead">${esc(f.doc)}</p>`;
+  const fd = f.full ? fnDesc(id) : '';
+  if (fd) h += `<p class="lead">${esc(fd)}</p>`;
   if (f.sig) h += `<h3>${esc(t('sig'))}</h3><div class="sig">${hlLine(f.sig, f.lang)}</div>`;
   if (f.file) h += `<div class="loc">${esc(f.file)}:${f.s}–${f.e}</div>`;
   const eps = D.epByFid[id] || [];
-  if (eps.length) h += `<div class="btnrow">${eps.slice(0, 3).map((e) => `<span class="chip"><span class="verb">${esc(e.method || e.kind)}</span>${esc(cut(e.path || e.name || '', 40))}</span>`).join('')}</div>`;
+  if (eps.length) h += `<div class="btnrow">${eps.slice(0, 3).map((e) => `<span class="chip" title="${esc(e.desc || '')}"><span class="verb">${esc(e.method || e.kind)}</span>${esc(cut(e.path || e.name || '', 40))}</span>`).join('')}</div>`;
+  if (eps.some((e) => e.desc && e.desc !== fd)) h += `<p class="loc" style="font-family:inherit">${eps.filter((e) => e.desc && e.desc !== fd).slice(0, 3).map((e) => esc(t('dsEpOf')) + ': ' + esc(e.desc)).join('<br>')}</p>`;
+  if (!opt.noRel && D.fns[id]) h += flowList(flowsThrough((s) => s === id), t('dsThrough'), 8);
   if (!opt.noRel) h += relList(f.in, t('callers'), 'in', id) + relList(f.out, t('callees'), 'out', id);
   const c = codeHTML(id, target);
   h += `<h3>${esc(t('code'))}</h3><div class="code"${opt.codeId ? ` id="${opt.codeId}"` : ''}>${c.html}</div>`;
@@ -83,6 +148,7 @@ function renderPanel() {
     h += `<h3>${esc(t('imports'))}</h3><div class="tbl-pills">${imps.slice(0, 30).map(chipMod).join('') || '—'}</div>`;
     if (by.length) h += `<h3>${esc(t('importedBy'))}</h3><div class="tbl-pills">${by.slice(0, 30).map(chipMod).join('')}</div>`;
     if (inRun.length) h += `<h3>${esc(t('inScen'))}</h3><ul class="rel-list">${inRun.slice(0, 12).map(([x, i]) => `<li data-step="${i}"><span class="fn">${i + 1}.</span><span>${esc(stepLabel(i))}</span></li>`).join('')}</ul>`;
+    h += flowList(flowsThrough((s) => D.fns[s].module === m), t('dsThrough'));
     h += `<div class="btnrow"><button class="pbtn primary" data-act="intomod">${esc(t('into'))}</button></div>`;
   } else if (s.t === 'group') {
     const n = G.TN[s.id]; if (!n) { state.sel = null; return renderPanel(); }
@@ -100,16 +166,11 @@ function renderPanel() {
     h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>`;
   } else if (s.t === 'actor') {
     const a = D.actors.find((x) => x.id === s.id); if (!a) { state.sel = null; return renderPanel(); }
-    h = `<div class="kicker">${esc(t('kinds').actor)}</div><h2>${esc(actorName(a))}</h2><p class="lead">${esc(actorSub(a))}</p>`;
-    const e = sys && sys.edges.find((q) => q.a === a.id);
-    if (e && e.text) h += `<dl class="kv"><dt>${esc(t('link'))}</dt><dd>${esc(e.text)}</dd></dl>`;
-    if (a.eps.length) h += `<h3>${esc(t('epsN', a.eps.length))}</h3><ul class="rel-list">${a.eps.slice(0, 14).map((ep) => `<li${ep.fid ? ` data-fn="${esc(ep.fid)}"` : ''}><span class="verb">${esc(ep.method || ep.kind)}</span><span class="fn">${esc(ep.name || ep.path)}</span><span class="md">${esc(ep.path || ep.service || '')}</span></li>`).join('')}${a.eps.length > 14 ? `<li class="md">+${a.eps.length - 14}</li>` : ''}</ul>`;
-    else if (a.fids.length) h += `<h3>${esc(t('entries'))}</h3>` + relList(a.fids, t('entries'), 'out', '').replace(/^<h3>.*?<\/h3>/, '');
-    h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${Array.from(a.mods).map(chipMod).join('') || '—'}</div>`;
-    if (a.mods.size) h += `<div class="btnrow"><button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button></div>`;
+    h = actorHTML(a);
   } else if (s.t === 'ext') {
     const x = D.externals.find((q) => q.id === s.id); if (!x) { state.sel = null; return renderPanel(); }
     h = `<div class="kicker">${esc(t('kinds')[x.kind] || x.kind)}</div><h2>${esc(x.name)}</h2>`;
+    if (extDesc(x)) h += `<p class="lead">${esc(extDesc(x))}</p>`;
     const e = sys && sys.edges.find((q) => q.b === x.id);
     h += `<dl class="kv">${e && e.text ? `<dt>${esc(t('link'))}</dt><dd>${esc(e.text)}</dd>` : ''}<dt>${esc(t('implBy'))}</dt><dd>${(x.modules || []).map(chipMod).join(' ') || '—'}</dd></dl>`;
     h += relList((x.functions || []).filter((f) => D.fns[f]), t('callers'), 'in', '');
@@ -133,6 +194,7 @@ function wirePanel(p, s) {
   p.querySelectorAll('[data-fn]').forEach((e) => e.addEventListener('click', () => openFn(e.getAttribute('data-fn'))));
   p.querySelectorAll('[data-mod]').forEach((e) => e.addEventListener('click', () => openMod(e.getAttribute('data-mod'))));
   p.querySelectorAll('[data-step]').forEach((e) => e.addEventListener('click', () => AM.play.go(+e.getAttribute('data-step'))));
+  p.querySelectorAll('[data-run]').forEach((e) => e.addEventListener('click', () => { if (state.view !== 'map') setView('map'); openRun(e.getAttribute('data-run')); }));
   const act = (a, f) => { const b = p.querySelector(`[data-act="${a}"]`); if (b) b.onclick = f; };
   act('code', () => jumpToFn(s.id, 3));
   act('playfn', () => playFrom(s.id));

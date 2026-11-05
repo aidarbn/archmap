@@ -35,6 +35,8 @@ type Result struct {
 	Spec      bool `json:"spec"`       // spec files declare something
 	SpecFlows int  `json:"spec_flows"` // flows declared in the spec
 	Planned   int  `json:"planned"`    // planned steps (no code yet)
+	// Docs is the description coverage (information only, set by the command).
+	Docs *DocCoverage `json:"docs,omitempty"`
 }
 
 // Run checks the markup of the functions in f and the specification in

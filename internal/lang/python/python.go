@@ -260,7 +260,7 @@ func (p *state) docstring(first *sitter.Node) string {
 		val.WriteString(v)
 	}
 	for _, ln := range strings.Split(val.String(), "\n") {
-		if t := strings.TrimSpace(ln); t != "" {
+		if t := strings.TrimSpace(ln); t != "" && !lang.IsDirectiveLine(t) {
 			return truncate(t, 200)
 		}
 	}
