@@ -108,6 +108,7 @@ func Compare(base, head *Snapshot) Report {
 	r.Diffs = append(r.Diffs, compareFlows(base, head)...)
 	r.Diffs = append(r.Diffs, compareJourneys(base, head)...)
 	r.Diffs = append(r.Diffs, compareMachines(base, head)...)
+	r.Diffs = append(r.Diffs, comparePages(base, head)...)
 	old := map[string]bool{}
 	for _, b := range base.Broken {
 		old[b.key()] = true

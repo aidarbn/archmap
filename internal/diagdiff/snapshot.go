@@ -117,17 +117,18 @@ type Snapshot struct {
 	Flows    map[string]*Flow    `json:"flows"`
 	Journeys map[string]*Journey `json:"journeys"`
 	Machines map[string]*Machine `json:"machines"`
+	Pages    map[string]*Page    `json:"pages"`
 	Funcs    map[string]Func     `json:"-"`
 	Broken   []Broken            `json:"broken"`
 	// order of first appearance, for stable output
-	flowOrder, journeyOrder []string
+	flowOrder, journeyOrder, pageOrder []string
 }
 
 // Build makes the snapshot of a revision from its facts and spec (set may be nil).
 func Build(f *facts.Facts, set *spec.Set) *Snapshot {
 	m := autosem.BuildWith(f, set)
 	sf := spec.MergeStates(f, set)
-	s := &Snapshot{Flows: map[string]*Flow{}, Journeys: map[string]*Journey{}, Machines: map[string]*Machine{}, Funcs: map[string]Func{}}
+	s := &Snapshot{Flows: map[string]*Flow{}, Journeys: map[string]*Journey{}, Machines: map[string]*Machine{}, Pages: map[string]*Page{}, Funcs: map[string]Func{}}
 
 	for fid, fn := range f.Functions {
 		x := Func{Name: funcName(fn), File: fn.File, Line: fn.Start, Entry: fn.Entry != nil, Flows: map[string]bool{}, Steps: map[string]bool{}}
@@ -193,6 +194,8 @@ func Build(f *facts.Facts, set *spec.Set) *Snapshot {
 		s.Machines[key] = mc
 	}
 	s.Broken = broken(f, m, s)
+	s.buildPages(m.Spec)
+	sortBroken(s.Broken)
 	return s
 }
 
@@ -266,6 +269,12 @@ func broken(f *facts.Facts, m autosem.Model, s *Snapshot) []Broken {
 			}
 		}
 	}
+	sortBroken(out)
+	return out
+}
+
+// sortBroken orders broken diagrams by place, then by kind and ids.
+func sortBroken(out []Broken) {
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.File != b.File {
@@ -276,7 +285,6 @@ func broken(f *facts.Facts, m autosem.Model, s *Snapshot) []Broken {
 		}
 		return a.key() < b.key()
 	})
-	return out
 }
 
 func funcName(fn facts.Function) string {

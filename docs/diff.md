@@ -8,7 +8,8 @@ revision and prints what changed, ready for a pull request comment:
   the entry function has a doc comment), so that a heuristic walk does not make
   noise;
 - **journeys** (`arch:journey`, `.arch` journeys; automatic journeys among the top);
-- **state machines** (`arch:state`, `.arch` `states`, transitions found in the code).
+- **state machines** (`arch:state`, `.arch` `states`, transitions found in the code);
+- **pages** (`page` blocks of `arch/pages/*.arch` and `arch/*.arch`).
 
 The diagrams are built exactly like `archmap map` builds them (the same
 extraction, spec merge and scenario model), once for the base and once for the
@@ -51,6 +52,8 @@ journey id, entity of a state machine).
 - **Journeys**: a scenario left the journey (and whether it exists at all) or joined it.
 - **States**: a state added or removed; a transition appeared or is gone (with the
   function that makes it); the same transition is now made by other functions.
+- **Pages** (key: the page id): a page appeared (with its frames) or is gone; a
+  frame (one line, `tables orders, payments`) added or removed; the page renamed.
 
 **Broken** diagrams (the same rules as `archmap lint`, see docs/spec.md,
 "Annotations do not change the logic"):
@@ -59,7 +62,10 @@ journey id, entity of a state machine).
 - a branch (`arch:on -> flow`, `alt -> flow`) leads to a scenario that does not exist;
 - a scenario has `arch:step` markers but no entry point (no `arch:flow`);
 - a spec step names no function;
-- a step is not reachable by calls from the entry point of its scenario.
+- a step is not reachable by calls from the entry point of its scenario;
+- a page shows something the code does not have (a journey, flow, table,
+  entity, endpoint or module of a frame) — kind `page-ref`, `ref` is
+  `<frame kind> <name>`.
 
 ## Markdown
 
