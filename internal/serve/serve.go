@@ -371,11 +371,9 @@ func (s *Server) takeSnapshot() snapshot {
 			snap[key] = stamp{st.ModTime().UnixNano(), st.Size()}
 		}
 	}
-	if ents, err := os.ReadDir(filepath.Join(s.opts.Root, spec.Dir)); err == nil {
-		for _, e := range ents {
-			if p := spec.Dir + "/" + e.Name(); !e.IsDir() && spec.ValidPath(p) {
-				add("s:"+p, filepath.Join(s.opts.Root, filepath.FromSlash(p)))
-			}
+	if paths, err := spec.Paths(s.opts.Root); err == nil {
+		for _, p := range paths {
+			add("s:"+p, filepath.Join(s.opts.Root, filepath.FromSlash(p)))
 		}
 	}
 	exts := s.exts()

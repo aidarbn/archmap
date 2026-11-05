@@ -1,6 +1,7 @@
 // Package spec reads, checks, edits and writes `.arch` files: the optional
 // text specification of behaviour (state machines, scenarios, journeys) that
-// lives in <root>/arch/*.arch next to the code. The language says what the
+// lives in <root>/arch/*.arch next to the code, and the pages
+// (<root>/arch/pages/*.arch) that put diagrams of the code side by side. The language says what the
 // system does, never how; archmap lint compares it with the code.
 //
 // The types in this file are also the JSON contract for the editor in the
@@ -116,8 +117,63 @@ type Journey struct {
 	Missing []string `json:"missing,omitempty"` // flow ids that exist nowhere
 }
 
+// Frame kinds of a page: one line of a `page` block is one frame.
+const (
+	FrameJourney = "journey"
+	FrameFlow    = "flow"
+	FrameStates  = "states"
+	FrameTables  = "tables"
+	FrameAPI     = "api"
+	FrameModule  = "module"
+	FrameNote    = "note"
+)
+
+// FrameKinds lists the frame keywords in the order the docs name them.
+var FrameKinds = []string{FrameJourney, FrameFlow, FrameStates, FrameTables, FrameAPI, FrameModule, FrameNote}
+
+// Frame is one line of a page: `<kind> ref, ref…` or `note "text"`. Each frame
+// is a separate diagram drawn from the code; the line only says which one.
+type Frame struct {
+	Kind string   `json:"kind"`
+	Refs []string `json:"refs,omitempty"` // journey/flow: one id; states: entities; tables; api: endpoints; module: module paths
+	Text string   `json:"text,omitempty"` // note only
+	Line int      `json:"line,omitempty"`
+	// enrich (Check): what the refs point to in the code, "" / -1 when nothing.
+	// Machines: keys of facts.states; Endpoints: indexes into facts.endpoints
+	// (one per ref); Modules: keys of facts.modules; Missing: refs that point
+	// nowhere (lint reports them, diff counts them as broken).
+	Machines  []string `json:"machines,omitempty"`
+	Endpoints []int    `json:"endpoints,omitempty"`
+	Modules   []string `json:"modules,omitempty"`
+	Missing   []string `json:"missing,omitempty"`
+}
+
+// Page is `page [id] "Name"`: a set of frames (diagrams) shown together, like
+// a page in Figma. The page names and orders diagrams; it never changes them.
+type Page struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Frames []Frame `json:"frames"`
+	// Comment: `#` lines right above the block, kept when the file is rewritten.
+	Comment []string `json:"comment,omitempty"`
+	File    string   `json:"file,omitempty"`
+	Line    int      `json:"line,omitempty"`
+	// enrich: where every frame goes on the page grid (see LayoutPage)
+	Layout []Slot `json:"layout,omitempty"`
+}
+
+// Slot puts frame Frame (index in Page.Frames) at row Row, column Col of the
+// page grid of PageCols columns, Span columns wide. The viewer sizes the
+// columns and rows by the diagrams in them.
+type Slot struct {
+	Frame int `json:"frame"`
+	Row   int `json:"row"`
+	Col   int `json:"col"`
+	Span  int `json:"span"`
+}
+
 // Doc is the content of one .arch file. Kinds are kept apart; Format writes
-// states, then flows, then journeys.
+// states, then flows, then journeys, then pages.
 //
 // Comments: a `#` line at column 0 belongs to the next block (Comment); those
 // after the last block are Tail. Comments at the end of a line and indented
@@ -126,6 +182,7 @@ type Doc struct {
 	States   []*States  `json:"states"`
 	Flows    []*Flow    `json:"flows"`
 	Journeys []*Journey `json:"journeys"`
+	Pages    []*Page    `json:"pages,omitempty"`
 	Tail     []string   `json:"tail,omitempty"`
 }
 
@@ -134,6 +191,7 @@ type Model struct {
 	States   []States  `json:"states"`
 	Flows    []Flow    `json:"flows"`
 	Journeys []Journey `json:"journeys"`
+	Pages    []Page    `json:"pages"`
 }
 
 // Error is a syntax or validation error with a position.

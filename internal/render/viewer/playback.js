@@ -607,8 +607,22 @@ function playFrom(fid) {
   return openScenario(fl ? 'flow:' + fl.i : 'fn:' + fid);
 }
 
+// previewRun(key): a run and every step object of it without opening it (state.run is left as it is) — for the
+// diagrams drawn elsewhere: the journey / flow frames of a page (views/pages.js). → {run, steps} or null
+function previewRun(key) {
+  const r = buildRun(key); if (!r) return null;
+  const keep = [state.run, state.step];
+  state.run = r;
+  try {
+    const n = runList().length, steps = [];
+    for (let i = 0; i < n; i++) steps.push(stepAt(i));
+    return { run: r, steps };
+  } finally { state.run = keep[0]; state.step = keep[1]; }
+}
+
 Object.assign(AM, {
   play: {
+    preview: previewRun,
     load: loadRun, open: openRun, close: closeRun, step: doStep, stepIn, stepOut, reset: resetRun, playFrom,
     go: (i) => { if (state.busy || !state.run) return; state.step = Math.max(0, Math.min(runList().length - 1, i)); trimSegs(); return replay(); },
     choose: (b) => takeBranch(b), branches: () => (atBranch() ? branchesHere() : null),

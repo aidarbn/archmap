@@ -170,10 +170,48 @@ function layout(m) {
 
 const NH = 40, ROWGAP = 90, COLGAP = 200;
 
+// the hooks of the Statuses view: select, jump to the map, the editor (frames on a page pass none)
+function viewHooks(m) {
+  return {
+    trClick(e, x) {
+      e.stopPropagation(); if (V.cam.justDragged) return;
+      if (editing()) { V.selTr = trKey(m, x); paintSel(); }
+      if (x.fid && AM.D.fns[x.fid]) AM.select({ t: 'fn', id: x.fid, why: `${m.ent}: ${x.from || AM.t('stAny')} → ${x.to}` });
+      else if (editing()) AM.select(null);
+    },
+    trDbl(e, x) {
+      e.stopPropagation();
+      if (editing() && x.ref) { AM.spec.ask(V.wrap, e.clientX, e.clientY, specLabel(x), AM.t('edEvent'), (v) => AM.spec.do.editTr(m.ent, x, v)); return; }
+      if (editing() && x.st === 'code') { AM.spec.do.addTr(m.ent, x.from, x.to, ''); return; }
+      if (x.fid && AM.D.fns[x.fid]) AM.map.jumpToFn(x.fid, 2);
+    },
+    nodeClick(e, n) { e.stopPropagation(); if (V.cam.justDragged) return; V.selTr = null; AM.select({ t: 'status', entity: m.ent, id: n }); },
+    nodeDbl(e, n) {
+      if (!editing()) return;
+      e.stopPropagation();
+      AM.spec.ask(V.wrap, e.clientX, e.clientY, n, AM.t('edRename'), (v) => { if (v && v !== n) AM.spec.do.rename(m.ent, n, v); });
+    },
+    nodeDown(e, n, p) { if (editing() && e.button === 0) { e.stopPropagation(); startConnect(e, m, n, p); } },
+  };
+}
+
 function renderDiagram() {
   const svg = V.svg; svg.innerHTML = ''; V.g = null;
   const m = machines().find((x) => x.ent === V.ent);
   if (!m) { V.cam.set({ x: 0, y: 0, w: 100, h: 60 }); return; }
+  const r = drawMachine(svg, m, viewHooks(m));
+  if (!m.trs.length) AM.svg('text', { x: 0, y: -16, class: 'sv-note' }, svg, AM.t('stNoTrans'));
+  svg.classList.toggle('editing', editing());
+  V.g = { edges: r.edges, nodes: r.nodes, m, bounds: r.bounds };
+  fitView();
+  paintSel(); paintHot();
+}
+
+// drawMachine(svg, m, hooks): the diagram of one machine into svg (an <svg> or <g>); the same drawing serves the
+// Statuses view and the frames of a page (views/pages.js through AM.status.draw). hooks: trClick / trDbl (e, x, g),
+// nodeClick / nodeDbl (e, n), nodeDown (e, n, p) — all optional. Returns {edges: [{x, g}], nodes: {name: g}, bounds}.
+function drawMachine(svg, m, hk) {
+  hk = hk || {};
   const L = layout(m), bounds = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
   const inc = (x, y) => { bounds.x0 = Math.min(bounds.x0, x); bounds.x1 = Math.max(bounds.x1, x); bounds.y0 = Math.min(bounds.y0, y); bounds.y1 = Math.max(bounds.y1, y); };
   const widthOf = (n) => Math.max(110, Math.min(250, AM.cut(n, 28).length * 8 + 56));
@@ -244,18 +282,8 @@ function renderDiagram() {
     AM.svg('title', null, txt, `${x.fid || ''}\n${x.from || AM.t('stAny')} → ${x.to}\n${AM.t('stSrc')[x.source] || x.source || ''}${x.confirmed ? ' · ' + AM.t('stOk') : ''}${x.st ? '\n' + AM.t({ both: 'edLgBoth', code: 'edLgCode', spec: 'edLgSpec' }[x.st]) : ''}`);
     void hit; void ti;
     if (x.st) g.classList.add('st-' + x.st);
-    g.addEventListener('click', (e) => {
-      e.stopPropagation(); if (V.cam.justDragged) return;
-      if (editing()) { V.selTr = trKey(m, x); paintSel(); }
-      if (x.fid && AM.D.fns[x.fid]) AM.select({ t: 'fn', id: x.fid, why: `${m.ent}: ${x.from || AM.t('stAny')} → ${x.to}` });
-      else if (editing()) AM.select(null);
-    });
-    g.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      if (editing() && x.ref) { AM.spec.ask(V.wrap, e.clientX, e.clientY, specLabel(x), AM.t('edEvent'), (v) => AM.spec.do.editTr(m.ent, x, v)); return; }
-      if (editing() && x.st === 'code') { AM.spec.do.addTr(m.ent, x.from, x.to, ''); return; }
-      if (x.fid && AM.D.fns[x.fid]) AM.map.jumpToFn(x.fid, 2);
-    });
+    if (hk.trClick) g.addEventListener('click', (e) => hk.trClick(e, x, g));
+    if (hk.trDbl) g.addEventListener('dblclick', (e) => hk.trDbl(e, x, g));
     const tw = etxt.length * 7.4;
     inc(lab.x - (lab.anchor === 'end' ? tw : lab.anchor === 'middle' ? tw / 2 : 0), lab.y - 14);
     inc(lab.x + (lab.anchor === 'start' ? tw : lab.anchor === 'middle' ? tw / 2 : 0), lab.y + 4);
@@ -274,13 +302,9 @@ function renderDiagram() {
     AM.svg('text', { x: p.x + 38, y: p.y + NH / 2 + 5, class: 'nm' }, g, AM.cut(n, 28));
     AM.svg('title', null, g, n + (L.starts.has(n) ? ' · ' + AM.t('stInitial') : '') + (L.finals.has(n) ? ' · ' + AM.t('stFinal') : ''));
     if (L.finals.has(n)) AM.svg('rect', { x: p.x - 4, y: p.y - 4, width: p.w + 8, height: NH + 8, rx: NH / 2 + 4, class: 'finalring' }, g);
-    g.addEventListener('click', (e) => { e.stopPropagation(); if (V.cam.justDragged) return; V.selTr = null; AM.select({ t: 'status', entity: m.ent, id: n }); });
-    g.addEventListener('dblclick', (e) => {
-      if (!editing()) return;
-      e.stopPropagation();
-      AM.spec.ask(V.wrap, e.clientX, e.clientY, n, AM.t('edRename'), (v) => { if (v && v !== n) AM.spec.do.rename(m.ent, n, v); });
-    });
-    g.addEventListener('pointerdown', (e) => { if (editing() && e.button === 0) { e.stopPropagation(); startConnect(e, m, n, p); } });
+    if (hk.nodeClick) g.addEventListener('click', (e) => hk.nodeClick(e, n));
+    if (hk.nodeDbl) g.addEventListener('dblclick', (e) => hk.nodeDbl(e, n));
+    if (hk.nodeDown) g.addEventListener('pointerdown', (e) => hk.nodeDown(e, n, p));
     if (L.starts.has(n) && !m.trs.some((x) => !x.from && x.to === n)) {
       AM.svg('circle', { cx: p.x - 30, cy: p.y + NH / 2, r: 5, class: 'startdot' }, gE);
       AM.svg('path', { d: `M${p.x - 24},${p.y + NH / 2} H${p.x - 3}`, class: 'startln', 'marker-end': 'url(#arr)' }, gE);
@@ -288,11 +312,7 @@ function renderDiagram() {
     }
     nodes[n] = g;
   });
-  if (!m.trs.length) AM.svg('text', { x: 0, y: -16, class: 'sv-note' }, svg, AM.t('stNoTrans'));
-  svg.classList.toggle('editing', editing());
-  V.g = { edges, nodes, m, bounds };
-  fitView();
-  paintSel(); paintHot();
+  return { edges, nodes, bounds };
 }
 
 function fitView() {
@@ -349,28 +369,46 @@ function onKey(e) {
 }
 function paintHot() {
   if (!V || !V.g) return;
-  const h = V.hot && V.hot.ent === V.g.m.ent ? V.hot : null;
-  Object.keys(V.g.nodes).forEach((n) => V.g.nodes[n].classList.toggle('cur', !!h && h.cur.has(n)));
-  V.g.edges.forEach((e) => {
+  paintDrawn(V.g, V.hot && V.hot.ent === V.g.m.ent ? V.hot : null);
+}
+// paintDrawn(r, h): mark the statuses h.cur and transitions h.trs on a drawn machine (drawMachine's result)
+function paintDrawn(r, h) {
+  Object.keys(r.nodes).forEach((n) => r.nodes[n].classList.toggle('cur', !!h && h.cur.has(n)));
+  r.edges.forEach((e) => {
     const on = !!h && h.trs.has(e.x);
     e.g.classList.toggle('hot', on);
     const p = e.g.querySelector('.ln'); if (p) p.setAttribute('marker-end', on ? 'url(#arrA)' : markOf(e.x));
   });
 }
+// the status changes a scenario step makes, from the code only: arch:state of the step (and its callees,
+// step.states) and the transitions the step function itself makes (D.transByFid) → [{ent, from, to, fid?}]
+function stepCands(step) {
+  const cands = (step.states || []).map((s) => ({ ent: s.entity, from: s.from || '', to: s.to }));
+  (AM.D.transByFid[step.fid] || []).forEach((x) => cands.push({ ent: x.entity, from: x.from || '', to: x.to, fid: step.fid }));
+  return cands;
+}
+// stepHot(m, step): what of machine m the step touches → {ent, trs: Set(transition), cur: Set(status)} or null
+function stepHot(m, step) {
+  if (!m || !step) return null;
+  const mine = stepCands(step).filter((c) => c.ent === m.ent);
+  if (!mine.length) return null;
+  const trs = new Set(), cur = new Set();
+  m.trs.forEach((x) => { if (mine.some((c) => c.to === x.to && (c.from === (x.from || '') || (x.fid && c.fid === x.fid && c.from === (x.from || ''))))) { trs.add(x); cur.add(x.to); } });
+  mine.forEach((c) => cur.add(c.to));
+  return { ent: m.ent, trs, cur };
+}
+// the page frames (views/pages.js) draw machines with the same code
+AM.status = { machine: (ent) => machines().find((x) => x.ent === ent) || null, draw: drawMachine, hot: stepHot, paint: paintDrawn, nodeH: NH };
 function onStepStatus(step) {
   if (!V) return;
   if (!step) { V.hot = null; paintHot(); return; }
-  const cands = (step.states || []).map((s) => ({ ent: s.entity, from: s.from || '', to: s.to }));
-  (AM.D.transByFid[step.fid] || []).forEach((x) => cands.push({ ent: x.entity, from: x.from || '', to: x.to, fid: step.fid }));
+  const cands = stepCands(step);
   if (!cands.length) { V.hot = null; paintHot(); return; }
   const all = machines().map((m) => m.ent);
   let ent = V.ent;
   if (!cands.some((c) => c.ent === ent)) { const c = cands.find((x) => all.includes(x.ent)); if (!c) { V.hot = null; paintHot(); return; } ent = c.ent; }
   const m = machines().find((x) => x.ent === ent);
-  const mine = cands.filter((c) => c.ent === ent), trs = new Set(), cur = new Set();
-  m.trs.forEach((x) => { if (mine.some((c) => c.to === x.to && (c.from === (x.from || '') || (x.fid && c.fid === x.fid && c.from === (x.from || ''))))) { trs.add(x); cur.add(x.to); } });
-  mine.forEach((c) => cur.add(c.to));
-  V.hot = { ent, trs, cur };
+  V.hot = stepHot(m, step);
   if (ent !== V.ent) {
     if (AM.state.view === 'status') { V.ent = ent; renderList(); renderDiagram(); } else V.pendingEnt = ent;
   }

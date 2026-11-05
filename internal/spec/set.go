@@ -28,29 +28,49 @@ type Set struct {
 
 var fileRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*\.arch$`)
 
-// ValidPath reports whether p is "arch/<name>.arch" with a plain name.
+// PagesDir is the directory of page files ("arch/pages"); a page may also sit in
+// any arch/*.arch.
+const PagesDir = Dir + "/pages"
+
+// ValidPath reports whether p is "arch/<name>.arch" or "arch/pages/<name>.arch"
+// with a plain name.
 func ValidPath(p string) bool {
 	dir, name := path.Split(p)
-	return dir == Dir+"/" && fileRe.MatchString(name) && path.Clean(p) == p
+	return (dir == Dir+"/" || dir == PagesDir+"/") && fileRe.MatchString(name) && path.Clean(p) == p
 }
 
-// Load reads <root>/arch/*.arch (not recursive). A missing directory is an empty Set.
-func Load(root string) (*Set, error) {
-	dir := filepath.Join(root, Dir)
-	ents, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return &Set{}, nil
+// Paths lists the spec files under root (arch/*.arch, then arch/pages/*.arch),
+// slash-separated and relative to root. Missing directories give nothing.
+func Paths(root string) ([]string, error) {
+	var out []string
+	for _, d := range []string{Dir, PagesDir} {
+		ents, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(d)))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range ents {
+			p := d + "/" + e.Name()
+			if !e.IsDir() && ValidPath(p) {
+				out = append(out, p)
+			}
+		}
 	}
+	return out, nil
+}
+
+// Load reads <root>/arch/*.arch and <root>/arch/pages/*.arch. Missing
+// directories are an empty Set.
+func Load(root string) (*Set, error) {
+	paths, err := Paths(root)
 	if err != nil {
 		return nil, err
 	}
 	texts := map[string]string{}
-	for _, e := range ents {
-		p := Dir + "/" + e.Name()
-		if e.IsDir() || !ValidPath(p) {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+	for _, p := range paths {
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +101,7 @@ func (s *Set) Empty() bool {
 		return true
 	}
 	for _, f := range s.Files {
-		if len(f.Doc.States)+len(f.Doc.Flows)+len(f.Doc.Journeys) > 0 {
+		if len(f.Doc.States)+len(f.Doc.Flows)+len(f.Doc.Journeys)+len(f.Doc.Pages) > 0 {
 			return false
 		}
 	}
@@ -148,11 +168,11 @@ func (s *Set) Texts() map[string]string {
 // Model flattens the files into one Model. A declaration seen twice (same
 // entity or id) keeps the first one; Check reports the duplicate.
 func (s *Set) Model() Model {
-	m := Model{States: []States{}, Flows: []Flow{}, Journeys: []Journey{}}
+	m := Model{States: []States{}, Flows: []Flow{}, Journeys: []Journey{}, Pages: []Page{}}
 	if s == nil {
 		return m
 	}
-	seenS, seenF, seenJ := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	seenS, seenF, seenJ, seenP := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, f := range s.Files {
 		for _, st := range f.Doc.States {
 			if seenS[st.Entity] {
@@ -198,6 +218,18 @@ func (s *Set) Model() Model {
 			c.File = f.Path
 			norm(&c.Flows)
 			m.Journeys = append(m.Journeys, c)
+		}
+		for _, pg := range f.Doc.Pages {
+			if seenP[pg.ID] {
+				continue
+			}
+			seenP[pg.ID] = true
+			c := copyJSON(*pg)
+			c.File = f.Path
+			if c.Frames == nil {
+				c.Frames = []Frame{}
+			}
+			m.Pages = append(m.Pages, c)
 		}
 	}
 	return m

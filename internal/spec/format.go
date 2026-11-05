@@ -71,7 +71,7 @@ func rows(table [][]string) []string {
 	return out
 }
 
-// Format writes a Doc in the canonical form: states, flows, journeys in their
+// Format writes a Doc in the canonical form: states, flows, journeys, pages in their
 // order, two-space indent, aligned columns. Parse(Format(d)) equals d.
 func Format(d *Doc) string {
 	var blocks []string
@@ -83,6 +83,9 @@ func Format(d *Doc) string {
 	}
 	for _, j := range d.Journeys {
 		blocks = append(blocks, comment(j.Comment)+formatJourney(j))
+	}
+	for _, pg := range d.Pages {
+		blocks = append(blocks, comment(pg.Comment)+formatPage(pg))
 	}
 	if len(d.Tail) > 0 {
 		blocks = append(blocks, comment(d.Tail))

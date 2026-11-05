@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -110,17 +111,25 @@ func (s *Server) writeSpecFile(rel, text string) error {
 	if !spec.ValidPath(rel) {
 		return fmt.Errorf("path %q must be arch/<name>.arch", rel)
 	}
-	dir := filepath.Join(s.opts.Root, spec.Dir)
-	if fi, err := os.Lstat(dir); err == nil {
-		if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
-			return fmt.Errorf("%s is not a plain directory", spec.Dir)
-		}
-	} else if errors.Is(err, os.ErrNotExist) {
-		if err := os.Mkdir(dir, 0o755); err != nil {
+	// arch/ and, for a page file, arch/pages/: plain directories, made when missing
+	dirs := []string{spec.Dir}
+	if path.Dir(rel) == spec.PagesDir {
+		dirs = append(dirs, spec.PagesDir)
+	}
+	var dir string
+	for _, d := range dirs {
+		dir = filepath.Join(s.opts.Root, filepath.FromSlash(d))
+		if fi, err := os.Lstat(dir); err == nil {
+			if fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+				return fmt.Errorf("%s is not a plain directory", d)
+			}
+		} else if errors.Is(err, os.ErrNotExist) {
+			if err := os.Mkdir(dir, 0o755); err != nil {
+				return err
+			}
+		} else {
 			return err
 		}
-	} else {
-		return err
 	}
 	dst := filepath.Join(s.opts.Root, filepath.FromSlash(rel))
 	if fi, err := os.Lstat(dst); err == nil && !fi.Mode().IsRegular() {

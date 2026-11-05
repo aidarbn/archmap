@@ -200,15 +200,26 @@ function renderER() {
   if (!X.names.length) { h('div', { class: 'empty' }, host, esc(tr('dvNone'))); V.er = null; return; }
   const sv = svg('svg', { class: 'er dv-er' }, host);
   const LY = layoutAll();
-  const gb = svg('g', {}, sv), ge = svg('g', {}, sv), gc = svg('g', {}, sv);
   const er = V.er = { sv, cam: new A.Cam(sv, (vb) => sv.classList.toggle('lod-lo', (sv.parentElement.offsetWidth || 1000) / vb.w < 0.4)), cards: {}, edges: [], by: {}, extent: { x: 0, y: 0, w: LY.w, h: LY.h }, boxes: LY.boxes, pos: LY.pos };
   er.cam.maxW = Math.max(2e5, LY.w * 4);
-  LY.boxes.forEach((b) => {
+  Object.assign(er, drawER(sv, LY, X.names, { click: (n) => { if (er.cam.justDragged) return; A.select({ t: 'table', id: n }); } }));
+  paintER();
+  fitER();
+}
+// drawER(sv, LY, names, hooks): table cards at LY.pos and the references between the drawn tables into sv; the same
+// drawing serves the Data view and the "tables" frames of a page (views/pages.js through AM.dataER). hooks.click(n).
+// Returns {cards: {name: {g, rows, more, moreSet, opb, p}}, edges: [{a, b, el}], by: {name: [edge]}}.
+function drawER(sv, LY, names, hk) {
+  hk = hk || {};
+  const X = ix();
+  const gb = svg('g', {}, sv), ge = svg('g', {}, sv), gc = svg('g', {}, sv);
+  const er = { cards: {}, edges: [], by: {} };
+  (LY.boxes || []).forEach((b) => {
     svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 14, class: 'gbox' }, gb);
     svg('text', { x: b.x + GP, y: b.y + 19, class: 'gname' }, gb, (b.other ? tr('dvOther') : b.key) + ' · ' + b.n);
   });
   // cards
-  X.names.forEach((n) => {
+  names.forEach((n) => {
     const tb = X.T[n], p = LY.pos[n], s = shown(tb);
     const g = svg('g', { class: 'tb n' + (tb.virtual ? ' ext' : ''), 'data-id': n }, gc);
     svg('title', {}, g, n + (tb.desc ? '\n' + tb.desc : ''));
@@ -235,14 +246,14 @@ function renderER() {
       more = svg('rect', { x: p.x + 4, y, width: p.w - 8, height: RH, rx: 4, class: 'row' }, fg);
       svg('text', { x: p.x + 12, y: y + 12.5, class: 'ft' }, fg, tr('dvMore', s.more.length));
     }
-    g.addEventListener('click', () => { if (er.cam.justDragged) return; A.select({ t: 'table', id: n }); });
+    if (hk.click) g.addEventListener('click', () => hk.click(n));
     g.addEventListener('mouseenter', () => (er.by[n] || []).forEach((e) => e.el.classList.add('hov')));
     g.addEventListener('mouseleave', () => (er.by[n] || []).forEach((e) => e.el.classList.remove('hov')));
     er.cards[n] = { g, rows, more, moreSet: new Set(s.more.map((f) => f.name)), opb, p };
   });
-  // relations
-  X.names.forEach((a) => X.T[a].refs.forEach((r) => {
-    const b = r.table; if (a === b) return;
+  // relations (between the drawn tables only)
+  names.forEach((a) => X.T[a].refs.forEach((r) => {
+    const b = r.table; if (a === b || !er.cards[b]) return;
     const A_ = er.cards[a].p, B_ = er.cards[b].p, sa = shown(X.T[a]).list.findIndex((f) => f.name === r.field);
     const y1 = A_.y + (sa >= 0 ? HH + sa * RH + 2 + RH / 2 : HH / 2);
     const tl = shown(X.T[b]).list, ti = tl.findIndex((f) => f.name === r.to || pkOf(f));
@@ -255,9 +266,24 @@ function renderER() {
     const e = { a, b, el };
     er.edges.push(e); (er.by[a] = er.by[a] || []).push(e); (er.by[b] = er.by[b] || []).push(e);
   }));
-  paintER();
-  fitER();
+  return er;
 }
+// paintCards(er, hot): the playback marks on drawn cards — hot: Map table → {ops: Set, fields: Set} (or null)
+function paintCards(er, hot) {
+  Object.keys(er.cards).forEach((n) => {
+    const c = er.cards[n], x = hot && hot.get(n);
+    c.g.classList.toggle('hot', !!x);
+    Object.keys(c.rows).forEach((f) => c.rows[f].classList.toggle('hot', !!(x && x.fields.has(f))));
+    if (c.more) c.more.classList.toggle('hot', !!(x && Array.from(x.fields).some((f) => c.moreSet.has(f))));
+    c.opb.textContent = x ? Array.from(x.ops).map((o) => OPL[o] || o).join(' ') : '';
+  });
+}
+// the page frames (views/pages.js) draw a part of the schema with the same code: layout(names) → {pos, w, h}
+A.dataER = {
+  has: (n) => !!ix().T[n],
+  layout: (names) => { const ns = names.filter((n) => ix().T[n]); return Object.assign(layoutCluster(ns, Math.max(260, Math.min(900, ns.length * 120))), { names: ns }); },
+  draw: drawER, paint: paintCards, stepTables: (step) => stepTables(step),
+};
 function fitER() { if (V.er && V.erBox.offsetWidth) V.er.cam.fit(V.er.extent, 30); }
 function focusTable(n) {
   const er = V && V.er; if (!er || !er.cards[n]) return;

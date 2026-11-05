@@ -76,6 +76,9 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 			if res.Spec {
 				msg += fmt.Sprintf(", %d spec flows", res.SpecFlows)
 			}
+			if res.Pages > 0 {
+				msg += fmt.Sprintf(", %d pages", res.Pages)
+			}
 			fmt.Fprintln(stdout, msg+")")
 		}
 	}

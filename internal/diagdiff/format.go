@@ -17,13 +17,14 @@ type words struct {
 	title, none                                 string
 	changed, added, removed, broken, oldBroken  string
 	kind                                        map[string]string
-	status                                      map[string]string
+	status, pageStatus                          map[string]string
 	reason                                      map[string]string
 	stepRemoved, stepAdded, stepText, stepOrder string
 	steps, flows                                string
 	flowRemoved, flowAdded                      string
 	stateAdded, stateRemoved                    string
 	trAdded, trRemoved, trFuncs                 string
+	frames, frameAdded, frameRemoved, renamed   string
 	inBase                                      string
 	brokenHead                                  string
 	brokenKind                                  map[string]string
@@ -33,7 +34,7 @@ var dict = map[string]words{
 	LangEN: {
 		title: "archmap diagrams", none: "Diagrams did not change.",
 		changed: "changed", added: "added", removed: "gone", broken: "broken", oldBroken: "broken already in the base",
-		kind:   map[string]string{KindFlow: "Scenario", KindJourney: "Journey", KindStates: "States"},
+		kind:   map[string]string{KindFlow: "Scenario", KindJourney: "Journey", KindStates: "States", KindPage: "Page"},
 		status: map[string]string{Added: "new", Removed: "gone", Changed: "changed"},
 		reason: map[string]string{
 			ReasonEntryDeleted:  "the entry-point function %s was deleted",
@@ -53,6 +54,7 @@ var dict = map[string]words{
 		flowRemoved: "Scenario left the journey", flowAdded: "Scenario joined the journey",
 		stateAdded: "State added", stateRemoved: "State removed",
 		trAdded: "Transition added", trRemoved: "Transition gone", trFuncs: "Transition is now made by",
+		frames: "Frames", frameAdded: "Frame added", frameRemoved: "Frame gone", renamed: "Renamed",
 		inBase:     "in the base",
 		brokenHead: "Broken diagrams",
 		brokenKind: map[string]string{
@@ -61,13 +63,15 @@ var dict = map[string]words{
 			BrokenNoEntry:     "scenario `%s` has steps but no entry point (no arch:flow): %s",
 			BrokenNoFunction:  "scenario `%s`: step `%s` names no function",
 			BrokenUnreachable: "scenario `%s`: step %s is not reachable from the entry point",
+			BrokenPageRef:     "page `%s` shows `%s`, which the code does not have",
 		},
 	},
 	LangRU: {
 		title: "Диаграммы archmap", none: "Диаграммы не изменились.",
 		changed: "изменено", added: "появилось", removed: "исчезло", broken: "битых", oldBroken: "битых уже в базе",
-		kind:   map[string]string{KindFlow: "Сценарий", KindJourney: "Путь", KindStates: "Статусы"},
-		status: map[string]string{Added: "новый", Removed: "исчез", Changed: "изменён"},
+		kind:       map[string]string{KindFlow: "Сценарий", KindJourney: "Путь", KindStates: "Статусы", KindPage: "Страница"},
+		status:     map[string]string{Added: "новый", Removed: "исчез", Changed: "изменён"},
+		pageStatus: map[string]string{Added: "новая", Removed: "исчезла", Changed: "изменена"},
 		reason: map[string]string{
 			ReasonEntryDeleted:  "удалена функция точки входа %s",
 			ReasonEntryUnmarked: "с точки входа %s снята пометка arch:flow",
@@ -86,6 +90,7 @@ var dict = map[string]words{
 		flowRemoved: "Сценарий убран из пути", flowAdded: "Сценарий добавлен в путь",
 		stateAdded: "Статус добавлен", stateRemoved: "Статус удалён",
 		trAdded: "Переход появился", trRemoved: "Переход исчез", trFuncs: "Переход теперь делает",
+		frames: "Рамки", frameAdded: "Рамка добавлена", frameRemoved: "Рамка убрана", renamed: "Переименована",
 		inBase:     "в базе",
 		brokenHead: "Битые диаграммы",
 		brokenKind: map[string]string{
@@ -94,6 +99,7 @@ var dict = map[string]words{
 			BrokenNoEntry:     "у сценария `%s` есть шаги, но нет точки входа (нет arch:flow): %s",
 			BrokenNoFunction:  "сценарий `%s`: шаг `%s` не указывает ни на одну функцию",
 			BrokenUnreachable: "сценарий `%s`: шаг %s недостижим из точки входа",
+			BrokenPageRef:     "страница `%s` показывает `%s`, которого нет в коде",
 		},
 	},
 }
@@ -134,6 +140,14 @@ func (p printer) fns(rs []Ref) string {
 }
 
 func quote(s string) string { return "«" + s + "»" }
+
+// status of a diagram; a page has its own words (Russian: «страница» is feminine)
+func (p printer) status(d Diff) string {
+	if s, ok := p.w.pageStatus[d.Status]; ok && d.Kind == KindPage {
+		return s
+	}
+	return p.w.status[d.Status]
+}
 
 func (p printer) title(d Diff) string {
 	name := d.Name
@@ -190,6 +204,12 @@ func (p printer) change(c Change) string {
 			s += " (" + p.fns(c.Funcs) + ")"
 		}
 		return s
+	case FrameAdded:
+		return fmt.Sprintf("%s: %s", p.w.frameAdded, p.code(c.Text))
+	case FrameRemoved:
+		return fmt.Sprintf("%s: %s", p.w.frameRemoved, p.code(c.Text))
+	case PageRenamed:
+		return fmt.Sprintf("%s: %s → %s", p.w.renamed, quote(c.Old), quote(c.Text))
 	case TransitionFuncs:
 		return fmt.Sprintf("%s: %s %s (%s: %s)", p.code(transition(c)), p.w.trFuncs, p.fns(c.Funcs), p.w.inBase, p.fns(c.Before))
 	}
@@ -208,6 +228,8 @@ func (p printer) lines(d Diff) []string {
 			switch {
 			case c.Code == FlowAdded:
 				names = append(names, p.code(c.Flow))
+			case c.Code == FrameAdded:
+				names = append(names, p.code(c.Text))
 			case c.Text != "":
 				names = append(names, quote(c.Text))
 			default:
@@ -215,15 +237,19 @@ func (p printer) lines(d Diff) []string {
 			}
 		}
 		label := p.w.steps
-		if d.Kind == KindJourney {
+		sep := " → "
+		switch d.Kind {
+		case KindJourney:
 			label = p.w.flows
+		case KindPage:
+			label, sep = p.w.frames, "; "
 		}
 		more := ""
 		if len(names) > maxListed {
 			more = fmt.Sprintf(" … (+%d)", len(names)-maxListed)
 			names = names[:maxListed]
 		}
-		return []string{fmt.Sprintf("%s (%d): %s%s", label, len(d.Changes), strings.Join(names, " → "), more)}
+		return []string{fmt.Sprintf("%s (%d): %s%s", label, len(d.Changes), strings.Join(names, sep), more)}
 	}
 	var out []string
 	for _, c := range d.Changes {
@@ -294,7 +320,7 @@ func Markdown(r Report, l string) string {
 		}
 	}
 	for _, d := range r.Diffs {
-		head := fmt.Sprintf("%s — %s", p.title(d), p.w.status[d.Status])
+		head := fmt.Sprintf("%s — %s", p.title(d), p.status(d))
 		if d.Status == Removed && d.Reason != "" {
 			head += ": " + p.reason(d)
 		}
@@ -355,7 +381,7 @@ func Text(r Report, l string) string {
 		}
 	}
 	for _, d := range r.Diffs {
-		head := fmt.Sprintf("%s — %s", p.title(d), p.w.status[d.Status])
+		head := fmt.Sprintf("%s — %s", p.title(d), p.status(d))
 		if d.Status == Removed && d.Reason != "" {
 			head += ": " + p.reason(d)
 		}
