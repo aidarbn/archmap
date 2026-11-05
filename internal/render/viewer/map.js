@@ -1,8 +1,8 @@
 /* map.js — the map: one scene, four levels (0 system, 1 modules, 2 functions of a module, 3 code),
  * module groups for large repos, selection, drill-in/out with camera animation, crumbs, minimap. */
 
-let sys = null, map = null, fv = null, mini = null;
-const INSET = 64; // px at the top of every scene covered by the crumbs and the level buttons
+let sys = null, map = null, fv = null;
+const INSET = 12; // px kept free at the top of every scene (the crumbs live in the header now)
 // the sequence dock (views/sequence.js) covers a strip at the bottom or on the right of the map: cameras fit into the rest
 const DOCK = { b: 0, r: 0 };
 const dockInsets = (cam) => { cam.insetBottom = DOCK.b; cam.insetRight = DOCK.r; };
@@ -359,7 +359,7 @@ function buildMap() {
   acts.forEach((o) => o.tg.forEach((u) => E.push({ a: o.a.id, b: u, w: 1, dash: true })));
   exts.forEach((o) => o.tg.forEach((u) => E.push({ a: u, b: o.x.id, w: 1, dash: true })));
   drawPortEdges(E, pos, ge);
-  map.cam = new Cam(svg, (vb) => { updateMinimap(vb); svg.classList.toggle('lod-lo', (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
+  map.cam = new Cam(svg, (vb) => { svg.classList.toggle('lod-lo', (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
   map.cam.insetTop = INSET; dockInsets(map.cam); map.cam.maxW = Math.max(map.extent.w, map.extent.h * map.cam.aspect()) * 4; // far enough out for the level to drop below LEAVE (zoom.js)
   wireSelect(svg, map.cam, selectMod, (id) => {
     if (U[id] && U[id].kind === 'g') return expandGroup(U[id].node);
@@ -367,7 +367,6 @@ function buildMap() {
     const m = (id.startsWith('ext:') ? (D.externals.find((x) => x.id === id) || {}).modules || [] : Array.from((D.actors.find((a) => a.id === id) || { mods: new Set() }).mods))[0];
     if (m) goModule(m);
   });
-  buildMinimap(); buildLegend(present);
   paintMap();
 }
 // edges distributed over card ports (top/bottom/sides) and pulled toward a common trunk (bundles)
@@ -524,28 +523,6 @@ function collapseGroup(n) {
   buildMap(); fitMap();
   if (map.nodes[n.id]) selectMod(n.id); else setSel(null);
   renderCrumbs();
-}
-/* minimap and legend */
-function buildMinimap() {
-  const box = $('#minimap'); box.innerHTML = '';
-  const ex = map.extent;
-  const svg = S_('svg', { viewBox: `${ex.x} ${ex.y} ${ex.w} ${ex.h}`, width: '100%', height: '100%', preserveAspectRatio: 'xMidYMid meet' }, box);
-  for (const l in map.bands) { const b = map.bands[l]; S_('rect', { x: 0, y: b.y, width: map.W, height: b.h, rx: 14, fill: 'var(--surface-2)' }, svg); }
-  for (const id in map.pos) { const r = map.pos[id]; S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 8, fill: U[id] ? LCOLOR[unitLayer(U[id])] : 'var(--muted)', opacity: U[id] ? .55 : .3 }, svg); }
-  const vp = S_('rect', { class: 'vp', rx: 6 }, svg);
-  mini = { svg, vp };
-  box.onclick = (e) => {
-    const r = svg.getBoundingClientRect(), s = Math.min(r.width / ex.w, r.height / ex.h);
-    const ox = (r.width - ex.w * s) / 2, oy = (r.height - ex.h * s) / 2;
-    const wx = ex.x + (e.clientX - r.left - ox) / s, wy = ex.y + (e.clientY - r.top - oy) / s;
-    const v = map.cam.vb; map.cam.animToVB({ x: wx - v.w / 2, y: wy - v.h / 2, w: v.w, h: v.h }, 300);
-  };
-}
-function updateMinimap(vb) { if (mini) { mini.vp.setAttribute('x', vb.x); mini.vp.setAttribute('y', vb.y); mini.vp.setAttribute('width', vb.w); mini.vp.setAttribute('height', vb.h); } }
-function buildLegend(present) {
-  $('#legend').innerHTML = present.map((l) => `<span><i style="background:${LCOLOR[l]}"></i>${esc(t('layers')[l])}</span>`).join('') +
-    (D.externals.length ? `<span><i style="background:none;border:1.5px dashed var(--muted)"></i>${esc(t('ext'))}</span>` : '') +
-    (D.changed.length || D.deleted.length ? `<span><i style="background:none;border:2px solid var(--add)"></i>${esc(t('st_added'))}</span><span><i style="background:none;border:2px solid var(--mod)"></i>${esc(t('st_modified'))}</span>` : '');
 }
 
 /* ===================== Level 2: functions of a module ===================== */
@@ -822,18 +799,23 @@ function setLevel(lvl, fid) {
   afterLevel();
 }
 function afterLevel() {
-  $('#minimap').classList.toggle('off', state.level !== 1);
-  $('#legend').classList.toggle('off', state.level !== 1);
   $('.zoomctl').style.display = state.level === 3 ? 'none' : '';
-  renderCrumbs(); renderLevelBar();
+  renderCrumbs();
   bus.emit('level', state.level);
 }
+// the crumbs in the header: where I am — system › modules › module › function (a click goes back up);
+// on another view (API, Data, Statuses) its title, a click on the system returns to the map
 function renderCrumbs() {
-  const c = $('#crumbs'); c.innerHTML = '';
-  H('span', { class: 'lvl' }, c, esc(t('lv')[state.level]));
-  const PJ = D.F.project || {};
-  const items = [[PJ.name || D.M.title || D.F.repo || 'repo', 0]];
-  if (state.played && state.step >= 0 && state.run) items.push([cut(state.run.name, 28), -1]);
+  const c = $('#crumbs'); if (!c) return;
+  c.innerHTML = '';
+  if (state.view !== 'map') {
+    const v = VIEWS.find((x) => x.id === state.view);
+    const b0 = H('button', { title: t('lv')[0] }, c, esc(t('lv')[0])); b0.onclick = () => setView('map');
+    H('span', { class: 'sep' }, c, '›');
+    H('button', { class: 'cur' }, c, esc(v ? viewTitle(v) : state.view));
+    return;
+  }
+  const items = [[t('lv')[0], 0]];
   if (state.level >= 1) {
     items.push([t('lv')[1], 1]);
     if (G.on && state.level === 1) { const ch = []; for (let n = G.focus; n && n.parent; n = n.parent) ch.unshift(n); ch.forEach((n) => items.push([n.label + '/', 'g:' + n.id])); }
@@ -844,18 +826,11 @@ function renderCrumbs() {
     if (i) H('span', { class: 'sep' }, c, '›');
     const b = H('button', { class: i === items.length - 1 ? 'cur' : '', title: tx }, c, esc(tx));
     b.onclick = () => {
-      if (l === -1) { openPick(); return; }
       if (typeof l === 'string') { focusGroup(G.TN[l.slice(2)]); return; }
       if (l === 1 && state.level === 1 && G.focus) { G.userOpen.clear(); G.focus = null; buildMap(); fitMap(); setSel(null); renderCrumbs(); return; }
       if (l < state.level) up(l);
     };
   });
-}
-function renderLevelBar() {
-  $('#btnUp').textContent = t('up');
-  const s = state.sel;
-  $('#btnIn').textContent = state.level === 1 && s && s.t === 'group' ? t('expand') : t('into');
-  $('#btnUp').disabled = state.level === 0; $('#btnIn').disabled = state.level === 3;
 }
 function intoSelected() {
   const s = state.sel;

@@ -72,9 +72,10 @@ function mountStatus(el) {
   const wrap = AM.h('div', { class: 'sv-wrap' }, split);
   const svg = AM.svg('svg', { class: 'st sv-svg' }, wrap);
   const leg = AM.h('div', { class: 'sv-legend' }, wrap);
+  const title = AM.h('div', { class: 'sv-title' }, wrap);
   const fit = AM.h('button', { class: 'iconbtn sv-fit', type: 'button' }, wrap);
   fit.onclick = () => fitView();
-  V = { el, listEl, wrap, svg, leg, fit, cam: new AM.Cam(svg), ent: null, showEmpty: false, hot: null, pendingEnt: null, g: null };
+  V = { el, listEl, wrap, svg, leg, fit, title, cam: new AM.Cam(svg), ent: null, showEmpty: false, hot: null, pendingEnt: null, g: null };
   AM.bus.on('resize', () => { if (AM.state.view === 'status') fitView(); });
   // editing: new status on a double click on the empty place, Del, spec updates (views/editor.js)
   svg.addEventListener('dblclick', onBgDbl);
@@ -87,7 +88,8 @@ function mountStatus(el) {
     if (AM.state.view === 'status') renderAll();
   };
   AM.bus.on('spec', redo); AM.bus.on('edit', redo);
-  AM.bus.on('status:focus', (f) => { V.ent = f.machine; V.hot = null; AM.select({ t: 'status', entity: f.machine, id: f.to }); renderAll(); });
+  // from ⌘K ({machine}) or another view ({machine, to}): show the machine, select the status when given
+  AM.bus.on('status:focus', (f) => { V.ent = f.machine; V.hot = null; AM.select(f.to ? { t: 'status', entity: f.machine, id: f.to } : null); renderAll(); });
   renderAll();
 }
 
@@ -97,6 +99,8 @@ function renderAll() {
     V.ent = vm.length ? vm[0].ent : null;
   }
   renderList(); renderLegend(); V.fit.textContent = '⤢ ' + AM.t('stFit');
+  const cur = machines().find((m) => m.ent === V.ent);
+  V.title.innerHTML = cur ? `${AM.esc(cur.ent)}<small>${AM.esc(AM.t('stCounts', cur.states.length, cur.trs.length))} · ⌘K</small>` : '';
   renderDiagram();
 }
 
