@@ -17,32 +17,49 @@ How the viewer is built and how to add a view: [docs/viewer.md](docs/viewer.md).
 
 ## Interface
 
-The page is deliberately minimal: one line on top and the map under it. More
-controls come back only when they prove necessary.
+The page is a desktop layout in the manner of Figma (≥ 1200 px wide; there is
+no mobile layout): a thin toolbar on top and three docked columns under it —
+the sidebar, the canvas, the inspector. Nothing floats over the map but the
+crumbs and the zoom block in its corners. A light neutral theme (a dotted grey
+canvas, white panels, 1 px borders, one accent colour, small radii, no panel
+shadows) and a dark one.
 
-- **Top line**: the logo and the project name (a click goes back to the whole
-  system; the tooltip has the repo, the branch and its changes; under `archmap
-  serve` a small dot next to the name is the live state) and a small **⋯** at
-  the right: **API**, **Data**, **Statuses**, **Language**, **Theme** and, on a
-  branch with changes, **Only changed**. Nothing else. There is no search.
-- **Scenario list** — a narrow column at the left of the map. On top **Through
-  paths** (journeys): the name (up to two lines), its description or outcome in
-  grey and `N scenarios · M steps`. Under them the scenarios grouped by who
-  starts them (the actors of the map: restaurant cabinet, super admin, tablet,
-  guest, cron/queue, other roles); a group is folded until clicked, its header
-  has the count; a row is the name and one grey line (description or outcome).
-  Technical scenarios are not listed. A small filter above the list narrows
-  this list only (by name and description) when it is long. The chevron on the
-  column's edge or `[` hides and shows it (remembered by the browser). A click
-  opens the path or scenario on the map; a click on the selected row, ✕ in the
-  bar or Esc brings the whole map back. While a path is open its scenarios
-  unfold under it, the current one marked; a click goes to its first step. The
-  URL gets `#journey=<id>` or `#flow=<id>`, so the choice survives a reload.
-- **Breadcrumbs** "where I am" sit small in the top-left corner of the map,
-  right of the list (system › modules › module › function — a click goes back
-  up; on a view: system › API).
-- **An open path or scenario** shows **only what takes part in it**: the actors
-  that start its flows, the modules of its steps, the outside systems they call,
+- **Toolbar** (40 px): at the left the logo (a click goes back to the whole
+  system), the live dot under `archmap serve` and the sidebar toggle; in the
+  centre the open scenario with its navigation (only in the scenario window,
+  below); at the right a small **⋯**: **API**, **Data**, **Statuses**,
+  **Language**, **Theme** and, on a branch with changes, **Only changed**.
+  There is no search.
+- **Sidebar** — the base of the page, a docked column at the left (240 px; drag
+  its right edge for 200–420 px, double-click for the default, remembered by
+  the browser; the toolbar button or `[` hides it). On top the project name
+  with the branch under it, then a compact **filter** that narrows the whole
+  tree, then the **full navigation of the project as one tree**, like the
+  layers of Figma — names only, one line each (the full name in the tooltip), a
+  small grey counter on sections and groups: **System** → **Users** (actors) →
+  **Modules** by layer (Entry, Domain, Adapters, Infrastructure …; a module
+  unfolds into its functions) → **Outside systems** → **Data** (tables) →
+  **API** (services → endpoints) → **Statuses** (entities) → **Scenarios**
+  (through paths → their scenarios, then the scenarios by who starts them;
+  technical scenarios are not listed). A click selects the node on the map
+  (going to its level) or opens its view in the centre (Data, API, Statuses),
+  and the inspector shows it. The tree follows a selection made on the map or
+  in a view: it unfolds down to the selected node and scrolls to it.
+- **Scenarios open apart**, in a window of their own: a click on a path or a
+  scenario (in the tree or in a card) opens one reused browser window
+  `archmap-scenario` — the same page with `#journey=<id>` / `#flow=<id>` and
+  `&solo=1` (works for a static file and under `serve`; when the pop-up is
+  blocked, a new tab). The main window never plays a scenario: its map stays the
+  map. The scenario window has no sidebar: the toolbar with the scenario name
+  and **Overview · ← Step k/N →** in the centre (✕ closes the window), the map
+  of its participants only, the inspector at the right. A reload shows the same
+  scenario.
+- **Breadcrumbs** "where I am" sit small in the top-left corner of the canvas
+  (system › modules › module › function — a click goes back up; on a view:
+  system › API).
+- **An open path or scenario** (the scenario window) is the same system,
+  simplified: it shows **only what takes part in it** — the actors
+  that start its flows (in a column at the left), the modules of its steps, the outside systems they call,
   the database when a step reads or writes, the queue at a hand-off. Nothing
   else is drawn. The participants keep the look of the map and their layer
   bands and go left to right in the order the path reaches them; zooming into a
@@ -54,22 +71,22 @@ controls come back only when they prove necessary.
   scroll (or the wheel) pans. A pinch or Cmd/Ctrl+wheel zooms, and zooming into
   a card far enough dives into it (system → modules → the functions of a module →
   code); zooming a level out far enough goes back up, and the crumbs follow. There
-  is no switch for it. Small +/−/fit buttons sit in the corner. Under the name, an
+  is no switch for it. A small − / fit / + block sits in the bottom-right corner. Under the name, an
   actor, an outside system, a module or a function shows one short line of its
   description when the code has one (an actor: `61 scenarios · Admin service…`;
   the count leaves out technical scenarios).
-- **First what it does, then the details.** On the system level with nothing
-  selected a compact card under the crumbs says what the system does (the
-  project description), the counts, who uses it and which outside systems it
-  talks to (a name opens its card); the system card (the service node) lists
-  them with a line of description each.
-- **Details panel**: appears only when something is selected (actor, outside
-  system, module, function, step, endpoint, table, status) and floats over the
-  right side. It starts with what the element does, in a larger font. Where the
+- **Inspector** — a docked column at the right (280 px; drag its left edge for
+  240–480 px; `]` or Cmd/Ctrl+. hide and show it), like the Design panel of
+  Figma: sections with small titles, dense "label — value" rows. It is always
+  there: **with nothing selected it shows the system overview** — what the
+  system does (the project description), the counts, who uses it and which
+  outside systems it talks to, each with a line of description (a name opens
+  its card). A selection (actor, outside system, module, function, step,
+  endpoint, table, status) shows its card: first what the element does, then the
+  details and the steps. Where the
   code has no description, a module or function card shows a **summary of the
   structure** instead, marked as such (entry points, called from, calls, tables
-  written and read, outside systems) — facts only, no guessed meaning. ✕, `]` or
-  Cmd/Ctrl+. hide it until the next selection; drag its left edge to resize. An
+  written and read, outside systems) — facts only, no guessed meaning. An
   **actor** card says what it is (protocol, service, where it is defined
   `file:line`, the implementing type), lists its through paths and scenarios and
   then its endpoints grouped by service, each with its description; a click on
@@ -88,24 +105,27 @@ controls come back only when they prove necessary.
   into the step before them. A through path does not replay a step an earlier
   flow of it already played. The rules are in `internal/autosem/trim.go`.
 - **Scenarios** go only by hand: there is no auto play and nothing starts by
-  itself. Pick a path or scenario in the list, or in an actor, module or
-  function card: it opens on its **overview** (step 0). The panel says what it
+  itself. Pick a path or scenario in the sidebar, or in an actor, module or
+  function card: its window opens on the **overview** (step 0). The inspector says what it
   does (the description of `arch:flow` / the doc of the entry point / the rpc
   comment), who starts it, the entry (endpoint or task), how it ends, the
   number of steps and forks, and its participants — modules and outside systems
   with a line of description each, then the tables; a path lists its scenarios
   in order, each with its line (a click goes to its first step). The map shows
-  the whole path evenly, no step lit, and the bar reads `<name>  Overview · N
-  steps  → Start`. → (or Start) goes to step 1, then the bar is `<name>  ← Step
-  k/N →  <the step>  ✕`; ← from step 1 returns to the overview. The whole path is drawn on the level you are on. The current leg is
+  the whole path evenly, no step lit, and the toolbar reads `<name>  Overview ·
+  ← N steps  Start →  ✕`. → (or Start) goes to step 1, then it is `<name>
+  Overview · ← Step k/N →  ✕` and the inspector shows the step; ← from step 1
+  (or Overview, Home) returns to the overview. The whole path is drawn on the level you are on. The current leg is
   bright with a bigger number and glows once, passed legs are a calm accent, the
   coming ones pale and dashed with their numbers, the rest of the map is dimmed;
   on the modules the module of the step lights up, inside a module the function.
-  → and ← (or the arrows of the bar) step, a click on a leg or its number goes
+  → and ← (or the arrows of the toolbar) step, a click on a leg or its number goes
   to that step (the tooltip says `Step k: …`), a click on the node of the next
-  step steps forward. Home goes back to the overview, Esc closes it. The camera
+  step steps forward. Home goes back to the overview, Esc goes a level up, then
+  to the overview. The camera
   moves smoothly and only when the step is off screen. At a fork the branches
-  that go on in another flow are pale legs (and buttons in the bar): a click
+  that go on in another flow are pale legs (and buttons in a strip on top of the
+  inspector, with the plate between flows and the outcome): a click
   takes one. Outcomes that end the story (an `arch:on` without a flow: an error,
   "still waiting") are folded into one pale **+N branches** mark on the node; a
   click unfolds them.
@@ -373,12 +393,13 @@ through all the steps. The name is built from the condition (`paid → to the ca
 has at most 12 variants (outcomes with the same end are folded together first). A flow without
 `arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
 
-**In the viewer** the through paths head the scenario list at the left, the other scenarios
-follow grouped by actor; they are also in the actor, module and function cards (paths there are marked "through path").
+**In the viewer** the through paths head the Scenarios section of the sidebar tree, the other scenarios
+follow grouped by actor; they are also in the actor, module and function cards (paths there are marked
+"through path"). Each opens in the scenario window.
 
-- Stepping through a path goes over its flows one after another; between two flows a plate in the
-  scenario bar says how the next one starts ("→ through the queue", "→ on condition …", "next the
-  client calls …"), and the bar shows the overall progress ("flow 2/5 · step 3/7").
+- Stepping through a path goes over its flows one after another; between two flows a plate on top of
+  the inspector says how the next one starts ("→ through the queue", "→ on condition …", "next the
+  client calls …"), and the toolbar shows the overall progress ("flow 2/5 · step 3/7").
 - A variant (`variant:<id>` runs, kept in the code) takes its forks by itself. At the end a plate
   shows the outcome, or offers "Go to the scenario" when the variant ends in another flow.
 
@@ -501,7 +522,7 @@ systems appear as options too.
   `Esc` exits.
 - Add a planned step or a branch to the walk when the code has no such call yet.
 - **Save as scenario** (needs `serve`) writes the walk to `arch/*.arch` as a
-  flow; it shows up in the scenario list at once. Walking itself also works in a
+  flow; it shows up in the sidebar at once. Walking itself also works in a
   static `map` file.
 
 ## serve: live map while you code
@@ -533,7 +554,7 @@ viewer as `map`, but it follows the repo:
   changed function is re-read.
 - Every view follows the update (the endpoint list, the ER diagram and the state
   machines are rebuilt from the new facts).
-- The scenario list, ⋯ and the cards work as in a static file (see [Interface](#interface)).
+- The sidebar, ⋯, the cards and the scenario window work as in a static file (see [Interface](#interface)).
 - Only loopback addresses are accepted for `--addr`; requests with a foreign
   `Host` header are rejected, and so are all methods but GET/HEAD, except
   `POST /spec/ops` and `PUT /spec/file` (JSON only, same origin, files only

@@ -239,7 +239,7 @@
       after(p) {
         const fb = p.querySelector('[data-api-fn]'); if (fb) fb.onclick = () => AM.map.jumpToFn(e.fid, 2);
         const pb = p.querySelector('[data-api-play]');
-        if (pb) pb.onclick = () => { AM.setView('map'); AM.play.playFrom(e.fid); };
+        if (pb) pb.onclick = () => AM.play.playFrom(e.fid); // a scenario window of its own
         const cl = f ? closure(e.fid) : null;
         p.querySelectorAll('[data-api-tbl]').forEach((li) => {
           const go = () => {

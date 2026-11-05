@@ -135,7 +135,7 @@ function computeFocus() {
   const q = D.externals.find((x) => x.kind === 'queue'), dbs = D.externals.filter((x) => x.kind === 'db');
   const link = (o, k, m) => { if (m && mods.has(m)) (o[k] = o[k] || new Set()).add(m); };
   for (let i = 0; i < L_.length; i++) {
-    const s = stepAt(i); if (!s) continue;
+    const s = stepAt(i); if (!s || s.planned) continue; // a planned step (arch plan, no code) is not drawn
     const m = s.mod && D.allMods.includes(s.mod) ? s.mod : null;
     if (m && !mods.has(m)) { mods.add(m); modList.push(m); }
     if (D.fns[s.fid]) fids.add(s.fid);
@@ -422,10 +422,17 @@ function buildMap() {
   const uy = (ids) => { const ys = ids.map((id) => pos[id] && pos[id].y + CH / 2).filter((v) => v != null).sort((a, b) => a - b); return ys.length ? ys[ys.length >> 1] : null; };
   // actors (top row), placed over their entry modules
   const acts = shownActors().map((a) => ({ a, tg: uniq(Array.from(FOCUS ? FOCUS.actTo[a.id] || [] : a.mods).map((m) => unitOf[m]).filter(Boolean)) }));
-  acts.forEach((o) => { o.x = ux(o.tg); if (o.x == null) o.x = LBL + lay.width / 2; });
-  acts.sort((p, q) => p.x - q.x);
-  let lastX = -1e9;
-  acts.forEach((o) => { o.x = Math.max(o.x - 100, lastX + 214); lastX = o.x; pos[o.a.id] = { x: o.x, y: 30, w: 200, h: 50, actor: true, a: o.a }; });
+  if (FOCUS) { // a scenario: the actors in a column at the left, level with the modules they start
+    acts.forEach((o) => { o.y = uy(o.tg); if (o.y == null) o.y = 160; });
+    acts.sort((p, q) => p.y - q.y);
+    let ly = -1e9;
+    acts.forEach((o) => { const yy = Math.max(o.y - 25, ly + 64); ly = yy; pos[o.a.id] = { x: -240, y: yy, w: 200, h: 50, actor: true, a: o.a, left: true }; });
+  } else {
+    acts.forEach((o) => { o.x = ux(o.tg); if (o.x == null) o.x = LBL + lay.width / 2; });
+    acts.sort((p, q) => p.x - q.x);
+    let lastX = -1e9;
+    acts.forEach((o) => { o.x = Math.max(o.x - 100, lastX + 214); lastX = o.x; pos[o.a.id] = { x: o.x, y: 30, w: 200, h: 50, actor: true, a: o.a }; });
+  }
   // externals (right column), placed level with their adapter modules
   const EX = W + 90;
   const exts = shownExts().map((x) => ({ x, tg: uniq((FOCUS ? Array.from(FOCUS.extFrom[x.id] || []).concat((x.modules || []).filter((m) => FOCUS.mods.has(m))) : x.modules || []).map((m) => unitOf[m]).filter(Boolean)) }));
@@ -436,8 +443,11 @@ function buildMap() {
   if (exts.length) S_('text', { x: EX, y: pos[exts[0].x.id].y - 16, class: 'grp' }, gb, t('ext'));
   const lastBand = bands[present[present.length - 1]] || { y: 120, h: 100 };
   const maxY = Math.max(lastBand.y + lastBand.h, ...exts.map((o) => pos[o.x.id].y + 56));
-  const right = Math.max(exts.length ? EX + 190 : W, ...acts.map((o) => o.x + 200));
-  map.extent = { x: -20, y: acts.length ? 10 : 90, w: right + 40, h: maxY + 20 - (acts.length ? 10 : 90) };
+  const right = Math.max(exts.length ? EX + 190 : W, ...acts.map((o) => pos[o.a.id].x + 200));
+  if (FOCUS) {
+    const x0 = acts.length ? -260 : -20, y1 = Math.max(maxY, ...acts.map((o) => pos[o.a.id].y + 50));
+    map.extent = { x: x0, y: 90, w: right + 40 - x0, h: y1 + 20 - 90 };
+  } else map.extent = { x: -20, y: acts.length ? 10 : 90, w: right + 40, h: maxY + 20 - (acts.length ? 10 : 90) };
   // cards
   units.forEach((u) => (u.kind === 'g' ? groupCard : mapCard)(gn, u, pos[u.id]));
   acts.forEach((o) => extCard(gn, o.a.id, pos[o.a.id]));
@@ -461,7 +471,7 @@ function drawPortEdges(E, pos, ge) {
   const side = (e) => {
     const A = pos[e.a], B = pos[e.b];
     if (B.ext) return ['r', 'l'];
-    if (A.actor) return ['b', 't'];
+    if (A.actor) return A.left ? ['r', 'l'] : ['b', 't'];
     if (Math.abs(A.y - B.y) < 2) return ['b', 'b'];
     return B.y > A.y ? ['b', 't'] : ['t', 'b'];
   };
@@ -823,20 +833,12 @@ function focusNode(f) {
 }
 function fitMap(focus) {
   const id = focusNode(focus);
-  if (FOCUS) { // the whole scenario at once, not blown up when it is small, clear of the step card on the right
-    const keep = map.cam.insetRight; map.cam.insetRight = Math.max(keep, (PNL.w || 380) + 20);
-    map.cam.fit({ ...map.extent }, 40, 1150); map.cam.insetRight = keep;
-  }
+  if (FOCUS) map.cam.fit({ ...map.extent }, 40, 1150); // the whole scenario at once, not blown up when it is small
   else if (id && map.pos[id]) { const r = map.pos[id]; map.cam.fit({ x: r.x - 380, y: r.y - 240, w: r.w + 760, h: r.h + 480 }, 20); }
   else map.cam.fitTop({ ...map.extent }, 40);
 }
 function fitFns() { fv.cam.fit(fv.extent, 10); }
-// the system is framed below the "about the system" card in the top-left corner when it is shown (panel.js)
-function fitSys() {
-  const ab = $('#about'), st = $('#stage');
-  sys.cam.insetTop = ab && !ab.hidden && st ? Math.max(INSET, ab.getBoundingClientRect().bottom - st.getBoundingClientRect().top + 8) : INSET;
-  sys.cam.fit(sys.extent, 30);
-}
+function fitSys() { sys.cam.fit(sys.extent, 30); }
 function defaultFrames(fn) {
   const fr = [fn]; let cur = fn;
   for (let i = 0; i < 3; i++) { const c = (D.callers[cur] || [])[0]; if (!c || fr.includes(c)) break; fr.unshift(c); cur = c; }

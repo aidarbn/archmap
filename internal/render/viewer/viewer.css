@@ -1,31 +1,35 @@
-/* archmap viewer — design tokens and core styles (map, panel, player).
+/* archmap viewer — design tokens and core styles (the desktop shell, map, inspector, run bar).
+   A Figma-like layout: a thin toolbar, the docked scenario sidebar at the left, the canvas, the docked
+   inspector at the right. Desktop only (≥ 1200 px wide); there is no mobile layout.
    View-specific blocks below (sequence, lists, ER, matrix, status) are the approved
    mockup styles kept here for the views; a view may add its own views/<id>.css. */
 :root {
   color-scheme: light;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", Consolas, monospace;
-  --bg: #f4f4f1; --surface: #fcfcfb; --surface-2: #f0efec; --surface-3: #e8e7e2;
-  --line: #e2e1db; --line-2: #cfcec7; --edge: #b9b8b0;
-  --text: #0b0b0b; --text-2: #52514e; --muted: #7d7c76;
+  --bg: #f5f5f5; --surface: #ffffff; --surface-2: #f5f5f5; --surface-3: #ebebeb;
+  --line: #e5e5e5; --line-2: #d6d6d6; --edge: #b3b3b3;
+  --text: #1e1e1e; --text-2: #5c5c5c; --muted: #8c8c8c;
+  --hover: rgb(0 0 0 / .045);
   --in: #2a78d6; --ui: #b0489c; --dom: #1baf7a; --ad: #eb6834; --infra: #8a8983; --oth: #a9a8a0; --tst: #8d6fd1; --ext: #6b6a64;
-  --accent: #6250d6; --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --accent: #5b5bd6; --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --good-text: #006300; --crit-text: #b12d2d;
   --add: #1f8f3a; --mod: #b7791f; --del: #d03b3b; --loc: #8250df;
   --shadow-1: 0 1px 2px rgb(20 20 18 / .06), 0 1px 1px rgb(20 20 18 / .04);
   --shadow-2: 0 6px 24px rgb(20 20 18 / .08), 0 2px 6px rgb(20 20 18 / .05);
   --code-kw: #8a3fbf; --code-str: #1d7a4e; --code-com: #8a8983; --code-num: #b5541f; --code-fn: #1c5cab; --code-ty: #0d6e80;
-  --r: 10px; --r-sm: 6px;
+  --r: 6px; --r-sm: 4px;
   --t: 280ms; --ease: cubic-bezier(.2,.7,.2,1);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #121211; --surface: #1a1a19; --surface-2: #222220; --surface-3: #2b2b28;
-  --line: #31302d; --line-2: #403f3b; --edge: #5b5a54;
-  --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e86;
+  --bg: #1e1e1e; --surface: #2c2c2c; --surface-2: #363636; --surface-3: #414141;
+  --line: #3e3e3e; --line-2: #4d4d4d; --edge: #6b6b6b;
+  --text: #f0f0f0; --text-2: #c4c4c4; --muted: #8f8f8f;
+  --hover: rgb(255 255 255 / .06);
   --in: #3987e5; --ui: #c96bb6; --dom: #199e70; --ad: #d95926; --infra: #8f8e86; --oth: #77766f; --tst: #a48be0; --ext: #a3a29a;
-  --accent: #9085e9;
+  --accent: #8b8bf0;
   --good-text: #4cc94c; --crit-text: #f08a8a;
   --add: #3fb950; --mod: #d29922; --del: #f85149; --loc: #a371f7;
   --shadow-1: 0 1px 2px rgb(0 0 0 / .4);
@@ -35,25 +39,33 @@
 @media (prefers-reduced-motion: reduce) { :root { --t: 0ms; } }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-body { font: 13px/1.45 var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; overflow: hidden; }
+body { font: 12px/1.4 var(--font); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; overflow: hidden; min-width: 1200px; }
 button, select, input { font: inherit; color: inherit; }
-.app { display: grid; grid-template-rows: 48px 1fr auto; height: 100vh; }
+.app { display: grid; grid-template-rows: 40px 1fr; height: 100vh; }
 .mono { font-family: var(--mono); }
 
-/* header: the brand (back to the system) and ⋯, nothing else */
-header { position: relative; display: flex; align-items: center; gap: 14px; padding: 0 14px 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: none; border: 0; background: none; padding: 4px 6px; border-radius: 8px; cursor: pointer; color: var(--text); }
-.brand:hover { background: var(--surface-2); }
-.brand b { font-size: 14px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
-.brand .logo { width: 20px; height: 20px; flex: none; }
+/* the toolbar (40 px): the logo (back to the system), the live dot and the sidebar toggle at the left; the open
+ * scenario with its step navigation in the centre (the project name when nothing is open and the sidebar is
+ * hidden); ⋯ at the right */
+header { position: relative; display: grid; grid-template-columns: 1fr minmax(0, auto) 1fr; align-items: center; gap: 12px; padding: 0 8px; background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
+header .hl { display: flex; align-items: center; gap: 2px; min-width: 0; }
+header .hc { display: flex; justify-content: center; align-items: center; min-width: 0; max-width: 62vw; }
+header .hr { display: flex; justify-content: flex-end; align-items: center; gap: 2px; }
+.brand, .tb { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; border: 0; background: none; padding: 0; border-radius: var(--r-sm); cursor: pointer; color: var(--text-2); }
+.brand:hover, .tb:hover { background: var(--hover); color: var(--text); }
+.tb[aria-expanded="true"] { color: var(--text); }
+.tb svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+.brand .logo { width: 18px; height: 18px; flex: none; }
+.hname { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hname[hidden] { display: none; }
 .spacer { flex: 1; }
-.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 7px; overflow: hidden; flex: none; }
-.seg button { border: 0; background: var(--surface); padding: 4px 9px; cursor: pointer; color: var(--text-2); font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r-sm); overflow: hidden; flex: none; }
+.seg button { border: 0; background: var(--surface); padding: 3px 8px; cursor: pointer; color: var(--text-2); font-size: 11.5px; }
 .seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
-.iconbtn { border: 1px solid var(--line-2); background: var(--surface); border-radius: 7px; height: 28px; min-width: 28px; padding: 0 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-2); flex: none; }
+.iconbtn { border: 1px solid var(--line-2); background: var(--surface); border-radius: var(--r-sm); height: 26px; min-width: 26px; padding: 0 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-2); flex: none; }
 .iconbtn:hover { color: var(--text); border-color: var(--edge); }
-.iconbtn:focus-visible, .pbtn:focus-visible, .brand:focus-visible, .crumbs button:focus-visible, .chgbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.chgbtn { border: 1px solid var(--line-2); background: var(--surface); border-radius: 7px; height: 28px; padding: 0 9px; cursor: pointer; color: var(--text-2); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.iconbtn:focus-visible, .pbtn:focus-visible, .brand:focus-visible, .tb:focus-visible, .crumbs button:focus-visible, .chgbtn:focus-visible, .zoomctl button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.chgbtn { border: 1px solid var(--line-2); background: var(--surface); border-radius: var(--r-sm); height: 26px; padding: 0 8px; cursor: pointer; color: var(--text-2); font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px; }
 .chgbtn[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
 /* live (archmap serve): a dot next to the name, the state in its tooltip */
 .live { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: none; }
@@ -62,10 +74,13 @@ header { position: relative; display: flex; align-items: center; gap: 14px; padd
 .live.error { background: var(--critical); }
 @keyframes blink { from { opacity: 1; } to { opacity: .25; } }
 
-/* main */
-main { position: relative; min-height: 0; }
-.stage { position: absolute; inset: 0; overflow: hidden; background: var(--bg);
-  background-image: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--text) 7%, transparent) 1px, transparent 0); background-size: 22px 22px; }
+/* main: three docked columns — the sidebar (side.js), the canvas (.stage), the inspector (aside, panel.js);
+ * nothing floats over the canvas but the crumbs and the zoom block in its corners */
+main { position: relative; min-height: 0; display: flex; --sw: 240px; }
+main.noside { --sw: 0px; }
+.stage { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; background: var(--bg);
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--text) 13%, transparent) 1px, transparent 0); background-size: 20px 20px; }
+main.presize { user-select: none; cursor: col-resize; }
 /* an inactive view is gone for the eyes, the pointer, Tab and screen readers: visibility (delayed
  * until the fade-out ends) hides every descendant, even ones with their own pointer-events */
 .view { position: absolute; inset: 0; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--t) var(--ease), visibility 0s linear var(--t); }
@@ -89,27 +104,20 @@ main { position: relative; min-height: 0; }
 svg text { font-family: var(--font); }
 .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); padding: 40px; text-align: center; }
 
-/* crumbs: where I am, small, over the top-left corner of the stage */
-.crumbs { position: absolute; left: 10px; top: 8px; z-index: 6; display: flex; align-items: center; gap: 1px; max-width: calc(100% - 20px); overflow: hidden; padding: 1px 3px; border-radius: 8px; background: color-mix(in oklab, var(--bg) 82%, transparent); }
+/* crumbs: where I am, small, in the top-left corner of the canvas */
+.crumbs { position: absolute; left: 8px; top: 6px; z-index: 6; display: flex; align-items: center; gap: 1px; max-width: calc(100% - 16px); overflow: hidden; padding: 1px 2px; border-radius: var(--r-sm); background: color-mix(in oklab, var(--bg) 85%, transparent); }
 .crumbs:empty { display: none; }
-/* about the system: a compact card under the crumbs while the system level has nothing selected (panel.js) */
-.about { position: absolute; left: 10px; top: 36px; z-index: 6; width: min(460px, calc(100% - 20px)); padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in oklab, var(--surface) 94%, transparent); box-shadow: var(--shadow-1); font-size: 12px; color: var(--text-2); }
-.about[hidden] { display: none; }
-.about p { margin: 0; }
-.about .ab-d { font-size: 13.5px; line-height: 1.4; color: var(--text); margin-bottom: 4px; }
-.about .ab-m { color: var(--muted); font-size: 11.5px; margin-bottom: 4px; }
-.about .ab-l { line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.about .ab-l b { font-weight: 600; color: var(--text-2); }
-.about button { border: 0; background: none; padding: 0; font: inherit; color: var(--text); cursor: pointer; }
-.about button:hover { color: var(--accent); text-decoration: underline; }
-.crumbs button { border: 0; background: none; padding: 2px 5px; border-radius: 5px; cursor: pointer; color: var(--muted); white-space: nowrap; font-size: 11.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
-.crumbs button:hover { background: var(--surface-2); color: var(--text); }
-.crumbs button.cur { color: var(--text); font-weight: 600; cursor: default; }
+.crumbs button { border: 0; background: none; padding: 2px 5px; border-radius: var(--r-sm); cursor: pointer; color: var(--muted); white-space: nowrap; font-size: 11px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.crumbs button:hover { background: var(--hover); color: var(--text); }
+.crumbs button.cur { color: var(--text); font-weight: 500; cursor: default; }
 .crumbs button.cur:hover { background: none; }
-.crumbs .sep { color: var(--muted); font-size: 12px; flex: none; }
-.zoomctl { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; flex-direction: column; gap: 3px; opacity: .7; transition: opacity var(--t); }
-.zoomctl:hover { opacity: 1; }
-.zoomctl .iconbtn { height: 26px; min-width: 26px; padding: 0; background: color-mix(in oklab, var(--surface) 92%, transparent); }
+.crumbs .sep { color: var(--muted); font-size: 11px; flex: none; }
+/* zoom: a small block in the bottom-right corner of the canvas: − fit + */
+.zoomctl { position: absolute; right: 8px; bottom: 8px; z-index: 5; display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.zoomctl button { width: 28px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; color: var(--text-2); font-size: 14px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.zoomctl button + button { border-left: 1px solid var(--line); }
+.zoomctl button:hover { background: var(--hover); color: var(--text); }
+.zoomctl svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.3; }
 
 /* svg nodes */
 .n { cursor: pointer; transition: opacity var(--t); }
@@ -153,49 +161,48 @@ svg.lod-lo .n.x .t1 { font-size: 17px; } svg.lod-lo .n.x .t3 { display: none; }
 @keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
 
-/* right panel */
-/* the details panel floats over the right of the stage; it is there only while something is selected
- * (main.nopanel otherwise), closes with ✕ and resizes by its left edge */
-aside { position: absolute; top: 10px; right: 10px; bottom: 10px; z-index: 20; width: min(var(--pw, 380px), calc(100% - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-2); display: flex; flex-direction: column; min-height: 0; }
-.pane { padding: 16px 40px 24px 18px; overflow: auto; flex: 1; min-height: 0; }
+/* the inspector: a docked column at the right (280 px, resized by its left edge), always there — with nothing
+ * selected it shows the system overview; `]` / Cmd+. hide it (main.nopanel). Sections with small titles split
+ * by full-width lines, dense "label — value" rows, like the Design panel of Figma */
+aside { position: relative; flex: none; width: var(--pw, 280px); background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; z-index: 7; }
+.pane { padding: 0 12px 20px; overflow: auto; flex: 1; min-height: 0; scrollbar-width: thin; }
 main.nopanel > aside { display: none; }
-aside .phide { position: absolute; top: 10px; right: 10px; z-index: 2; height: 24px; min-width: 24px; padding: 0 4px; font-size: 12px; border-color: transparent; background: none; }
-aside .phide:hover { border-color: var(--line-2); }
-aside .pgrip { position: absolute; left: -4px; top: 12px; bottom: 12px; width: 8px; cursor: col-resize; z-index: 3; border-radius: 4px; }
-aside .pgrip:hover, aside .pgrip:focus-visible, aside .pgrip.drag { background: color-mix(in oklab, var(--accent) 35%, transparent); outline: none; }
-main.presize { user-select: none; cursor: col-resize; }
-.pane h2 { margin: 2px 0 2px; font-size: 18px; letter-spacing: -.01em; line-height: 1.25; word-break: break-word; }
-.pane h2.mono { font-family: var(--mono); font-size: 16px; margin-top: 8px; }
-.pane .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pane .lead { color: var(--text-2); margin: 6px 0 14px; white-space: pre-wrap; }
-.pane h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pgrip, .sgrip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: col-resize; z-index: 9; outline: none;
+  background: linear-gradient(var(--accent), var(--accent)) center / 0 100% no-repeat; transition: background-size 120ms; }
+.pgrip { left: -4px; } .sgrip { right: -4px; }
+.pgrip:hover, .pgrip:focus-visible, .pgrip.drag, .sgrip:hover, .sgrip:focus-visible, .sgrip.drag { background-size: 2px 100%; }
+.pane h2 { margin: 2px 0 2px; font-size: 13px; font-weight: 600; line-height: 1.3; word-break: break-word; }
+.pane h2.mono { font-family: var(--mono); font-size: 12.5px; margin-top: 4px; }
+.pane .kicker { margin-top: 12px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pane .lead { color: var(--text-2); margin: 6px 0 10px; white-space: pre-wrap; }
+.pane h3 { font-size: 11px; color: var(--text); margin: 12px -12px 6px; padding: 10px 12px 0; border-top: 1px solid var(--line); font-weight: 600; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 6px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .chip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
 .chip.a { color: var(--add); border-color: var(--add); } .chip.m { color: var(--mod); border-color: var(--mod); } .chip.d { color: var(--del); border-color: var(--del); } .chip.l { color: var(--loc); border-color: var(--loc); }
-.sig { font-family: var(--mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
-.loc { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); margin-top: 8px; word-break: break-all; }
-.rel-list { list-style: none; margin: 0; padding: 0; }
-.rel-list li { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
-.rel-list li:hover { background: var(--surface-2); }
-.rel-list .fn { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sig { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.loc { font-family: var(--mono); font-size: 11px; color: var(--text-2); margin-top: 6px; word-break: break-all; }
+.rel-list { list-style: none; margin: 0 -6px; padding: 0; }
+.rel-list li { display: flex; gap: 6px; align-items: baseline; padding: 4px 6px; border-radius: var(--r-sm); cursor: pointer; font-size: 11.5px; }
+.rel-list li:hover { background: var(--hover); }
+.rel-list .fn { font-family: var(--mono); font-size: 11.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rel-list .md { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 /* a row with a description: the name on top, the description under it in grey */
 .rel-list li.dsc { flex-wrap: wrap; row-gap: 1px; }
 .rel-list li.dsc .fn { flex: 0 1 auto; min-width: 0; max-width: 72%; }
-.rel-list li.dsc .ds { flex-basis: 100%; font-size: 11.5px; color: var(--text-2); line-height: 1.35; padding-left: 2px; }
+.rel-list li.dsc .ds { flex-basis: 100%; font-size: 11px; color: var(--text-2); line-height: 1.35; padding-left: 2px; }
 .rel-list li .run { color: var(--accent); font-size: 10px; }
 .pane h3 .hs { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-2); font-size: 11.5px; margin-top: 2px; }
 .pane .nodesc { font-size: 11.5px; color: var(--muted); margin: -8px 0 12px; }
 .pane .nodesc code { font-family: var(--mono); font-size: 11px; }
 /* "what it does" comes first and reads larger; without a description — the facts summary, marked as such */
-.pane .lead.what { font-size: 14px; line-height: 1.5; color: var(--text); margin: 8px 0 14px; }
-.pane .summ { margin: 8px 0 14px; padding: 8px 10px; border: 1px dashed var(--line-2); border-radius: 8px; background: var(--surface-2); }
-.pane .summ-k { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-.pane .summ .kv { font-size: 12px; }
+.pane .lead.what { font-size: 12px; line-height: 1.5; color: var(--text); margin: 6px 0 10px; }
+.pane .summ { margin: 6px 0 10px; padding: 6px 8px; border: 1px dashed var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); }
+.pane .summ-k { font-size: 10.5px; color: var(--muted); margin-bottom: 4px; }
+.pane .summ .kv { font-size: 11px; grid-template-columns: auto 1fr; }
 .rel-list .lsq { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
 .rel-list .q { font-size: 10px; color: var(--accent); border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line)); border-radius: 4px; padding: 0 4px; }
 .st-a { color: var(--add); font-weight: 700; } .st-m { color: var(--mod); font-weight: 700; } .st-d { color: var(--del); font-weight: 700; }
-.code { font-family: var(--mono); font-size: calc(12px * var(--cz, 1)); line-height: 1.6; position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 360px; }
+.code { font-family: var(--mono); font-size: calc(11.5px * var(--cz, 1)); line-height: 1.6; position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: auto; max-height: 360px; }
 .code .ln { display: flex; padding: 0 10px 0 0; white-space: pre; min-width: max-content; }
 .code .ln .no { width: 44px; flex: none; text-align: right; padding-right: 10px; color: var(--muted); user-select: none; }
 .code .ln.hl { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
@@ -206,25 +213,31 @@ main.presize { user-select: none; cursor: col-resize; }
 .stat { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 9px 2px 6px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); white-space: nowrap; }
 .stat .ic { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; }
 .stat small { font-weight: 400; color: var(--muted); }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; }
-.kv dt { color: var(--muted); } .kv dd { margin: 0; word-break: break-word; }
-.btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.tbl-pills { display: flex; gap: 8px; flex-wrap: wrap; }
-
-/* scenario bar: only while a scenario is open — name, ← step k/N →, the step, ✕ */
-.player { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--surface); border-top: 1px solid var(--line); min-width: 0; }
-.player[hidden] { display: none; }
-.pname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32%; flex: 0 1 auto; }
-.pstep { font: 600 12px var(--mono); color: var(--accent); white-space: nowrap; min-width: 64px; text-align: center; }
-.ptext { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
-.pbtn { height: 30px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; white-space: nowrap; }
-.pbtn:hover { border-color: var(--edge); }
-.pbtn.primary { background: var(--text); color: var(--surface); border-color: var(--text); }
+.kv { display: grid; grid-template-columns: 96px 1fr; gap: 5px 8px; font-size: 11.5px; line-height: 1.45; }
+.kv dt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .kv dd { margin: 0; word-break: break-word; }
+.btnrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.tbl-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.pbtn { height: 24px; padding: 0 8px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.pbtn:hover { background: var(--hover); }
+.pbtn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pbtn.primary:hover { background: color-mix(in oklab, var(--accent) 88%, #000); }
 .pbtn kbd { font: 10.5px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
-.pbtn[disabled] { opacity: .4; cursor: default; }
-.player .pclose { border-color: transparent; color: var(--muted); }
-.player .pclose:hover { border-color: var(--line-2); color: var(--text); }
-.choice { display: none; gap: 6px; align-items: center; flex: none; }
+.pbtn[disabled] { opacity: .35; cursor: default; }
+
+/* the run bar in the centre of the toolbar, only while a scenario is open: name · Overview · ← Step k/N → ✕ */
+.runbar { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.runbar[hidden] { display: none; }
+.runbar .pname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; min-width: 0; flex: 0 1 auto; margin-right: 8px; }
+.runbar .pbtn { height: 26px; border-color: transparent; background: none; padding: 0 8px; }
+.runbar .pbtn:hover:not([disabled]) { background: var(--hover); }
+.runbar .pbtn.ic { width: 26px; padding: 0; justify-content: center; font-size: 13px; }
+.runbar .pbtn.pov[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.runbar .pbtn.primary { background: var(--accent); color: #fff; width: auto; padding: 0 8px; font-size: 11.5px; }
+.runbar .psep { color: var(--muted); padding: 0 2px; }
+.runbar .pstep { font-size: 11.5px; color: var(--text-2); white-space: nowrap; min-width: 72px; text-align: center; font-variant-numeric: tabular-nums; }
+.runbar .pclose { color: var(--muted); margin-left: 6px; }
+/* forks, the plate between flows, the outcome: a strip on top of the inspector */
+.choice { display: none; gap: 4px; align-items: center; flex-wrap: wrap; flex: none; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 11.5px; }
 .choice.on { display: flex; }
 
 /* code scene (debugger) */
@@ -336,54 +349,48 @@ main.presize { user-select: none; cursor: col-resize; }
 .st .tr .fnl { font-family: var(--mono); font-size: 11px; fill: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--accent) 35%, transparent); }
 .st .tr.hot path { stroke: var(--accent); stroke-width: 2.5; }
 @media (max-width: 1500px) { .split { grid-template-columns: 320px 1fr; } }
-@media (max-width: 1200px) { .brand .meta, .chg .lbl { display: none; } }
 
-/* the scenario list (side.js): a narrow column at the left of the stage; the stage starts right of it, so the crumbs
- * and the map move with it. main.noside hides it (the chevron or `[`) */
-main { --sw: 264px; }
-main.noside { --sw: 0px; }
-main > .stage { left: var(--sw); }
-.side { position: absolute; left: 0; top: 0; bottom: 0; width: var(--sw); z-index: 8; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); min-height: 0; overflow: hidden; }
-main.noside > .side { visibility: hidden; border: 0; }
-.side .sq { padding: 10px 10px 4px; flex: none; }
-.side .sq[hidden] { display: none; }
-.side .sq input { width: 100%; height: 28px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-2); padding: 0 9px; font-size: 12.5px; outline: none; }
+/* the sidebar (side.js): a docked column at the left — the project name and branch, the filter, the scenario tree
+ * (names only, one line each). Width --sw on main (200–420 px, the right edge drags it); main.noside hides it */
+.side { position: relative; flex: none; width: var(--sw); z-index: 8; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); min-height: 0; }
+main.noside > .side { display: none; }
+.side .shd { flex: none; padding: 10px 12px 6px; min-width: 0; }
+.side .shd b { display: block; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side .shd small { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side .shd small:empty { display: none; }
+.side .sq { position: relative; flex: none; margin: 2px 8px 6px; }
+.side .sq svg { position: absolute; left: 7px; top: 6px; width: 13px; height: 13px; fill: none; stroke: var(--muted); stroke-width: 1.3; pointer-events: none; }
+.side .sq input { width: 100%; height: 26px; border: 1px solid transparent; border-radius: var(--r-sm); background: var(--surface-2); padding: 0 8px 0 26px; font-size: 11.5px; outline: none; }
+.side .sq input::-webkit-search-cancel-button { display: none; }
+.side .sq input:hover { border-color: var(--line); }
 .side .sq input:focus { border-color: var(--accent); background: var(--surface); }
-.slist { flex: 1; min-height: 0; overflow: auto; padding: 4px 6px 16px; scrollbar-width: thin; }
-.slist .sh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 8px 8px 4px; }
-.slist .sn { padding: 12px 8px; color: var(--muted); font-size: 12px; }
-.slist button { display: flex; width: 100%; border: 0; background: none; text-align: left; cursor: pointer; color: var(--text); border-radius: 7px; }
-.slist button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.slist .si { flex-direction: column; gap: 1px; padding: 6px 8px; }
-.slist .si:hover { background: var(--surface-2); }
-.slist .si.cur { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-.slist .si .nm { font-size: 12.5px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.slist .si.j .nm { font-weight: 600; }
-.slist .si .ds { font-size: 11.5px; line-height: 1.3; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.slist .si.f .ds { -webkit-line-clamp: 1; }
-.slist .si .mt { font-size: 11px; color: var(--muted); }
-.slist .sg { align-items: center; gap: 6px; padding: 6px 8px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--text-2); }
-.slist .sg:hover { background: var(--surface-2); color: var(--text); }
-.slist .sg .ar { width: 10px; color: var(--muted); font-size: 10px; flex: none; }
-.slist .sg .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slist .sg .n { font-weight: 500; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.slist .sk { margin: 0 0 6px 14px; padding-left: 6px; border-left: 1px solid var(--line-2); }
-.slist .sk-i { align-items: baseline; gap: 6px; padding: 3px 6px; font-size: 11.5px; color: var(--text-2); }
-.slist .sk-i:hover { background: var(--surface-2); color: var(--text); }
-.slist .sk-i i { font-style: normal; color: var(--muted); font-size: 10.5px; width: 12px; flex: none; font-variant-numeric: tabular-nums; }
-.slist .sk-i span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slist .sk-i.cur { color: var(--text); font-weight: 600; }
-.slist .sk-i.cur i { color: var(--accent); }
-.sidetog { position: absolute; left: var(--sw); top: 50%; transform: translateY(-50%); z-index: 9; width: 14px; height: 44px; padding: 0; border: 1px solid var(--line); border-left: 0; border-radius: 0 7px 7px 0; background: var(--surface); color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; }
-.sidetog:hover { color: var(--text); background: var(--surface-2); }
-.sidetog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.slist { flex: 1; min-height: 0; overflow: auto; padding: 0 0 16px; scrollbar-width: thin; border-top: 1px solid var(--line); }
+.slist .sn { padding: 12px; color: var(--muted); }
+.slist .ti { display: flex; align-items: center; gap: 4px; width: 100%; height: 28px; border: 0; background: none; text-align: left; cursor: pointer; color: var(--text); font-size: 12px;
+  padding: 0 10px 0 calc(6px + var(--d, 0) * 14px); }
+.slist .ti:hover { background: var(--hover); }
+.slist .ti:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.slist .ti.cur { background: var(--accent-soft); }
+.slist .ti .chev { width: 16px; height: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 3px; }
+.slist .ti .chev:hover { color: var(--text); }
+.slist .ti .chev svg { width: 8px; height: 8px; fill: currentColor; transition: transform 120ms; }
+.slist .ti .chev.on svg { transform: rotate(90deg); }
+.slist .ti .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.slist .ti.cur .ico { stroke: var(--accent); }
+.slist .ti .nm { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slist .ti.g .nm { font-weight: 500; }
+.slist .ti .ct { flex: none; margin-left: 4px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.slist .ti .no { width: 16px; flex: none; text-align: right; padding-right: 2px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.slist .ti.sec .nm { font-weight: 600; }
+.slist .ti.mono .nm { font-family: var(--mono); font-size: 11px; }
+/* the scenario window (side.js SOLO): no sidebar and no sidebar toggle */
+.solo #side, .solo #sideTog { display: none; }
 /* ⋯: views, language, theme */
 .more { position: relative; flex: none; }
-.morebtn { border-color: transparent; background: none; font-size: 16px; letter-spacing: 1px; color: var(--muted); }
-.morebtn[aria-expanded="true"] { border-color: var(--line-2); color: var(--text); }
-.menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-2); z-index: 60; padding: 4px 0; color: var(--text); }
+.morebtn { font-size: 15px; letter-spacing: 1px; }
+.menu { position: absolute; top: calc(100% + 4px); right: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-2); z-index: 60; padding: 4px 0; color: var(--text); }
 .menu[hidden] { display: none; }
-.menu button { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: none; padding: 6px 14px; cursor: pointer; color: var(--text); font-size: 13px; text-align: left; }
+.menu button { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: none; padding: 5px 12px; cursor: pointer; color: var(--text); font-size: 12px; text-align: left; }
 .menu button:hover, .menu button:focus-visible { background: var(--accent-soft); outline: 0; }
 .menu button .ck { margin-left: auto; color: var(--muted); font-size: 12px; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
@@ -461,6 +468,10 @@ svg.pathmode .elabel { opacity: .2; }
 .pleg.cur .v { stroke: var(--accent); stroke-width: 4; }
 .pleg.next .v { stroke: var(--muted); stroke-width: 1.8; stroke-dasharray: 5 6; opacity: .7; }
 .pleg.async .v { stroke-dasharray: 2 6; }
+/* the next flow of a path that the code does not call: the client makes the call — dashed, signed */
+.pleg.client .v { stroke-dasharray: 7 5; }
+.pleg.client .pnum text { font-size: 10.5px; font-weight: 500; }
+.pleg.client.cur .pnum text { font-size: 12px; }
 .pleg.br .v { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 3 5; opacity: .75; }
 .pleg:hover .v { opacity: 1; stroke-width: 3.2; }
 .pleg.cur:hover .v { stroke-width: 4.6; }

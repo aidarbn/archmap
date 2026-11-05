@@ -32,13 +32,19 @@ bus.on('step', (s) => forViews('onStep', s));
 bus.on('select', (s) => forViews('onSelect', s));
 
 /* ---------- header ---------- */
-// the brand: the project name; its tooltip carries the repo, the branch and the branch changes
+// the project name on top of the sidebar (as the file name in Figma) with the branch under it, and in the centre of
+// the toolbar while the sidebar is hidden; the tooltips carry the repo, the branch and the branch changes; the logo
+// goes back to the whole system
 function renderHeader() {
   const F = D.F, PJ = F.project || {};
   const name = PJ.name || D.M.title || F.repo || 'archmap';
-  $('#repoName').textContent = name;
   const chg = D.changed.length || D.deleted.length ? `+${D.nAdded} ~${D.nModified} −${D.deleted.length}` + (D.nLocal ? ` ●${D.nLocal} ${t('uncommitted')}` : '') : '';
-  $('#brand').title = [PJ.description || D.M.summary || '', [F.repo && F.repo !== name ? F.repo : '', F.branch ? t('branch') + ' ' + F.branch + (F.base ? ' vs ' + F.base : '') : '', F.head].filter(Boolean).join(' · '), chg].filter(Boolean).join('\n');
+  const tip = [name, PJ.description || D.M.summary || '', [F.repo && F.repo !== name ? F.repo : '', F.branch ? t('branch') + ' ' + F.branch + (F.base ? ' vs ' + F.base : '') : '', F.head].filter(Boolean).join(' · '), chg].filter(Boolean).join('\n');
+  $('#repoName').textContent = name; $('#repoName').title = tip;
+  $('#hName').textContent = name; $('#hName').title = tip;
+  const sub = [F.branch ? t('branch') + ' ' + F.branch : F.repo && F.repo !== name ? F.repo : '', chg].filter(Boolean).join(' · ');
+  $('#repoSub').textContent = sub; $('#repoSub').title = tip;
+  $('#brand').title = name + ' — ' + t('lv')[0]; $('#brand').setAttribute('aria-label', $('#brand').title);
   document.title = name + (LANG === 'ru' ? ' — архитектура' : ' — architecture');
   $('#zIn').title = t('zIn'); $('#zOut').title = t('zOut'); $('#zFit').title = t('zFit');
   document.documentElement.lang = LANG;
@@ -156,12 +162,13 @@ function init() {
   if (!DATA || !DATA.facts) { $('#pane').innerHTML = `<p class="lead">${esc(t('noData'))}</p>`; return; }
   indexData(DATA);
   renderHeader();
-  $('#brand').onclick = () => { if (state.run) closeRun(); if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); };
+  $('#brand').onclick = () => { if (SOLO) { if (state.run) resetRun(); return; } if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); else setSel(null); };
   $('#zIn').onclick = () => curCam() && curCam().zoomAt(.5, .5, 0.8);
   $('#zOut').onclick = () => curCam() && curCam().zoomAt(.5, .5, 1.25);
   $('#zFit').onclick = fitCur;
   $('#pStep').onclick = () => doStep(1);
   $('#pPrev').onclick = () => doStep(-1);
+  $('#pOv').onclick = () => resetRun();
   $('#pClose').onclick = () => closeRun();
   setupSide(); setupMenu(); setupZoom(); setupSidePanel();
   window.addEventListener('keydown', (e) => {
@@ -176,10 +183,11 @@ function init() {
   });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
   rebuildMap();
-  renderPlayer(); // no scenario opens by itself: the bar stays hidden until the list or a panel opens one
-  setView(VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
+  renderPlayer(); // no scenario opens by itself: the run bar stays hidden until the sidebar or a card opens one
+  setView(!SOLO && VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
-  const hk = hashRun(); if (hk && state.view === 'map') openRun(hk); // the selection in the list survives a reload
+  // the scenario window: the run of the hash (a reload shows the same); the main window never plays one
+  if (SOLO) { const hk = hashRun(); if (hk) openRunAt(hk.key, hk.step); }
   if (D.live) { setupLive(); watchMarks(); }
 }
 

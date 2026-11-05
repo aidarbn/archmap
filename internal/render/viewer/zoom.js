@@ -104,11 +104,11 @@ AM.zoom = { scaleWheel, onGesture, isZoomWheel, get on() { return AZ.on; }, DIVE
 
 /* ---------- debug audit: no foreign panels after a view or level change ---------- */
 // auditPanels(label): visible position:absolute/fixed elements (and anything inside an inactive view) that do not
-// belong to the active view, the header, the footer, the side panel or an open popup. Warns and returns them.
+// belong to the active view, the toolbar, the sidebar, the inspector or an open popup. Warns and returns them.
 function auditPanels(label) {
   const act = $('#stage > .view.on');
   const seen = (el) => (el.checkVisibility ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : getComputedStyle(el).visibility !== 'hidden');
-  const open = [act, $('header'), $('footer'), $('aside'), $('#crumbs'), $('svg[aria-hidden]')].filter(Boolean);
+  const open = [act, $('header'), $('#side'), $('aside'), $('#crumbs'), $('svg[aria-hidden]')].filter(Boolean);
   const bad = [], name = (el) => (el.id ? '#' + el.id : '') + (el.getAttribute('class') ? '.' + String(el.getAttribute('class')).split(/\s+/).join('.') : '') || el.tagName;
   const add = (el, why) => { const r = el.getBoundingClientRect(); if (r.width > 1 && r.height > 1 && seen(el)) bad.push(why + ': ' + el.tagName.toLowerCase() + name(el)); };
   $$('body *').forEach((el) => {
