@@ -10,7 +10,7 @@
  * down to the selected node and scrolls to it. The filter on top narrows the whole tree (by name), folded groups too.
  * A scenario opens in this window (openScenario): the canvas turns into its diagram — the participants only, in
  * layers, in the order of the steps (map.js applyFocus) — the navigation marks it, the inspector shows the step; the
- * hash keeps it (#flow=<id> / #journey=<id> / #fn=<fid>). "‹ Map", Esc, another row of the tree or the same
+ * hash keeps it (nav.js writeHash: #flow=<id> / #journey=<id> / #fn=<fid> with the step and the map level). "‹ Map", Esc, another row of the tree or the same
  * scenario again bring the full map back.
  * The width is dragged by the right edge (200–420 px, localStorage archmap.side.w, double-click — 260); the toolbar
  * button or `[` hides the column (localStorage archmap.side). */
@@ -447,39 +447,9 @@ function pathSegs(key) {
   return r.segs.map((sg, si) => { const s0 = at; at += sg.steps.length; return { si, at: s0, name: sg.flow ? sg.flow.name : r.name }; });
 }
 
-/* ---------- the open scenario and the hash ---------- */
+/* ---------- the open scenario ---------- */
+// (the URL hash that keeps it — and every other place — is written and read in nav.js: writeHash, hashPlace)
 const flowKey = (fl) => 'flow:' + fl.i;
-const flowHashId = (fl) => fl.id || String(fl.i);
-function keyHash(key) {
-  if (!key) return '';
-  if (key.startsWith('journey:')) return '#journey=' + encodeURIComponent(key.slice(8));
-  if (key.startsWith('flow:')) { const fl = D.flows.find((x) => x.i === +key.slice(5)); return fl ? '#flow=' + encodeURIComponent(flowHashId(fl)) : ''; }
-  if (key.startsWith('fn:')) return '#fn=' + encodeURIComponent(key.slice(3));
-  return '#run=' + encodeURIComponent(key);
-}
-// the run the hash names and the step to start at: {key, step}; null when it names nothing known
-function hashRun() {
-  const h = location.hash || '', m = /^#(journey|flow|fn|run)=([^&]+)/.exec(h);
-  if (!m) return null;
-  const id = decodeURIComponent(m[2]), st = /&step=(\d+)/.exec(h), step = st ? +st[1] : -1;
-  let key = null;
-  if (m[1] === 'journey') key = jvJourney(id) ? 'journey:' + id : null;
-  else if (m[1] === 'flow') { const fl = D.flows.find((x) => x.id === id) || (/^\d+$/.test(id) ? D.flows.find((x) => x.i === +id) : null); key = fl ? flowKey(fl) : null; }
-  else if (m[1] === 'fn') key = D.fns[id] ? 'fn:' + id : null;
-  else key = buildRun(id) ? id : null;
-  return key ? { key, step } : null;
-}
-// the open scenario is kept in the hash (a reload or a shared link shows the same); closing it clears the hash.
-// Old links of the former scenario window (with the solo flag) open the scenario here too and lose the flag.
-const BASE_TITLE = document.title;
-function writeHash() {
-  // no scenario open: a page of arch/pages keeps its own hash (#page=<id>)
-  const pg = !state.run && state.view === 'page' && AM.pages && AM.pages.cur ? AM.pages.cur : null;
-  const want = state.run ? keyHash(state.run.key) : pg ? '#page=' + encodeURIComponent(pg) : '';
-  document.title = state.run ? state.run.name + ' — ' + BASE_TITLE : pg ? curPage().name + ' — ' + BASE_TITLE : BASE_TITLE;
-  if ((location.hash || '') === want) return;
-  try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
-}
 // openScenario(key, step): the scenario in this window — the canvas turns into its diagram (the participants only,
 // map.js applyFocus); the navigation and the inspector stay. The same scenario again (at the same place) closes it.
 function openScenario(key, step) {
@@ -490,21 +460,6 @@ function openScenario(key, step) {
 async function openRunAt(key, step) {
   if (!state.run || state.run.key !== key) await openRun(key);
   if (step >= 0) { for (let i = 0; i < 40 && state.busy; i++) await sleep(100); AM.play.go(step); }
-}
-// the page of arch/pages the hash names (#page=<id>), when it exists
-function hashPage() {
-  const m = /^#page=([^&]+)/.exec(location.hash || '');
-  const id = m ? decodeURIComponent(m[1]) : null;
-  return id && AM.pages && AM.pages.has(id) ? id : null;
-}
-function setupHash() {
-  bus.on('flow', writeHash);
-  window.addEventListener('hashchange', () => {
-    const r = hashRun(), pg = hashPage();
-    if (r) openRunAt(r.key, r.step);
-    else if (pg) { if (state.run) closeRun(); if (state.view !== 'page' || AM.pages.cur !== pg) AM.pages.open(pg); }
-    else if (state.run && !location.hash) closeRun();
-  });
 }
 
 /* ---------- the tree ---------- */
@@ -787,7 +742,6 @@ function setupSideGrip() {
   });
 }
 function setupSide() {
-  setupHash();
   let v = null, w = 0; try { v = localStorage.getItem('archmap.side'); w = +localStorage.getItem('archmap.side.w'); } catch (e) { /* ignore */ }
   SIDE.hidden = v === '0';
   if (w) setSideWidth(w);

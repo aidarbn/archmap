@@ -914,6 +914,7 @@ function afterLevel() {
 // the crumbs in the header: where I am — system › modules › module › function (a click goes back up);
 // on another view (API, Data, Statuses) its title, a click on the system returns to the map
 function renderCrumbs() {
+  writeHash(); // the crumbs follow every change of the place: so does the hash (nav.js, once per turn)
   const c = $('#crumbs'); if (!c) return;
   c.innerHTML = '';
   if (state.view !== 'map') {
