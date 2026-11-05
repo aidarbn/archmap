@@ -19,11 +19,18 @@ func (c *apiCtx) buildSchema() *facts.DataModel {
 	c.djangoModels(sb)
 	c.prismaModels(sb)
 	c.typeormEntities(sb)
+	c.goDocs(sb)
 	return &facts.DataModel{Tables: sb.tables}
 }
 
 type schemaBuilder struct {
 	tables map[string]*facts.Table
+	// last is the column defined last: a trailing `-- …` that lands after the
+	// comma or semicolon (in the next item / statement) belongs to it
+	last struct {
+		t   *facts.Table
+		col string
+	}
 }
 
 func (s *schemaBuilder) ensure(name, source string) *facts.Table {
@@ -80,9 +87,15 @@ func normIdent(s string) string {
 	return strings.ToLower(strings.Trim(s, "\"`[] "))
 }
 
-func cleanSQL(s string) string {
+func cleanSQL(s string) string { return cleanSQLWith(s, true) }
+
+// cleanSQLWith: lineComments = false when the line comments were already taken out with
+// the quotes respected (encodeSQLDocs), so `--` inside a string literal stays.
+func cleanSQLWith(s string, lineComments bool) string {
 	s = sqlBlockComment.ReplaceAllString(s, " ")
-	s = sqlLineComment.ReplaceAllString(s, " ")
+	if lineComments {
+		s = sqlLineComment.ReplaceAllString(s, " ")
+	}
 	s = stripDollar(s)
 	s = sqlString.ReplaceAllStringFunc(s, func(m string) string {
 		if len(m) <= 40 && !strings.ContainsAny(m, ",;()") {
@@ -152,18 +165,29 @@ func (s *schemaBuilder) sqlMigrations(c *apiCtx) {
 		if !strings.Contains(p, "migrat") && (b == "schema.sql" || strings.Contains(p, "sqlc")) {
 			source = "sqlc"
 		}
-		for _, st := range strings.Split(cleanSQL(src), ";") {
+		s.last.t = nil
+		for _, st := range strings.Split(cleanSQLWith(encodeSQLDocs(src), false), ";") {
 			s.statement(st, source)
 		}
 	}
 }
 
 func (s *schemaBuilder) statement(st, source string) {
-	st = strings.TrimSpace(st)
-	if st == "" {
+	// doc comments before the statement: a trailing one belongs to the column of the previous
+	// statement, the lines above describe this one
+	plain, lead, _ := splitDocs(st)
+	s.describeLast(lead)
+	s.last.t = nil
+	above := joinDocs(lead, false)
+	if strings.TrimSpace(plain) == "" {
 		return
 	}
-	if m := sqlCreateTable.FindStringSubmatchIndex(st); m != nil {
+	st = strings.TrimSpace(stripLeadDocs(st)) // the inner doc tokens stay: items read them
+	if m := sqlCommentStmt.FindStringSubmatch(strings.TrimSpace(plain)); m != nil {
+		s.commentOn(m)
+		return
+	}
+	if m := sqlCreateTable.FindStringSubmatchIndex(blankDocs(st)); m != nil {
 		name := normIdent(st[m[2]:m[3]])
 		open := m[1] - 1
 		end := matchParen(st, open)
@@ -172,11 +196,24 @@ func (s *schemaBuilder) statement(st, source string) {
 		}
 		t := s.ensure(name, source)
 		t.Fields, t.Refs = []facts.Field{}, nil
-		for _, item := range splitTop(st[open+1:end], ',') {
-			s.columnOrConstraint(t, strings.TrimSpace(item))
+		// a comment on the line of the name or of `(` describes the table too
+		_, _, head := splitDocs("x " + st[:open+1])
+		hd, body := joinDocs(head, true), st[open+1:end]
+		if fl := firstLine(body); strings.TrimSpace(sqlDocTok.ReplaceAllString(fl, "")) == "" {
+			_, l, _ := splitDocs(fl)
+			hd, body = strings.TrimSpace(hd+" "+joinDocs(l, true)), body[len(fl):]
 		}
+		if d := firstNonEmpty(above, hd); d != "" {
+			t.Desc = d
+		}
+		for _, item := range splitTop(body, ',') {
+			s.item(t, item)
+		}
+		s.last.t = nil // a comment after `);` is not about the last column
 		return
 	}
+	tok := st
+	st = strings.TrimSpace(plain)
 	if m := sqlRenameTable.FindStringSubmatch(st); m != nil {
 		from, to := normIdent(m[1]), normIdent(m[2])
 		if t := s.tables[from]; t != nil {
@@ -185,13 +222,18 @@ func (s *schemaBuilder) statement(st, source string) {
 		}
 		return
 	}
-	if m := sqlAlterTable.FindStringSubmatch(st); m != nil {
-		t := s.tables[normIdent(m[1])]
+	if m := sqlAlterTable.FindStringSubmatchIndex(blankDocs(tok)); m != nil {
+		t := s.tables[normIdent(tok[m[2]:m[3]])]
 		if t == nil {
 			return
 		}
-		for _, act := range splitTop(m[2], ',') {
-			s.alterAction(t, strings.TrimSpace(act))
+		acts := splitTop(tok[m[3]:], ',') // from the end of the name: keeps a comment line above the first action
+		for _, act := range acts {
+			desc := ""
+			if len(acts) == 1 {
+				desc = above
+			}
+			s.alterAction(t, act, desc)
 		}
 		return
 	}
@@ -202,12 +244,59 @@ func (s *schemaBuilder) statement(st, source string) {
 	}
 }
 
-func (s *schemaBuilder) columnOrConstraint(t *facts.Table, item string) {
-	if item == "" {
+// stripLeadDocs drops the doc tokens before the first code of s.
+func stripLeadDocs(s string) string {
+	for {
+		t := strings.TrimLeft(s, " \t\r\n")
+		loc := sqlDocTok.FindStringIndex(t)
+		if loc == nil || loc[0] != 0 {
+			return t
+		}
+		s = t[loc[1]:]
+	}
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// blankDocs replaces the doc tokens with spaces of the same length (indexes stay valid).
+func blankDocs(s string) string {
+	return sqlDocTok.ReplaceAllStringFunc(s, func(m string) string { return strings.Repeat(" ", len(m)) })
+}
+
+// item reads one item of CREATE TABLE (a column or a constraint) with its doc comments.
+func (s *schemaBuilder) item(t *facts.Table, item string) {
+	plain, lead, inner := splitDocs(item)
+	s.describeLast(lead)
+	s.last.t = nil
+	col := s.columnOrConstraint(t, strings.TrimSpace(plain))
+	if col == "" {
 		return
 	}
+	s.describe(t, col, firstNonEmpty(joinDocs(inner, true), joinDocs(lead, false), joinDocs(inner, false)))
+	s.last.t, s.last.col = t, col
+}
+
+func firstNonEmpty(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// columnOrConstraint adds a column (returns its name) or reads a table constraint (returns "").
+func (s *schemaBuilder) columnOrConstraint(t *facts.Table, item string) string {
+	if item == "" {
+		return ""
+	}
 	fields := strings.Fields(item)
-	first := strings.ToLower(strings.Trim(fields[0], "\"`"))
+	first := strings.ToLower(strings.Trim(strings.SplitN(fields[0], "(", 2)[0], "\"`")) // UNIQUE(a, b) too
 	if sqlConstraintKW[first] {
 		for _, m := range sqlFK.FindAllStringSubmatch(item, -1) {
 			cols := strings.Split(m[1], ",")
@@ -220,21 +309,38 @@ func (s *schemaBuilder) columnOrConstraint(t *facts.Table, item string) {
 				s.addRef(t, normIdent(col), normIdent(m[2]), to)
 			}
 		}
-		return
+		return ""
 	}
 	if len(fields) < 2 {
-		return
+		return ""
 	}
 	name := normIdent(fields[0])
 	rest := strings.TrimSpace(item[len(fields[0]):])
 	typ := strings.TrimSpace(sqlColStop.ReplaceAllString(rest, ""))
 	s.addField(t, name, strings.ToLower(typ))
+	if i := fieldIndex(t, name); i >= 0 {
+		t.Fields[i].NotNull = sqlNotNull.MatchString(rest)
+	}
 	if m := sqlRefInline.FindStringSubmatch(rest); m != nil {
 		s.addRef(t, name, normIdent(m[1]), normIdent(m[2]))
 	}
+	return name
 }
 
-func (s *schemaBuilder) alterAction(t *facts.Table, act string) {
+var (
+	sqlNotNull     = regexp.MustCompile(`(?i)\bnot\s+null\b|\bprimary\s+key\b`)
+	sqlSetNotNull  = regexp.MustCompile(`(?is)^alter\s+column\s+(\S+)\s+(set|drop)\s+not\s+null\b`)
+	sqlAlterType   = regexp.MustCompile(`(?is)^alter\s+column\s+(\S+)\s+(?:set\s+data\s+)?type\s+(.*?)(?:\s+using\s+.*)?$`)
+	sqlIfNotExists = regexp.MustCompile(`(?i)^if\s+not\s+exists\s+`)
+)
+
+// alterAction applies one action of ALTER TABLE; above is the comment above the statement
+// (given only when the statement has this one action).
+func (s *schemaBuilder) alterAction(t *facts.Table, act, above string) {
+	plain, lead, inner := splitDocs(act)
+	s.describeLast(lead)
+	s.last.t = nil
+	act = strings.TrimSpace(plain)
 	low := strings.ToLower(act)
 	switch {
 	case strings.HasPrefix(low, "add "):
@@ -247,8 +353,11 @@ func (s *schemaBuilder) alterAction(t *facts.Table, act string) {
 			s.columnOrConstraint(t, "constraint "+body) // a table constraint, never a column
 			return
 		}
-		body = regexp.MustCompile(`(?i)^if\s+not\s+exists\s+`).ReplaceAllString(body, "")
-		s.columnOrConstraint(t, body)
+		body = sqlIfNotExists.ReplaceAllString(body, "")
+		if col := s.columnOrConstraint(t, body); col != "" {
+			s.describe(t, col, firstNonEmpty(joinDocs(inner, true), joinDocs(lead, false), above, joinDocs(inner, false)))
+			s.last.t, s.last.col = t, col
+		}
 	case strings.HasPrefix(low, "drop column"):
 		n := normIdent(regexp.MustCompile(`(?i)^drop\s+column\s+(?:if\s+exists\s+)?(\S+)`).ReplaceAllString(act, "$1"))
 		for i, f := range t.Fields {
@@ -279,7 +388,11 @@ func (s *schemaBuilder) alterAction(t *facts.Table, act string) {
 			}
 		}
 	case strings.HasPrefix(low, "alter column"):
-		if m := regexp.MustCompile(`(?is)^alter\s+column\s+(\S+)\s+(?:set\s+data\s+)?type\s+(.*?)(?:\s+using\s+.*)?$`).FindStringSubmatch(act); m != nil {
+		if m := sqlSetNotNull.FindStringSubmatch(act); m != nil {
+			if i := fieldIndex(t, normIdent(m[1])); i >= 0 {
+				t.Fields[i].NotNull = strings.EqualFold(m[2], "set")
+			}
+		} else if m := sqlAlterType.FindStringSubmatch(act); m != nil {
 			s.addField(t, normIdent(m[1]), strings.ToLower(strings.TrimSpace(m[2])))
 		}
 	}
@@ -361,6 +474,9 @@ func (c *apiCtx) djangoModels(sb *schemaBuilder) {
 			continue
 		}
 		t := sb.ensure(m.table, "orm")
+		if d := pyClassDoc(cl.text); d != "" {
+			t.Desc = d
+		}
 		hasPK := false
 		var classes []*pyClass
 		chain, _ := c.pyChain(cl)
@@ -387,6 +503,7 @@ func (c *apiCtx) djangoModels(sb *schemaBuilder) {
 						col = dc[1]
 					}
 					sb.addField(t, col, kind)
+					sb.describe(t, col, djFieldDesc(args))
 					first := strings.TrimSpace(strings.SplitN(args, ",", 2)[0])
 					if tt := resolve(first, cl); tt != "" {
 						sb.addRef(t, col, tt, "id")
@@ -398,6 +515,7 @@ func (c *apiCtx) djangoModels(sb *schemaBuilder) {
 					}
 				default:
 					sb.addField(t, name, kind)
+					sb.describe(t, name, djFieldDesc(args))
 				}
 			}
 		}

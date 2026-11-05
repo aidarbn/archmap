@@ -27,12 +27,21 @@ type Table struct {
 	Fields []Field    `json:"fields"`
 	Source string     `json:"source"` // migration | orm | sqlc | jet
 	Refs   []TableRef `json:"refs,omitempty"`
+	// Desc is the description written in the code: COMMENT ON TABLE, a comment
+	// above CREATE TABLE, the doc of the mapped struct / model. Empty when none.
+	Desc string `json:"desc,omitempty"`
 }
 
 // Field is a column.
 type Field struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
+	// NotNull is set for SQL columns declared NOT NULL or PRIMARY KEY (only SQL
+	// sources know it; for ORM tables false means "unknown").
+	NotNull bool `json:"notNull,omitempty"`
+	// Desc is the description written in the code: COMMENT ON COLUMN, a `--`
+	// comment on or above the column, the doc of the struct field, help_text.
+	Desc string `json:"desc,omitempty"`
 }
 
 // TableRef is a foreign key: Field of this table points to To of Table.
