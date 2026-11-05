@@ -53,11 +53,153 @@ function setupMenu() {
   bus.on('lang', () => { b.title = t('moreTip'); b.setAttribute('aria-label', t('moreTip')); });
 }
 
-/* ---------- back ---------- */
-// back: a frame opened from a page returns to the page; the scenario closes first, then another view returns to the
-// map, then the map goes a level up
+/* ---------- back: one stack of levels ----------
+ * Every step down — a module or a function on the map (drill), a scenario opened from anywhere (openRun), a frame
+ * of a page opened on the whole canvas — first remembers where we were (navPush): the view, the page, the scenario
+ * and its step, the map level, module, function, camera, selection and the place on screen the step down started
+ * from. Esc, "‹ <where>" in the run bar and the browser's Back go to exactly that place (navRestore): a scenario
+ * entered from a page returns to the page, a module entered from a scenario step returns to the scenario at that
+ * step. Each push is a history entry, so Back and Forward of the browser walk the same stack.
+ * A detail picked in the inspector on top (a function, a module…) is closed by the first Esc. */
+addI18n({ ru: { navBack: (s) => 'Назад: ' + s + ' (Esc)' }, en: { navBack: (s) => 'Back: ' + s + ' (Esc)' } });
+const BACK = { stack: [], restoring: false, hold: 0, hist: false, base: '', ptr: null };
+const navSelKey = (s) => (s ? JSON.stringify(s) : '');
+const navKey = (s) => [s.view, s.page, s.run, s.run ? s.step : '', s.view === 'map' ? s.level : '', s.view === 'map' && s.level >= 2 ? s.mod : '', s.view === 'map' && s.level >= 3 ? s.fn : ''].join('|');
+const navCam = () => (state.view === 'map' ? curCam() : null);
+// where we are now
+function navSnap() {
+  const cam = navCam();
+  return {
+    view: state.view, page: state.view === 'page' && AM.pages ? AM.pages.cur : null,
+    run: state.run ? state.run.key : null, step: state.step, level: state.level, mod: state.mod, fn: state.fn,
+    cam: cam ? { ...cam.vb } : null, sel: state.sel, rect: null,
+    pcam: state.view === 'page' && AM.pages && AM.pages.camVb ? AM.pages.camVb() : null,
+  };
+}
+// the place a step down started from: the element last pressed (a node, a frame, a row of the tree), when recent
+function navFrom() {
+  const p = BACK.ptr; if (!p || performance.now() - p.t > 1500) return null;
+  const s = stageRect(); if (!s.width) return null;
+  return { x: p.r.left - s.left, y: p.r.top - s.top, w: Math.max(24, p.r.width), h: Math.max(18, p.r.height) };
+}
+// a short name of a place for "‹ <where>"
+function navLabel(s) {
+  if (!s) return '';
+  if (s.view === 'page') { const pg = AM.pageList ? AM.pageList().find((p) => p.id === s.page || p.id === 'p:' + s.page) : null; return pg ? pg.name : t('lv')[0]; }
+  if (s.view !== 'map') { const v = VIEWS.find((x) => x.id === s.view); return v ? viewTitle(v) : s.view; }
+  if (s.run) { const r = buildRun(s.run); return r ? cut(r.name, 22) + (s.step >= 0 ? ' · ' + t('stepOf', s.step + 1, r.segs.reduce((n, sg) => n + sg.steps.length, 0)) : '') : ''; }
+  if (s.level >= 3 && s.fn) return fnInfo(s.fn).name;
+  if (s.level >= 2 && s.mod) return short(s.mod);
+  return t('lv')[s.level] || t('lv')[0];
+}
+// navPush(): remember where we are before a step down (inside navBatch only once; the same place is not repeated)
+function navPush() {
+  if (BACK.restoring || BACK.hold > 1) return;
+  if (BACK.hold === 1) BACK.hold = 2; // the batch has pushed
+  const s = navSnap(); s.rect = navFrom();
+  const top = BACK.stack[BACK.stack.length - 1];
+  if (top && navKey(top) === navKey(s)) { top.cam = s.cam; top.sel = s.sel; if (s.rect) top.rect = s.rect; return; }
+  BACK.stack.push(s);
+  if (BACK.hist) try { history.pushState({ amNav: BACK.stack.length }, '', location.href); } catch (e) { BACK.hist = false; }
+  renderPlayer();
+}
+// navBatch(fn): a step down made of several (a module from the system level, a frame to its view) is one place back
+async function navBatch(fn) {
+  if (BACK.hold || BACK.restoring) return fn();
+  BACK.hold = 1;
+  try { return await fn(); } finally { BACK.hold = 0; }
+}
+const navDepth = () => BACK.stack.length;
+// the place Esc goes back to: the deepest remembered one that is not where we are now
+function navTarget() {
+  const cur = navKey(navSnap());
+  let n = BACK.stack.length - 1;
+  while (n >= 0 && navKey(BACK.stack[n]) === cur) n--;
+  return n;
+}
+const navBackLabel = () => { const n = navTarget(); return n >= 0 ? navLabel(BACK.stack[n]) : ''; };
+// zoom a scene out of / into the rect r of the stage (the place a step down started from)
+function navZoom(el, r, dir) {
+  if (!el || !el.animate || RM || !DUR) return;
+  const from = r ? (dir === 'in' ? tfFor(r) : tfZoomInto(r)) : dir === 'in' ? 'scale(.94)' : 'scale(1.06)';
+  el.animate([{ transform: from, opacity: 0.35, transformOrigin: '0 0' }, { transform: 'none', opacity: 1, transformOrigin: '0 0' }], { duration: 360, easing: 'cubic-bezier(.3,0,.2,1)' });
+}
+const navScene = () => (state.view === 'map' ? SC()[state.level] : viewEl(state.view));
+async function navRestore(s) {
+  BACK.restoring = true;
+  try {
+    for (let i = 0; i < 40 && state.busy; i++) await sleep(50);
+    const fromRun = state.run && !s.run;
+    if (s.view !== 'map') {
+      if (state.run) closeRun();
+      if (s.view === 'page' && AM.pages) { AM.pages.open(s.page); if (s.pcam) AM.pages.setCam(s.pcam); } else setView(s.view);
+      if (s.sel) setSel(s.sel);
+      navZoom(navScene(), s.rect, 'out');
+      return;
+    }
+    if (state.view !== 'map') setView('map');
+    const rk = state.run ? state.run.key : null;
+    if (rk !== s.run) { if (s.run) { loadRun(s.run); if (s.step < 0) showOverview(); } else closeRun(); }
+    if (state.level > s.level) await up(s.level);
+    else if (state.level < s.level && s.level >= 2 && s.mod) { if (s.level === 3 && s.fn) await jumpToFn(s.fn, 3); else await goModule(s.mod); }
+    if (s.level === 2 && s.mod && fv && fv.mod !== s.mod && D.byMod[s.mod]) { state.mod = s.mod; buildFns(s.mod); fitFns(); afterLevel(); }
+    if (s.run && state.run) {
+      if (s.step >= 0 && state.step !== s.step) await AM.play.go(s.step);
+      else if (s.step < 0 && state.step >= 0) { state.step = -1; trimSegs(); showOverview(); }
+    }
+    const cam = navCam(); if (cam && s.cam) cam.set(s.cam);
+    if (s.sel && navSelKey(s.sel) !== navSelKey(state.sel)) setSel(s.sel);
+    if (fromRun) navZoom(navScene(), s.rect, 'out');
+  } finally {
+    BACK.restoring = false; BACK.base = navSelKey(state.sel);
+    renderPlayer();
+  }
+}
+// go back to snapshot n (the stack keeps what is above it no more); through the browser history when it is ours
+function navBackTo(n) {
+  const L_ = BACK.stack.length;
+  if (BACK.hist && history.state && history.state.amNav === L_) { history.go(n - L_); return; } // popstate restores
+  const s = BACK.stack[n]; BACK.stack.length = n; navRestore(s);
+}
+function setupNav() {
+  try { history.replaceState(history.state, '', location.href); BACK.hist = true; } catch (e) { BACK.hist = false; }
+  // other code rewrites the URL of the current entry (the hash of the open scenario / page) with a null state: the
+  // depth of the entry is kept
+  const rs = history.replaceState.bind(history);
+  history.replaceState = (st, title, url) => rs(st == null && history.state && history.state.amNav != null ? history.state : st, title, url);
+  window.addEventListener('popstate', (e) => {
+    const d = e.state && e.state.amNav != null ? e.state.amNav : 0;
+    if (d >= BACK.stack.length) return; // forward: nothing remembered there
+    const s = BACK.stack[d]; BACK.stack.length = d; navRestore(s);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest && (e.target.closest('g.n, g.pf, .pv-node, .pleg, .slist .ti, .pgs .pg, li, tr, button') || e.target);
+    if (el && el.getBoundingClientRect) BACK.ptr = { r: el.getBoundingClientRect(), t: performance.now() };
+  }, true);
+  bus.on('level', () => { if (!BACK.restoring) BACK.base = navSelKey(state.sel); });
+  bus.on('flow', () => { if (!BACK.restoring) BACK.base = navSelKey(state.sel); });
+  bus.on('view', () => { if (!BACK.restoring) BACK.base = navSelKey(state.sel); });
+}
+// the first Esc closes a detail picked on top (the inspector goes back to what the level shows)
+function navDetail() {
+  const s = state.sel;
+  if (!s || ['page', 'step', 'run', 'pstep', 'frame'].includes(s.t) || navSelKey(s) === BACK.base) return false;
+  [sys, map, fv].forEach((x) => { if (x) clearSel(x.svg); });
+  const back = state.run ? { t: state.step >= 0 ? 'step' : 'run' } : state.view === 'page' && AM.pages && AM.pages.cur ? { t: 'page', id: AM.pages.cur } : null;
+  setSel(back);
+  if (state.run && state.view === 'map') restorePlay();
+  BACK.base = navSelKey(state.sel);
+  return true;
+}
 function goBack() {
-  // a frame of a page opened on the whole canvas: Esc goes back to the page (views/pages.js)
+  if (navDetail()) return;
+  // a page stepping a frame: Esc stops the stepping first (views/pages.js)
+  if (AM.pages && AM.pages.stopStepping && AM.pages.stopStepping()) return;
+  const n = navTarget();
+  if (n >= 0) return navBackTo(n);
+  BACK.stack.length = 0;
+  // nothing remembered (a link opened straight into a scenario): the scenario closes, another view returns to the
+  // map, the map goes a level up
   if (AM.pages && AM.pages.back()) return;
   if (state.run) return closeRun();
   if (state.view !== 'map') return setView('map');
@@ -162,4 +304,4 @@ function watchMarks() {
 }
 bus.on('level', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
 bus.on('view', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
-Object.assign(AM, { flowActor, menu: { open: openMenu, close: closeMenu, items: menuItems } });
+Object.assign(AM, { flowActor, menu: { open: openMenu, close: closeMenu, items: menuItems }, navPush, navBatch, nav: { get stack() { return BACK.stack; }, back: goBack, label: navBackLabel } });

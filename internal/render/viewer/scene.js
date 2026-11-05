@@ -148,9 +148,10 @@ const bbox = (rs) => {
 
 /* ---------- playback marks ---------- */
 // runDot(layer, d, {async, label}): animates the accent dot along path d; async — dotted line
-// with a pause mid-way (the job waits in the queue). Resolves when the dot arrives.
+// with a pause mid-way (the job waits in the queue); ghost — the line is not drawn (the path overlay already shows
+// the leg), only the dot runs. Resolves when the dot arrives.
 function runDot(layer, d, opt = {}) {
-  const p = S_('path', { d, class: 'e hot' + (opt.async ? ' dash' : ''), 'marker-end': 'url(#arrA)' }, layer);
+  const p = opt.ghost ? S_('path', { d, class: 'e ghost' }, layer) : S_('path', { d, class: 'e hot' + (opt.async ? ' dash' : ''), 'marker-end': 'url(#arrA)' }, layer);
   const c = S_('circle', { r: 6, class: 'dot' }, layer);
   const len = p.getTotalLength();
   const D_ = RM ? 0 : (opt.dur || 650) / state.speed;

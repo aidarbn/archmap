@@ -109,7 +109,7 @@ function runOverviewHTML() {
     h += `<h3>${esc(t('ovFlows'))}</h3><ul class="rel-list">` + r.segs.map((sg, i) => {
       const s0 = at; at += sg.steps.length;
       const fl = sg.flow, line = fl ? realDesc(fl) || (fl.exit ? '→ ' + fl.exit : '') : '';
-      return `<li class="dsc" data-step="${s0}" title="${esc(t('dsRunTip'))}"><span class="fn" style="font-family:inherit">${i + 1}. ${esc(fl ? fl.name : r.name)}</span><span class="md">${esc(t('pkStepsN', sg.steps.length))}</span>${line ? `<span class="ds">${esc(cut(line, 120))}</span>` : ''}</li>`;
+      return `<li class="dsc" data-step="${s0}" title="${esc(t('dsRunTip'))}"><span class="fn" style="font-family:inherit">${i + 1}. ${esc(fl ? fl.name : r.name)}</span><span class="md">${esc(t('jvStepsRange', s0 + 1, s0 + sg.steps.length))}</span>${line ? `<span class="ds">${esc(cut(line, 120))}</span>` : ''}</li>`;
     }).join('') + '</ul>';
   }
   if (P.mods.length || P.exts.length) {

@@ -169,8 +169,8 @@ function init() {
   $('#pStep').onclick = () => doStep(1);
   $('#pPrev').onclick = () => doStep(-1);
   $('#pOv').onclick = () => resetRun();
-  $('#pClose').onclick = () => closeRun();
-  setupSide(); setupMenu(); setupZoom(); setupSidePanel(); setupChrome();
+  $('#pClose').onclick = () => (navTarget() >= 0 ? goBack() : closeRun()); // back to where the scenario was opened from
+  setupNav(); setupSide(); setupMenu(); setupZoom(); setupSidePanel(); setupChrome();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;

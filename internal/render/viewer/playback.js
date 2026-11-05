@@ -9,8 +9,8 @@
  */
 
 addI18n({
-  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + '/' + n, closeRun: 'Закрыть сценарий, вернуться к карте', backToMap: 'Карта' },
-  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + '/' + n, closeRun: 'Close the scenario, back to the map', backToMap: 'Map' },
+  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + ' из ' + n, closeRun: 'Закрыть сценарий, вернуться к карте', backToMap: 'Карта' },
+  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + ' of ' + n, closeRun: 'Close the scenario, back to the map', backToMap: 'Map' },
 });
 
 /* ---------- runs ---------- */
@@ -124,6 +124,114 @@ function stepAt(i) {
   };
 }
 const curStep = () => (state.step >= 0 ? stepAt(state.step) : null);
+
+/* ---------- what a step does, from the code ----------
+ * The pill of the current leg and the tooltips of the numbers say what happens and what is passed, read from the
+ * code (not the step text of arch:step, that one is in the top bar and the inspector):
+ *   a call — the called function with the key arguments → its result: requestQR(Payment, KaspiDevice) → QRResult
+ *   a queue hand-off — → queue: CheckKaspiPaymentArgs; a client call — client → POST /orders/{id}/kaspi-qr
+ *   data — UPDATE orders; an outside system — → Kaspi: CreateQR; a status — Order: validated → payment_requested */
+addI18n({ ru: { actQueue: 'очередь', actClient: 'клиент' }, en: { actQueue: 'queue', actClient: 'client' } });
+// split s by sep at the top level (outside (), [], {}, <>)
+function splitTop(s, sep = ',') {
+  const out = []; let d = 0, cur = '';
+  for (const ch of s) {
+    if ('([{<'.includes(ch)) d++; else if (')]}>'.includes(ch)) d--;
+    if (ch === sep && d === 0) { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+// the text inside the parenthesis group that starts at i (s[i] === '('): [inner, index after ')']
+function parenAt(s, i) { let d = 0; for (let k = i; k < s.length; k++) { if (s[k] === '(') d++; else if (s[k] === ')' && --d === 0) return [s.slice(i + 1, k), k + 1]; } return [s.slice(i + 1), s.length]; }
+// params of a parameter list: [{n, t}] — Go (`a, b int64`, unnamed types), TS / Python / Kotlin / Swift (`a: T`)
+function paramList(inner, go) {
+  const items = splitTop(inner).filter(Boolean), out = [];
+  if (go) {
+    const named = items.some((x) => /^[\w]+\s+\S/.test(x));
+    let pend = [];
+    items.forEach((x) => {
+      if (!named) { out.push({ n: '', t: x }); return; }
+      const m = x.match(/^([\w]+)\s+(.+)$/);
+      if (!m) { pend.push(x); return; }
+      pend.concat(m[1]).forEach((n) => out.push({ n, t: m[2] })); pend = [];
+    });
+    return out;
+  }
+  items.forEach((x) => {
+    const m = x.replace(/=.*$/, '').match(/^(?:[@\w]+\s+)*?\*{0,2}([\w$]+)\??\s*:\s*(.+)$/);
+    if (m) out.push({ n: m[1], t: m[2].trim() }); else if (!/^(self|cls|this)$/.test(x)) out.push({ n: x.replace(/[=:].*$/, '').trim(), t: '' });
+  });
+  return out;
+}
+// a signature → {params: [{n, t}], res: [t]}; null when it cannot be read
+function sigParts(sig) {
+  if (!sig) return null;
+  const go = /^func\b/.test(sig);
+  let i = 0;
+  if (go) { i = 4; while (sig[i] === ' ') i++; if (sig[i] === '(') i = parenAt(sig, i)[1]; }
+  const p0 = sig.indexOf('(', i); if (p0 < 0) return null;
+  const [inner, after] = parenAt(sig, p0);
+  let rest = sig.slice(after).replace(/\{\s*$/, '').trim(), res = [];
+  if (go) { if (rest.startsWith('(')) res = paramList(parenAt(rest, 0)[0], true).map((x) => x.t); else if (rest) res = [rest]; }
+  else { const m = rest.match(/^(?:->|:)\s*(.+?)\s*(?:\{|=>|:)?$/); if (m) res = [m[1]]; }
+  return { params: paramList(inner, go), res };
+}
+// a type without packages and pointers: *tabletsv2.RequestKaspiQRForOrderRequest → RequestKaspiQRForOrderRequest
+// a queue job river.Job[XArgs] → XArgs
+const shortType = (tp) => String(tp).replace(/\*/g, '').replace(/\b[a-zA-Z_][\w]*\./g, '').replace(/^Job\[(.+)\]$/, '$1').trim();
+// generic method names read better with their type: CheckKaspiPaymentWorker.Work
+const GENERIC_FN = /^(Work|Handle|Run|Execute|Exec|Process|ServeHTTP|Call|Invoke|Do|Start|New|__call__|handle|run|execute|process|invoke)$/;
+const SKIP_T = /^(context\.Context|\*?slog\.Logger|\*?zap\.(Sugared)?Logger|\*?logrus\.\w+|\.\.\..*|\w*\.?Option|\*?http\.Request|http\.ResponseWriter|\*?sql\.Tx|pgx\.Tx)$/;
+const PRIM_T = /^(\*?u?int(8|16|32|64)?|string|bool|float(32|64)|byte|rune|any|interface\{\}|uuid\.UUID|time\.Time|time\.Duration|\[\]byte|number|str|int|float|boolean|String|Int|Long|Bool|Boolean|Double)$/;
+const SKIP_R = /^(error|void|None|Unit|Promise<void>)$/;
+// call text of a function: name(args) → result
+function callText(fid) {
+  const f = D.fns[fid]; if (!f) return fnInfo(fid).short || '';
+  const sp = sigParts(f.sig), nm = (f.cls && GENERIC_FN.test(f.name) ? f.cls + '.' : '') + (f.name || fnInfo(fid).short);
+  if (!sp) return nm + '()';
+  const args = sp.params.filter((p) => !SKIP_T.test(p.t.trim())).map((p) => (!p.t || (PRIM_T.test(p.t.trim()) && p.n) ? p.n : shortType(p.t))).filter(Boolean);
+  const res = sp.res.filter((r) => !SKIP_R.test(r.trim()) && !/^err\b/.test(r)).map(shortType);
+  return nm + '(' + args.join(', ') + ')' + (res.length ? ' → ' + res.join(', ') : '');
+}
+// the type a queue job carries: river.Job[CheckKaspiPaymentArgs] (or an Args parameter) → CheckKaspiPaymentArgs
+function jobType(fid) {
+  const f = D.fns[fid], sp = f && sigParts(f.sig); if (!sp) return null;
+  for (const p of sp.params) { const m = p.t.match(/Job\[(.+)\]/); if (m) return shortType(m[1]); if (/Args$/.test(shortType(p.t))) return shortType(p.t); }
+  return null;
+}
+// an endpoint, short: POST …/orders/{order_id}/kaspi-qr (the whole path in the tooltip)
+const epText = (fid, full) => {
+  const ep = (D.epByFid[fid] || [])[0]; if (!ep) return null;
+  let p = ep.path || (ep.service ? ep.service + '.' : '') + (ep.name || '');
+  if (!full && ep.path && p.length > 26) p = '…/' + p.split('/').filter(Boolean).slice(-2).join('/');
+  return ((ep.method || ep.kind || '') + ' ' + p).trim();
+};
+// stepAction(s) → {short, full}: what step s does and what it passes
+function stepAction(s) {
+  if (!s) return { short: '', full: '' };
+  if (s.planned) return { short: s.label, full: s.label };
+  const mainOf = (full) => (s.kind === 'async' ? '→ ' + t('actQueue') + ': ' + (jobType(s.fid) || callText(s.fid))
+    : s.kind === 'client' ? t('actClient') + ' → ' + (epText(s.fid, full) || callText(s.fid))
+      : s.kind === 'entry' && epText(s.fid) ? epText(s.fid, full) + (full ? ' → ' + callText(s.fid) : '')
+        : callText(s.fid));
+  const main = mainOf(false), mainFull = mainOf(true);
+  const more = [];
+  (s.data || []).forEach((a) => { const op = /^(read|select|get|find|list)/i.test(a.op || '') ? 'SELECT' : String(a.op || 'write').toUpperCase(); more.push(op + ' ' + a.table); });
+  const f = D.fns[s.fid];
+  (s.exts || []).forEach((x) => {
+    if (x.kind === 'db' || x.kind === 'queue') return;
+    const c = ((f && f.callees) || []).find((id) => D.fns[id] && (x.modules || []).includes(D.fns[id].module));
+    more.push('→ ' + x.name + (c ? ': ' + D.fns[c].name : ''));
+  });
+  const st = (s.states || [])[0];
+  if (st) more.push(st.entity.replace(/Status$/, '') + ': ' + (st.from ? st.from + ' → ' : '→ ') + st.to);
+  const uniq = Array.from(new Set(more));
+  let short = main;
+  for (const m of uniq) { if ((short + ' · ' + m).length > 46) break; short += ' · ' + m; }
+  return { short: cut(short, 46), full: [mainFull].concat(uniq).join('\n') };
+}
+const actionAt = (i) => stepAction(stepAt(i));
 // call stack up to step i: a callee is pushed, a return pops to its caller, an async hand-off starts anew
 function framesUpTo(i) {
   const L_ = runList(), out = [];
@@ -149,23 +257,26 @@ function framesUpTo(i) {
 function hotOn(nodes, id) { if (nodes[id]) nodes[id].el.classList.add('hot'); }
 function hotEdge(edges, a, b) { edges.forEach((e) => { if ((e.a === a && e.b === b) || (e.a === b && e.b === a)) e.path.classList.add('hot'); }); }
 function startPlay(svg, fx) { clearSel(svg); clearPlay(svg); fx.innerHTML = ''; svg.classList.add('play'); }
+// the dot of a hop a → b: along the leg the path overlay drew (the line is already there, the dot only moves);
+// without a drawn leg along its own invisible curve
+const legDot = (sc, a, b, d, opt) => runDot(sc.fx, legD(sc, a, b) || d, Object.assign({ ghost: true }, opt));
 async function sysHop(s) {
   startPlay(sys.svg, sys.fx);
   const N = sys.nodes, svc = N.svc.r;
   hotOn(N, 'svc');
   let moved = false;
-  if (s.actor && N[s.actor.id]) { hotOn(N, s.actor.id); hotEdge(sys.edges, s.actor.id, 'svc'); await runDot(sys.fx, hop(N[s.actor.id].r, svc, .08)); moved = true; }
+  if (s.actor && N[s.actor.id]) { hotOn(N, s.actor.id); hotEdge(sys.edges, s.actor.id, 'svc'); await legDot(sys, s.actor.id, 'svc', hop(N[s.actor.id].r, svc, .08)); moved = true; }
   const q = D.externals.find((x) => x.kind === 'queue');
   if (s.kind === 'async' && q && N[q.id]) {
     hotOn(N, q.id); hotEdge(sys.edges, 'svc', q.id);
-    await runDot(sys.fx, hop(svc, N[q.id].r, .08));
-    await runDot(sys.fx, hop(N[q.id].r, svc, .08), { async: true });
+    await legDot(sys, 'svc', q.id, hop(svc, N[q.id].r, .08));
+    await runDot(sys.fx, hop(N[q.id].r, svc, .08), { async: true, ghost: true });
     moved = true;
   }
   for (const x of s.exts.slice(0, 2)) {
     if (!N[x.id] || (s.kind === 'async' && x === q)) continue;
     hotOn(N, x.id); hotEdge(sys.edges, 'svc', x.id);
-    await runDot(sys.fx, hop(svc, N[x.id].r, .08)); moved = true;
+    await legDot(sys, 'svc', x.id, hop(svc, N[x.id].r, .08)); moved = true;
   }
   if (!moved) pulse(sys.fx, svc);
 }
@@ -180,8 +291,8 @@ async function mapHop(s) {
   if (!map.cam.contains(box, 20)) await map.cam.animTo(box, 160, 1100, RM ? 0 : 480); // only when the step is off screen
   hotOn(map.nodes, b); if (a) { hotOn(map.nodes, a); hotEdge(map.edges, a, b); }
   if (!a || a === b) pulse(map.fx, rb);
-  else await runDot(map.fx, hop(ra, rb), { async: s.kind === 'async' });
-  if (ext) { hotOn(map.nodes, ext); hotEdge(map.edges, b, ext); await runDot(map.fx, hop(rb, map.pos[ext], .06)); }
+  else await legDot(map, a, b, hop(ra, rb), { async: s.kind === 'async' });
+  if (ext) { hotOn(map.nodes, ext); hotEdge(map.edges, b, ext); await legDot(map, b, ext, hop(rb, map.pos[ext], .06)); }
 }
 async function fnHop(s) {
   startPlay(fv.svg, fv.fx);
@@ -196,7 +307,8 @@ async function fnHop(s) {
   else {
     src.el.classList.add('hot');
     fv.edges.forEach((e) => { if ((e.a === s.prev || e.a === 'port:in:' + D.fns[s.prev].module) && e.b === s.fid) e.path.classList.add('hot'); });
-    await runDot(fv.fx, hop(src.r, at.r, .1), { async: s.kind === 'async' });
+    const sid = fv.nodes[s.prev] ? s.prev : 'port:in:' + D.fns[s.prev].module;
+    await legDot(fv, sid, s.fid, hop(src.r, at.r, .1), { async: s.kind === 'async' });
   }
   const xm = s.exts.map((x) => (x.modules || []).find((m) => fv.ports['out:' + m])).filter(Boolean)[0];
   if (xm) { const p = fv.ports['out:' + xm]; p.el.classList.add('hot'); await runDot(fv.fx, hop(at.r, p.r, .06)); }
@@ -218,6 +330,9 @@ async function showStep() {
   bus.emit('step', s);
   if (state.view !== 'map') return;
   if (s.planned) { planHop(s); return drawPath(); }
+  // the path moves to the step at once (the dot follows along the drawn leg); a level that rebuilds for the step
+  // (another module) draws it after
+  if (state.level < 2 || (state.level === 2 && fv && fv.mod === (unitFor(s.mod) || s.mod) && fv.nodes[s.fid])) drawPath();
   try { await hopTo(s); } finally { if (state.step === s.i) drawPath(); }
 }
 async function hopTo(s) {
@@ -358,13 +473,63 @@ function pathLegs(level) {
   return Array.from(legs.values());
 }
 const pathRect = (sc, id) => { const p = sc.nodes[id] || (sc.ports && sc.ports[String(id).replace(/^port:/, '')]); return p ? (p.r || (sc.pos && sc.pos[id])) : (sc.pos && sc.pos[id]) || null; };
+// The overlay of a scene is built once and then only updated: a step changes classes, attributes and text of the
+// elements already there (legs stay, a leg that is not on the path any more is hidden, not removed), so nothing
+// blinks. sc.pv keeps them: {legs: Map key → leg elements, inside, gl/gi/gb (layers), brSig, step, glow}.
 function pathLayer(sc) {
-  if (!sc.pg || !sc.pg.isConnected) { sc.pg = S_('g', { class: 'pathov' }); sc.g.insertBefore(sc.pg, sc.fx); }
+  if (!sc.pg || !sc.pg.isConnected) { sc.pg = S_('g', { class: 'pathov' }); sc.g.insertBefore(sc.pg, sc.fx); sc.pv = null; }
+  if (!sc.pv) {
+    sc.pg.textContent = '';
+    sc.pv = { legs: new Map(), inside: null, brSig: '', step: null, glow: null };
+    sc.pv.gl = S_('g', {}, sc.pg); sc.pv.gi = S_('g', {}, sc.pg); sc.pv.gb = S_('g', {}, sc.pg);
+  }
   return sc.pg;
 }
-function clearPath() {
-  [sys, map, fv].forEach((sc) => { if (!sc) return; if (sc.pg) sc.pg.innerHTML = ''; sc.svg.classList.remove('pathmode'); sc.svg.querySelectorAll('.pn').forEach((e) => e.classList.remove('pn', 'pn-done', 'pn-cur', 'pn-next')); });
-  PATH.legs = [];
+// set an attribute / the text only when it differs (null removes the attribute)
+const setA = (e, k, v) => { v = v == null ? null : String(v); if (e.getAttribute(k) === v) return; if (v == null) e.removeAttribute(k); else e.setAttribute(k, v); };
+const setT = (e, s) => { s = String(s); const n = e.firstChild; if (n && n.nodeType === 3 && !n.nextSibling) { if (n.data !== s) n.data = s; } else e.textContent = s; };
+function wipePath(sc) {
+  if (!sc) return;
+  if (sc.pv && sc.pv.glow) sc.pv.glow.cancel();
+  if (sc.pg && sc.pg.firstChild) sc.pg.textContent = '';
+  sc.pv = null;
+  sc.svg.classList.remove('pathmode');
+  sc.svg.querySelectorAll('.pn').forEach((e) => e.classList.remove('pn', 'pn-done', 'pn-cur', 'pn-next'));
+}
+function clearPath() { [sys, map, fv].forEach(wipePath); PATH.legs = []; }
+// the path d of the drawn leg a → b on a scene (the dot of a hop runs along it), null when it is not drawn
+function legD(sc, a, b) {
+  const pv = sc && sc.pv; if (!pv) return null;
+  const o = pv.legs.get(a + '\0' + b) || pv.legs.get(a + '\0' + b + '\0c');
+  return o && o.grp.getAttribute('display') !== 'none' ? o.v.getAttribute('d') : null;
+}
+// restack(parent, want): put the children listed in want in that order with the fewest moves — the longest run
+// already in order stays, only the others move (the hidden children in between do not matter)
+function restack(parent, want) {
+  const pos = new Map(Array.from(parent.children).map((e, i) => [e, i])), seq = want.map((e) => pos.get(e));
+  const tails = [], prev = new Array(seq.length).fill(-1); // longest increasing run of seq (indices into want)
+  seq.forEach((v, i) => {
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (seq[tails[m]] < v) lo = m + 1; else hi = m; }
+    if (lo > 0) prev[i] = tails[lo - 1];
+    tails[lo] = i;
+  });
+  const keep = new Set();
+  for (let i = tails.length ? tails[tails.length - 1] : -1; i >= 0; i = prev[i]) keep.add(want[i]);
+  let next = null;
+  for (let k = want.length - 1; k >= 0; k--) {
+    const el = want[k];
+    if (!keep.has(el)) parent.insertBefore(el, next);
+    next = el;
+  }
+}
+// the elements of one leg, made once: the line, a wide hit line, the number pill
+function legEl(g) {
+  const grp = S_('g', {}, g), v = S_('path', { class: 'v' }, grp), hit = S_('path', { class: 'hit' }, grp), hitT = S_('title', {}, hit, ' ');
+  const num = S_('g', { class: 'pnum' }, grp), rect = S_('rect', {}, num), text = S_('text', { 'text-anchor': 'middle' }, num, ' '), numT = S_('title', {}, num, ' ');
+  const o = { grp, v, hit, hitT, num, rect, text, numT, go: 0 };
+  grp.addEventListener('click', (e) => { e.stopPropagation(); AM.play.go(o.go); });
+  return o;
 }
 // what a step pill must not cover on a level: the band and group titles (their boxes in scene coordinates)
 function pathObstacles(sc) {
@@ -384,15 +549,21 @@ function overArea(r, list) {
   return s;
 }
 function drawPath() {
-  clearPath();
-  if (!state.run || state.view !== 'map' || state.level > 2) return;
+  if (!state.run || state.view !== 'map' || state.level > 2) { clearPath(); return; }
   const lvl = state.level, sc = [sys, map, fv][lvl]; if (!sc) return;
-  const g = pathLayer(sc), cur = state.step, ov = cur < 0, legs = pathLegs(lvl); // ov: the overview — every leg calm, none current
+  [sys, map, fv].forEach((x) => { if (x && x !== sc) wipePath(x); });
+  PATH.legs = [];
+  pathLayer(sc);
+  const pv = sc.pv, cur = state.step, ov = cur < 0, legs = pathLegs(lvl); // ov: the overview — every leg calm, none current
   // the numbers keep a readable size on screen when the level is zoomed out (fixed when drawn)
   const sw = sc.svg.getBoundingClientRect().width || 1000, zk = Math.max(1, Math.min(3, (sc.cam ? sc.cam.vb.w : sw) / sw));
   const zoomAround = (p) => (zk === 1 ? null : `translate(${p.x},${p.y}) scale(${zk}) translate(${-p.x},${-p.y})`);
   sc.svg.classList.add('pathmode');
-  const markNode = (id, st) => { const n = sc.nodes[id] || (sc.ports && sc.ports[String(id).replace(/^port:/, '')]); if (!n || !n.el) return; n.el.classList.add('pn'); if (st === 'cur' || !n.el.classList.contains('pn-cur')) { n.el.classList.remove('pn-done', 'pn-next'); n.el.classList.add('pn-' + st); } };
+  // the marks of the nodes are gathered first and put on at the end, only where they change
+  const want = new Map(); // node element → 'cur' | 'done' | 'next' | '' (on the path, idle)
+  const nodeEl = (id) => { const n = sc.nodes[id] || (sc.ports && sc.ports[String(id).replace(/^port:/, '')]); return n && n.el; };
+  const markNode = (id, st) => { const el = nodeEl(id); if (!el) return; if (st === 'cur' || want.get(el) !== 'cur') want.set(el, st); };
+  const plainNode = (id) => { const el = nodeEl(id); if (el && !want.has(el)) want.set(el, ''); };
   const pairs = new Set(legs.map((l) => l.a + '\0' + l.b));
   // future legs first, the current one last: on top
   const stOf = (l) => (ov ? 'done' : l.steps.includes(cur) ? 'cur' : l.steps.some((i) => i < cur) ? 'done' : 'next');
@@ -400,14 +571,23 @@ function drawPath() {
   // the number pills keep clear of each other, of the band and group titles and of the cards: each pill slides
   // along its leg to the spot that overlaps least (the current leg is placed first, so it keeps the middle)
   const taken = [], hard = pathObstacles(sc), soft = Object.keys(sc.nodes || {}).map((id) => pathRect(sc, id)).filter(Boolean);
-  const placePill = (v, w, h, fallback) => {
+  // ws: the weight of covering a card (a long signed pill keeps off the cards harder)
+  const placePill = (v, w, h, fallback, ws = 1) => {
     const len = v.getTotalLength ? v.getTotalLength() : 0;
     if (!len) return fallback;
     let best = null, bestS = Infinity;
+    // a long signed pill may also sit beside its leg (above, below, to either side) when the leg is short
+    const offs = [[0, 0]];
+    if (ws > 1) [1, 1.8].forEach((m) => { const dy = m * (h / 2 + 4); [0, w / 2 - 20, -(w / 2 - 20)].forEach((dx) => offs.push([dx, -dy], [dx, dy])); });
+    // and inside the part of the scene on screen
+    const vb = ws > 1 && sc.cam ? [sc.cam.vb] : null;
     [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88].forEach((f, k) => {
-      const p = v.getPointAtLength(len * f), r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
-      const s = overArea(r, taken) * 10 + overArea(r, hard) * 8 + overArea(r, soft) + k * 2;
-      if (s < bestS) { bestS = s; best = p; }
+      const q = v.getPointAtLength(len * f);
+      offs.forEach(([dx, dy], j) => {
+        const p = { x: q.x + dx, y: q.y + dy }, r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
+        const s = overArea(r, taken) * 10 + overArea(r, hard) * 8 + overArea(r, soft) * ws + k * 2 + j * 12 + (vb ? (w * h - overArea(r, vb)) * 8 : 0);
+        if (s < bestS) { bestS = s; best = p; }
+      });
     });
     taken.push({ x: best.x - w / 2, y: best.y - h / 2, w, h });
     return best;
@@ -415,69 +595,100 @@ function drawPath() {
   const drawn = [];
   // the number of a step that stays inside its node sits on the node's corner: keep the pills off it too
   const here0 = ov ? null : pathNode(lvl, cur);
-  if (here0 && !legs.some((l) => l.steps.includes(cur))) { const r = pathRect(sc, here0); if (r) taken.push({ x: r.x + r.w - 3 - 16 * zk, y: r.y - 16 * zk, w: 32 * zk, h: 32 * zk }); }
+  // its pill says what the step does too: "3 · validateOrderItems(Order)"
+  const inAct = here0 ? actionAt(cur).short : '', inTxt = String(cur + 1) + (inAct ? ' · ' + inAct : ''), inW = inAct ? inTxt.length * 6.9 + 18 : 26;
+  if (here0 && !legs.some((l) => l.steps.includes(cur))) { const r = pathRect(sc, here0); if (r) taken.push({ x: r.x + r.w - 16 * zk, y: r.y - 16 * zk, w: (inW + 6) * zk, h: 32 * zk }); }
+  const seen = new Set();
   legs.sort((p, q) => order[stOf(q)] - order[stOf(p)]).forEach((l) => {
     const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
     const st = stOf(l), back = pairs.has(l.b + '\0' + l.a);
     const cl = l.kind === 'client';
+    const key = l.a + '\0' + l.b + (cl ? '\0c' : '');
+    let o = pv.legs.get(key); if (!o) { o = legEl(pv.gl); pv.legs.set(key, o); }
+    seen.add(key);
     const d = hop(ra, rb, back ? 0.22 : cl ? 0.32 : 0.1); // a client leg bends away from the entry leg it may share ends with
-    const grp = S_('g', { class: 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : '') }, g);
+    setA(o.grp, 'display', null);
     const shown = ov ? Math.min(...l.steps) : st === 'cur' ? cur : st === 'done' ? Math.max(...l.steps.filter((i) => i <= cur)) : Math.min(...l.steps);
-    const tip = l.steps.map((i) => t('pathStep', i + 1, stepLabel(i))).join('\n');
-    const v = S_('path', { d, class: 'v', 'marker-end': st === 'next' ? 'url(#arrM)' : 'url(#arrA)' }, grp);
-    const hit = S_('path', { d, class: 'hit' }, grp);
-    S_('title', {}, hit, tip);
-    const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 3 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
-    // a client call is signed short ("client"); the full "next the client calls" is in the tooltip
-    const big = st === 'cur', txt = (big ? String(cur + 1) : txt0) + (cl ? ' · ' + t('jvClientShort') : '');
-    const w = Math.max(big ? 26 : 20, txt.length * (cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + 10), h = big ? 26 : 20;
-    const mid = placePill(v, w * zk, h * zk, ctr(ra));
-    const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp);
-    S_('rect', { x: mid.x - w / 2, y: mid.y - h / 2, width: w, height: h, rx: h / 2 }, num);
-    S_('text', { x: mid.x, y: mid.y + (big ? 5 : 4), 'text-anchor': 'middle' }, num, txt);
-    S_('title', {}, num, cl ? t('jvClient') + '\n' + tip : tip);
-    grp.addEventListener('click', (e) => { e.stopPropagation(); AM.play.go(st === 'cur' ? cur : shown); });
+    // the tooltip: every step of the leg — what it does and what it passes (the code), then its text
+    const tip = l.steps.map((i) => stepTip(i)).join('\n\n');
+    setA(o.v, 'd', d); setA(o.v, 'marker-end', st === 'next' ? 'url(#arrM)' : 'url(#arrA)');
+    setA(o.hit, 'd', d); setT(o.hitT, tip);
+    // several steps on one leg: "13…17" (the list is in the tooltip)
+    const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 2 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
+    // the current leg says what happens: "3 · requestQR(Payment) → QRResult"; a client call of another leg is
+    // signed short ("client")
+    const big = st === 'cur', act = big ? actionAt(cur).short : '', lbl = !!act;
+    const txt = big ? String(cur + 1) + (lbl ? ' · ' + act : cl ? ' · ' + t('jvClientShort') : '') : txt0 + (cl ? ' · ' + t('jvClientShort') : '');
+    const w = Math.max(big ? 26 : 20, txt.length * (lbl ? 6.9 : cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + (lbl ? 18 : 10)), h = big ? 26 : 20;
+    setA(o.grp, 'class', 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : '') + (lbl ? ' lbl' : ''));
+    const mid = placePill(o.v, w * zk, h * zk, ctr(ra), lbl ? 2 : 1);
+    setA(o.num, 'transform', zoomAround(mid));
+    setA(o.rect, 'x', mid.x - w / 2); setA(o.rect, 'y', mid.y - h / 2); setA(o.rect, 'width', w); setA(o.rect, 'height', h); setA(o.rect, 'rx', h / 2);
+    setA(o.text, 'x', mid.x); setA(o.text, 'y', mid.y + (big && !lbl ? 5 : 4)); setT(o.text, txt);
+    setT(o.numT, cl ? t('jvClient') + '\n' + tip : tip);
+    o.go = st === 'cur' ? cur : shown;
     markNode(l.a, st === 'next' ? 'next' : 'done'); markNode(l.b, st);
     PATH.legs.push({ a: l.a, b: l.b, steps: l.steps, st });
-    drawn.push({ grp, st });
+    drawn.push({ o, st });
   });
-  // the pills were placed current-first; the legs are stacked future-first so the current one is on top
-  drawn.sort((p, q) => order[p.st] - order[q.st]).forEach((x) => g.appendChild(x.grp));
+  // a leg that is not on the path now is hidden, not removed: it comes back as it was
+  pv.legs.forEach((o, k) => { if (!seen.has(k)) setA(o.grp, 'display', 'none'); });
+  // the pills were placed current-first; the legs are stacked future-first so the current one is on top — only the
+  // legs out of place move (one or two a step)
+  restack(pv.gl, drawn.sort((p, q) => order[p.st] - order[q.st]).map((x) => x.o.grp));
   // the node of the current step even when no leg reaches it on this level (the first step, a step inside a module)
   // the overview keeps the outside systems of every step in view (a step shows only its own one — pathLegs)
   // on a step the outside systems of the other steps stay plain (pn only): idle, not faded
   if (lvl === 1) for (let i = 0; i < runList().length; i++) {
     const s = stepAt(i); if (!s || s.planned) continue;
-    s.exts.forEach((x) => { if (ov) markNode(x.id, 'done'); else { const n = sc.nodes[x.id]; if (n && n.el) n.el.classList.add('pn'); } });
+    s.exts.forEach((x) => { if (ov) markNode(x.id, 'done'); else plainNode(x.id); });
   }
   const here = ov ? null : pathNode(lvl, cur); if (here) markNode(here, 'cur');
   // the step stays inside the node (a call within one module): its number sits on the node
-  if (here && !legs.some((l) => l.steps.includes(cur))) {
-    const r = pathRect(sc, here);
-    if (r) {
-      const grp = S_('g', { class: 'pleg cur inside' }, g), num = S_('g', { class: 'pnum', transform: zoomAround({ x: r.x + r.w - 3, y: r.y }) }, grp);
-      S_('rect', { x: r.x + r.w - 16, y: r.y - 13, width: 26, height: 26, rx: 13 }, num);
-      S_('text', { x: r.x + r.w - 3, y: r.y + 5, 'text-anchor': 'middle' }, num, String(cur + 1));
-      S_('title', {}, grp, t('pathStep', cur + 1, stepLabel(cur)));
+  const ir = here && !legs.some((l) => l.steps.includes(cur)) ? pathRect(sc, here) : null;
+  if (ir) {
+    let o = pv.inside;
+    if (!o) {
+      const grp = S_('g', { class: 'pleg cur inside' }, pv.gi), num = S_('g', { class: 'pnum' }, grp);
+      o = pv.inside = { grp, num, rect: S_('rect', { height: 26, rx: 13 }, num), text: S_('text', { 'text-anchor': 'middle' }, num, ' '), tt: S_('title', {}, grp, ' ') };
     }
-  }
+    setA(o.grp, 'display', null); setA(o.grp, 'class', 'pleg cur inside' + (inAct ? ' lbl' : ''));
+    setA(o.num, 'transform', zoomAround({ x: ir.x + ir.w - 3, y: ir.y }));
+    setA(o.rect, 'x', ir.x + ir.w - 16); setA(o.rect, 'y', ir.y - 13); setA(o.rect, 'width', inW);
+    setA(o.text, 'x', ir.x + ir.w - 16 + inW / 2); setA(o.text, 'y', ir.y + (inAct ? 4 : 5)); setT(o.text, inTxt);
+    setT(o.tt, stepTip(cur));
+  } else if (pv.inside) setA(pv.inside.grp, 'display', 'none');
   if (lvl === 0 && sc.nodes.svc) markNode('svc', ov ? 'done' : 'cur');
-  if (here) drawBranches(sc, g, lvl, here, zoomAround);
-  // the glow of the current leg plays once, when it appears
-  g.querySelectorAll('.pleg.cur').forEach((x) => x.classList.add('flash'));
+  drawBranches(sc, pv.gb, lvl, here, zoomAround, zk);
+  // node marks: only the ones that change
+  sc.svg.querySelectorAll('.pn').forEach((el) => { if (!want.has(el)) el.classList.remove('pn', 'pn-done', 'pn-cur', 'pn-next'); });
+  want.forEach((st, el) => { el.classList.add('pn'); ['done', 'cur', 'next'].forEach((k) => el.classList.toggle('pn-' + k, st === k)); });
+  // one soft glow of the current leg, only when the step really changed; a new step cancels the glow still running
+  if (pv.step !== cur) {
+    if (pv.glow) { pv.glow.cancel(); pv.glow = null; }
+    const c = drawn.find((x) => x.st === 'cur');
+    if (!ov && c && !RM && c.o.v.animate) pv.glow = c.o.v.animate([{ strokeWidth: '7px', opacity: 0.6 }, { strokeWidth: '3px', opacity: 1 }], { duration: 900, easing: 'ease-out' });
+    pv.step = cur;
+  }
 }
 // branches at the current step. At the fork that ends a flow run the branches that go on in another flow are pale
 // legs / pills, a click takes one; the outcomes that end the story (branch.fold) are folded into one "+N branches"
 // mark next to the node, a click unfolds them (and folds them back). On any other step (and in a path) the forks
 // of the step are only that mark: unfolded, their pills say what happens, the path goes on as written.
-function drawBranches(sc, g, lvl, here, zoomAround) {
-  const s = curStep(); if (!s) return;
-  const all = state.step === runList().length - 1 && !state.exitText ? allBranchesHere() : null;
-  const key = all ? 'end' : s.seg + ':' + s.fid;
+// They are redrawn only when what they show changes (sc.pv.brSig): the same forks stay as they are.
+function drawBranches(sc, g, lvl, here, zoomAround, zk) {
+  const s = here ? curStep() : null, ra = s && pathRect(sc, here);
+  const all = s && state.step === runList().length - 1 && !state.exitText ? allBranchesHere() : null;
+  const key = !s ? '' : all ? 'end' : s.seg + ':' + s.fid;
   const shown = all ? all.filter((b) => !b.fold) : [];
-  const folded = all ? all.filter((b) => b.fold) : uniqBr(((s.flow && s.flow.branches) || []).filter((b) => b.at === s.fid));
+  const folded = !s ? [] : all ? all.filter((b) => b.fold) : uniqBr(((s.flow && s.flow.branches) || []).filter((b) => b.at === s.fid));
   const open = PATH.open.has(key), list = open ? shown.concat(folded) : shown;
-  const ra = pathRect(sc, here); if (!ra) return;
+  const bk = (b) => (b.cond || '') + '\u0001' + (b.text || '') + '\u0001' + (b.flow || '');
+  const sig = !ra || (!list.length && !folded.length) ? '' : JSON.stringify([key, open, !!all, here, lvl, zk, ra.x, ra.y, ra.w, ra.h, list.map(bk), folded.map(bk)]);
+  if (sig === sc.pv.brSig) return;
+  sc.pv.brSig = sig;
+  if (g.firstChild) g.textContent = '';
+  if (!sig) return;
   let row = 0;
   list.forEach((b, k) => {
     const live = !!all; // only the fork at the end of a flow run can be taken
@@ -506,7 +717,7 @@ function drawBranches(sc, g, lvl, here, zoomAround) {
   S_('rect', { x: at.x, y: at.y - 10, width: w, height: 20, rx: 10 }, num);
   S_('text', { x: at.x + w / 2, y: at.y + 4, 'text-anchor': 'middle' }, num, lab);
   S_('title', {}, grp, folded.map((b) => (b.cond || '') + (b.text ? ' — ' + b.text : '')).join('\n'));
-  grp.addEventListener('click', (e) => { e.stopPropagation(); if (open) PATH.open.delete(key); else PATH.open.add(key); renderPlayer(); drawPath(); });
+  grp.addEventListener('click', (e) => { e.stopPropagation(); if (PATH.open.has(key)) PATH.open.delete(key); else PATH.open.add(key); renderPlayer(); drawPath(); });
 }
 // a click on the map while a scenario is open: the node of the next step steps forward; true when it was taken
 function pathClick(e) {
@@ -554,13 +765,18 @@ function renderPlayer() {
   $('#scName').textContent = r.name; $('#scName').title = r.name + (r.desc ? '\n' + r.desc : '');
   const ov = state.step < 0; // the overview: "Overview · N steps  Start →"
   $('#pOv').textContent = t('ovOverview'); $('#pOv').setAttribute('aria-pressed', String(ov)); $('#pOv').title = t('ovOverview') + ' (Home)';
-  $('#capNo').textContent = ov ? t('pkStepsN', list.length) : r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', state.step + 1, list.length);
-  $('#capNo').title = s ? s.label + (D.fns[s.fid] ? '\n' + fnInfo(s.fid).name : '') : list.length ? '' : t('noPlay');
+  // "Step 8 of 25 · <the step text>": a path is one story numbered through; its flow (the chapter) small in front
+  const cap = $('#capNo'), ch = s && r.fixed ? jvChapter() : '';
+  if (ov || !s) cap.textContent = t('pkStepsN', list.length);
+  else cap.innerHTML = (ch ? `<small class="ch">${esc(cut(ch, 30))} ·</small> ` : '') + esc(t('stepOf', state.step + 1, list.length)) + (s.label ? ` · <span class="sl">${esc(cut(s.label, 40))}</span>` : '');
+  cap.title = s ? (ch ? ch + '\n' : '') + s.label + '\n' + actionAt(state.step).full : list.length ? '' : t('noPlay');
   $('#pPrev').disabled = ov;
   $('#pStep').textContent = ov && list.length ? t('ovStart') + ' →' : '→';
   $('#pStep').classList.toggle('primary', ov && !!list.length);
   $('#pStep').disabled = !list.length || (state.step >= list.length - 1 && !br && !(fe && fe.jump));
-  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').textContent = '‹ ' + t('backToMap'); $('#pClose').title = t('closeRun') + ' (Esc)';
+  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; // "‹ <where Esc goes>": the page, the scenario step, the module the scenario was opened from; the map by default
+  const bk = typeof navBackLabel === 'function' ? navBackLabel() : '';
+  $('#pClose').textContent = '‹ ' + cut(bk || t('backToMap'), 40); $('#pClose').title = bk ? t('navBack', bk) : t('closeRun') + ' (Esc)';
   showChoice(br);
   if (!br) showPlate();
   if (!br && state.exitText && state.step === list.length - 1) {
@@ -575,6 +791,11 @@ function showPlate() {
   const c = $('#choice'); c.classList.add('on');
   H('span', { class: 'jv-plate ' + p.tone, title: p.text }, c, (p.kind ? jvIcon(p.kind) : '') + esc(cut(p.text, 60)));
   if (p.jump) { const b = H('button', { class: 'pbtn', title: t('jvGoTip') }, c, '↪ ' + esc(cut(t('jvGo'), 30))); b.onclick = () => jvJump(); }
+}
+// the tooltip of a step number: "Step k: <what it does>", the rest of what it does, then the step text
+function stepTip(i) {
+  const lines = actionAt(i).full.split('\n').filter(Boolean), lab = stepLabel(i);
+  return t('pathStep', i + 1, lines[0] || lab) + (lines.length > 1 ? '\n' + lines.slice(1).join('\n') : '') + (lab && lines.length && lab !== lines[0] ? '\n' + lab : '');
 }
 function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = state.run.segs[it.seg].flow; return (fl && fl.labels && fl.labels[it.fid]) || fnInfo(it.fid).name; }
 
@@ -591,11 +812,17 @@ function loadRun(key) {
   bus.emit('flow', state.run); bus.emit('step', null);
 }
 // openRun(key): open a scenario on its overview (what it does, the whole path on the map); the steps by hand
+// Opening is a step down (nav.js): Esc comes back to where it was opened from; the diagram zooms in from that place.
 async function openRun(key) {
+  const down = !BACK.restoring && (!state.run || state.run.key !== key);
+  if (down) navPush();
+  const from = down ? navFrom() : null;
   if (state.view !== 'map') setView('map');
   for (let i = 0; i < 40 && state.busy; i++) await sleep(100);
-  loadRun(key);
+  state.navZoom = down;
+  try { loadRun(key); } finally { state.navZoom = false; }
   if (state.run) showOverview();
+  if (down && state.run) navZoom(SC()[state.level], from, 'in');
 }
 function closeRun() {
   if (!state.run) return;
@@ -622,7 +849,7 @@ function previewRun(key) {
 
 Object.assign(AM, {
   play: {
-    preview: previewRun,
+    preview: previewRun, action: stepAction,
     load: loadRun, open: openRun, close: closeRun, step: doStep, stepIn, stepOut, reset: resetRun, playFrom,
     go: (i) => { if (state.busy || !state.run) return; state.step = Math.max(0, Math.min(runList().length - 1, i)); trimSegs(); return replay(); },
     choose: (b) => takeBranch(b), branches: () => (atBranch() ? branchesHere() : null),
