@@ -1,5 +1,5 @@
 /* playback.js — scenarios: a run of steps through the map levels, branches (continue in another flow or
- * exit), effects and status badges, the scenario bar. A scenario is opened from ⌘K (nav.js) and goes only by
+ * exit), effects and status badges, the scenario bar. A scenario is opened from a tab (nav.js) or a card and goes only by
  * hand: → / ← or the bar's arrows. There is no auto play and nothing opens by itself.
  *
  * A run is {key, name, desc, actor, exit, segs: [{flow|null, steps: [fid]}]}; segs grow when a branch
@@ -77,7 +77,13 @@ function runList() {
 }
 const runFids = () => runList().map((x) => x.fid);
 const lastSeg = () => (state.run ? state.run.segs[state.run.segs.length - 1] : null);
-const branchesHere = () => { const sg = lastSeg(); return state.run && !state.run.fixed && sg && sg.flow && (sg.flow.branches || []).length ? sg.flow.branches : null; };
+// branches without repeats: the same condition into the same flow (or with the same outcome) is one branch
+const uniqBr = (bs) => { const seen = new Set(); return (bs || []).filter((b) => { const k = (b.cond || '') + '\0' + (b.flow || '') + '\0' + (b.flow ? '' : b.text || ''); if (seen.has(k)) return false; seen.add(k); return true; }); };
+// every branch of the last flow of a flow run (not of a path or a variant: those go as written)
+const allBranchesHere = () => { const sg = lastSeg(); return state.run && !state.run.fixed && sg && sg.flow && (sg.flow.branches || []).length ? uniqBr(sg.flow.branches) : null; };
+// the branches the run stops at: those that go on in another flow; the folded outcomes (branch.fold) only when the
+// "+N branches" mark is unfolded. None — the run simply ends.
+const branchesHere = () => { const all = allBranchesHere(); if (!all) return null; const v = all.filter((b) => !b.fold || PATH.open.has('end')); return v.length ? v : null; };
 // the run waits for a branch choice: at its last step, the last flow has branches, none taken yet
 const atBranch = () => { const n = runList().length; return n > 0 && state.step === n - 1 && !!branchesHere() && !state.exitText; };
 function runActor() {
@@ -244,9 +250,10 @@ async function doStep(delta = 1) {
 // stepping back before a taken branch forgets it
 function trimSegs() {
   state.exitText = null;
-  const r = state.run; let start = 0;
+  const r = state.run, n0 = r.segs.length; let start = 0;
   // a fixed run (path, variant) keeps its flows; only the flow added by a jump from a variant is dropped
   for (let si = 0; si < r.segs.length; si++) { if (si > 0 && state.step < start && (!r.fixed || r.segs[si].extra)) { r.segs.length = si; break; } start += r.segs[si].steps.length; }
+  if (r.segs.length !== n0) applyFocus(); // the dropped flow's participants leave the map
 }
 async function replay() { if (state.busy) return; state.busy = true; try { await showStep(); } finally { state.busy = false; } }
 async function stepIn() {
@@ -275,6 +282,7 @@ function takeBranch(b) {
   const target = b.flow && D.flowById[b.flow];
   if (target) {
     state.run.segs.push({ flow: target, steps: flowSteps(target), via: b });
+    applyFocus(); // the new flow brings its own participants onto the map
     doStep(1);
   } else {
     state.exitText = b.text || b.cond;
@@ -285,6 +293,7 @@ function takeBranch(b) {
 async function resetRun() {
   if (!state.run || state.busy) return;
   state.run = buildRun(state.run.key); state.step = -1; state.exitText = null;
+  applyFocus();
   await doStep(1);
 }
 
@@ -295,7 +304,8 @@ async function resetRun() {
  * click on a leg (or its number) goes to its step, a click on the node of the next step steps forward, a pale
  * branch leg at a fork takes that branch. Nothing moves by itself: the overlay is redrawn by ← / → only. */
 addI18n({ ru: { pathStep: (k, s) => 'Шаг ' + k + ': ' + s, pathBranch: (c) => 'Ветка: ' + c }, en: { pathStep: (k, s) => 'Step ' + k + ': ' + s, pathBranch: (c) => 'Branch: ' + c } });
-const PATH = { legs: [] };
+addI18n({ ru: { brMore: (n, p) => '+' + n + ' ' + p(['ветка', 'ветки', 'веток']), brFold: '− свернуть ветки' }, en: { brMore: (n) => '+' + n + (n === 1 ? ' branch' : ' branches'), brFold: '− fold the branches' } });
+const PATH = { legs: [], open: new Set() }; // open: the "+N branches" marks unfolded ('end' or '<seg>:<fid>')
 // node ids of step i on the given level (sc: sys | map | fv); null when the step is not on it
 function pathNode(level, i) {
   const s = stepAt(i); if (!s || s.planned) return null;
@@ -387,31 +397,51 @@ function drawPath() {
     }
   }
   if (lvl === 0 && sc.nodes.svc) markNode('svc', 'cur');
-  // a fork at the current step: the branches pale, a click takes one
-  const brs = atBranch() ? branchesHere() : null;
-  if (brs && here) {
-    brs.forEach((b, k) => {
-      const tf = b.flow && D.flowById[b.flow], first = tf && flowSteps(tf).find((f) => D.fns[f]);
-      let to = null;
-      if (first && lvl === 1) to = unitFor(D.fns[first].module);
-      else if (first && lvl === 2) to = fv.nodes[first] ? first : fv.ports['out:' + D.fns[first].module] ? 'port:out:' + D.fns[first].module : null;
-      const ra = pathRect(sc, here), rb = to && pathRect(sc, to);
-      const grp = S_('g', { class: 'pleg br' }, g), lab = cut(b.cond || b.text || '?', 22);
-      let mid;
-      if (rb && to !== here) {
-        const d = hop(ra, rb, 0.18 + k * 0.08);
-        const v = S_('path', { d, class: 'v', 'marker-end': 'url(#arrM)' }, grp); S_('path', { d, class: 'hit' }, grp);
-        mid = v.getPointAtLength(v.getTotalLength() / 2);
-      } else mid = { x: ra.x + ra.w + 16, y: ra.y + 12 + k * 26 }; // the branch ends here: a pill next to the node
-      const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = lab.length * 6.6 + 18;
-      S_('rect', { x: mid.x - (rb && to !== here ? w / 2 : 0), y: mid.y - 10, width: w, height: 20, rx: 10 }, num);
-      S_('text', { x: mid.x + (rb && to !== here ? 0 : w / 2), y: mid.y + 4, 'text-anchor': 'middle' }, num, (tf ? '↪ ' : '⏹ ') + lab);
-      S_('title', {}, grp, t('pathBranch', (b.cond || '') + (b.text ? ' — ' + b.text : '') + (tf ? ' → ' + tf.name : '')));
-      grp.addEventListener('click', (e) => { e.stopPropagation(); takeBranch(b); });
-    });
-  }
+  if (here) drawBranches(sc, g, lvl, here, zoomAround);
   // the glow of the current leg plays once, when it appears
   g.querySelectorAll('.pleg.cur').forEach((x) => x.classList.add('flash'));
+}
+// branches at the current step. At the fork that ends a flow run the branches that go on in another flow are pale
+// legs / pills, a click takes one; the outcomes that end the story (branch.fold) are folded into one "+N branches"
+// mark next to the node, a click unfolds them (and folds them back). On any other step (and in a path) the forks
+// of the step are only that mark: unfolded, their pills say what happens, the path goes on as written.
+function drawBranches(sc, g, lvl, here, zoomAround) {
+  const s = curStep(); if (!s) return;
+  const all = state.step === runList().length - 1 && !state.exitText ? allBranchesHere() : null;
+  const key = all ? 'end' : s.seg + ':' + s.fid;
+  const shown = all ? all.filter((b) => !b.fold) : [];
+  const folded = all ? all.filter((b) => b.fold) : uniqBr(((s.flow && s.flow.branches) || []).filter((b) => b.at === s.fid));
+  const open = PATH.open.has(key), list = open ? shown.concat(folded) : shown;
+  const ra = pathRect(sc, here); if (!ra) return;
+  let row = 0;
+  list.forEach((b, k) => {
+    const live = !!all; // only the fork at the end of a flow run can be taken
+    const tf = b.flow && D.flowById[b.flow], first = tf && flowSteps(tf).find((f) => D.fns[f]);
+    let to = null;
+    if (first && lvl === 1) to = unitFor(D.fns[first].module);
+    else if (first && lvl === 2) to = fv.nodes[first] ? first : fv.ports['out:' + D.fns[first].module] ? 'port:out:' + D.fns[first].module : null;
+    const rb = to && pathRect(sc, to), leg = rb && to !== here;
+    const grp = S_('g', { class: 'pleg br' + (live ? '' : ' end') }, g), lab = cut(b.cond || b.text || '?', 22);
+    let mid;
+    if (leg) {
+      const d = hop(ra, rb, 0.18 + k * 0.08);
+      const v = S_('path', { d, class: 'v', 'marker-end': 'url(#arrM)' }, grp); S_('path', { d, class: 'hit' }, grp);
+      mid = v.getPointAtLength(v.getTotalLength() / 2);
+    } else mid = { x: ra.x + ra.w + 16, y: ra.y + 12 + row++ * 26 }; // the branch ends here: a pill next to the node
+    const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = lab.length * 6.6 + 18;
+    S_('rect', { x: mid.x - (leg ? w / 2 : 0), y: mid.y - 10, width: w, height: 20, rx: 10 }, num);
+    S_('text', { x: mid.x + (leg ? 0 : w / 2), y: mid.y + 4, 'text-anchor': 'middle' }, num, (tf ? '↪ ' : '⏹ ') + lab);
+    S_('title', {}, grp, t('pathBranch', (b.cond || '') + (b.text ? ' — ' + b.text : '') + (tf ? ' → ' + tf.name : '')));
+    grp.addEventListener('click', (e) => { e.stopPropagation(); if (live) takeBranch(b); });
+  });
+  if (!folded.length) return;
+  const lab = open ? t('brFold') : t('brMore', folded.length), w = lab.length * 6.4 + 18;
+  const at = { x: ra.x + ra.w + 16, y: ra.y + 12 + row * 26 };
+  const grp = S_('g', { class: 'pleg br fold' }, g), num = S_('g', { class: 'pnum', transform: zoomAround(at) }, grp);
+  S_('rect', { x: at.x, y: at.y - 10, width: w, height: 20, rx: 10 }, num);
+  S_('text', { x: at.x + w / 2, y: at.y + 4, 'text-anchor': 'middle' }, num, lab);
+  S_('title', {}, grp, folded.map((b) => (b.cond || '') + (b.text ? ' — ' + b.text : '')).join('\n'));
+  grp.addEventListener('click', (e) => { e.stopPropagation(); if (open) PATH.open.delete(key); else PATH.open.add(key); renderPlayer(); drawPath(); });
 }
 // a click on the map while a scenario is open: the node of the next step steps forward; true when it was taken
 function pathClick(e) {
@@ -478,9 +508,11 @@ function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = 
 // null closes the scenario. Nothing plays by itself: the steps go by → / ← only.
 function loadRun(key) {
   state.run = buildRun(key); state.step = -1; state.played = false; state.exitText = null;
+  PATH.open.clear();
   [sys, map, fv].forEach((x) => { if (x) { clearPlay(x.svg); x.fx.innerHTML = ''; } });
   clearPath();
-  if (fv && state.level === 2) { buildFns(fv.mod); fitFns(); }
+  // the map of the scenario: only its participants (map.js applyFocus); closing brings the full map back
+  if (!applyFocus(!!key) && fv && state.level === 2) { buildFns(fv.mod); fitFns(); }
   showChoice(false); renderPlayer(); renderCrumbs();
   bus.emit('flow', state.run); bus.emit('step', null);
 }

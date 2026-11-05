@@ -209,7 +209,8 @@ func TestLiveFlashVisibleAndPersistent(t *testing.T) {
 }
 
 // The minimal interface: walk, editor, the sequence dock and the scenario sheet stay in the sources but are not
-// put into the page; there is no auto play, no tabs, lists or language switch in the markup — one ⌘K field.
+// put into the page; there is no auto play, no search, lists or language switch in the markup — the header is the
+// name, the tabs of the through paths and ⋯.
 func TestMinimalInterface(t *testing.T) {
 	v := Viewer()
 	for _, name := range []string{"editor", "walk", "sequence", "sheet"} {
@@ -224,7 +225,7 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("%q missing from the page", s)
 		}
 	}
-	for _, id := range []string{`id="tabs"`, `id="listBtn"`, `id="flowsBtn"`, `id="walkBtn"`, `id="editBtn"`, `id="langSeg"`, `id="pAuto"`, `id="pSpeed"`, `id="btnAuto"`, `id="themeBtn"`, `id="panelBtn"`} {
+	for _, id := range []string{`id="q"`, `id="qpop"`, `id="search"`, `id="listBtn"`, `id="flowsBtn"`, `id="walkBtn"`, `id="editBtn"`, `id="langSeg"`, `id="pAuto"`, `id="pSpeed"`, `id="btnAuto"`, `id="themeBtn"`, `id="panelBtn"`} {
 		if strings.Contains(v, id) {
 			t.Errorf("%s must be gone from the markup", id)
 		}
@@ -234,7 +235,14 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("auto play left in the page: %q", s)
 		}
 	}
-	if strings.Count(v, `id="q"`) != 1 {
-		t.Error("the page must have exactly one ⌘K field")
+	for _, id := range []string{`id="tabs"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`} {
+		if strings.Count(v, id) != 1 {
+			t.Errorf("the page must have exactly one %s", id)
+		}
+	}
+	for _, s := range []string{"paletteItems", "setupSearch", "'k'"} {
+		if strings.Contains(v, s) {
+			t.Errorf("the search palette is left in the page: %q", s)
+		}
 	}
 }

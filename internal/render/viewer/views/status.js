@@ -88,7 +88,7 @@ function mountStatus(el) {
     if (AM.state.view === 'status') renderAll();
   };
   AM.bus.on('spec', redo); AM.bus.on('edit', redo);
-  // from ⌘K ({machine}) or another view ({machine, to}): show the machine, select the status when given
+  // from a card ({machine}) or another view ({machine, to}): show the machine, select the status when given
   AM.bus.on('status:focus', (f) => { V.ent = f.machine; V.hot = null; AM.select(f.to ? { t: 'status', entity: f.machine, id: f.to } : null); renderAll(); });
   renderAll();
 }
@@ -100,7 +100,7 @@ function renderAll() {
   }
   renderList(); renderLegend(); V.fit.textContent = '⤢ ' + AM.t('stFit');
   const cur = machines().find((m) => m.ent === V.ent);
-  V.title.innerHTML = cur ? `${AM.esc(cur.ent)}<small>${AM.esc(AM.t('stCounts', cur.states.length, cur.trs.length))} · ⌘K</small>` : '';
+  V.title.innerHTML = cur ? `${AM.esc(cur.ent)}<small>${AM.esc(AM.t('stCounts', cur.states.length, cur.trs.length))}</small>` : '';
   renderDiagram();
 }
 

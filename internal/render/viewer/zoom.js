@@ -108,7 +108,7 @@ AM.zoom = { scaleWheel, onGesture, isZoomWheel, get on() { return AZ.on; }, DIVE
 function auditPanels(label) {
   const act = $('#stage > .view.on');
   const seen = (el) => (el.checkVisibility ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : getComputedStyle(el).visibility !== 'hidden');
-  const open = [act, $('header'), $('footer'), $('aside'), SR.open && $('#qpop'), $('svg[aria-hidden]')].filter(Boolean);
+  const open = [act, $('header'), $('footer'), $('aside'), $('#crumbs'), $('svg[aria-hidden]')].filter(Boolean);
   const bad = [], name = (el) => (el.id ? '#' + el.id : '') + (el.getAttribute('class') ? '.' + String(el.getAttribute('class')).split(/\s+/).join('.') : '') || el.tagName;
   const add = (el, why) => { const r = el.getBoundingClientRect(); if (r.width > 1 && r.height > 1 && seen(el)) bad.push(why + ': ' + el.tagName.toLowerCase() + name(el)); };
   $$('body *').forEach((el) => {
@@ -116,7 +116,6 @@ function auditPanels(label) {
     const pos = getComputedStyle(el).position;
     if (el.closest('.view')) add(el, 'inactive view'); else if (pos === 'absolute' || pos === 'fixed') add(el, pos);
   });
-  if (!SR.open && !$('#qpop').hidden) bad.push('search popup open while closed');
   if (state.view === 'map' && !state.busy) $$('#v-map .scene').forEach((el, i) => { if (i !== state.level && !el.classList.contains('hidden')) bad.push('scene sc' + i + ' shown on level ' + state.level); });
   if (bad.length) { const u = Array.from(new Set(bad)); console.warn('[archmap debug] foreign elements after ' + label + ':\n' + u.slice(0, 12).join('\n')); (window.__auditWarns = window.__auditWarns || []).push({ label, bad: u }); return u; }
   return [];

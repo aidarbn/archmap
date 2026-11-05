@@ -172,7 +172,7 @@
   }
 
   /* ---------- toolbar ---------- */
-  // the minimal view: no filters of its own — an endpoint is found with ⌘K, "only changed" is a ⌘K command too
+  // the minimal view: no filters of its own — "only changed" is a command of the ⋯ menu
   // (the global filter event below); the bar keeps the count only
   function toolbar() {
     const bar = ui.bar; bar.innerHTML = '';

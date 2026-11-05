@@ -353,7 +353,7 @@ function paintMatrix() {
 }
 
 /* ---------- the bar ---------- */
-// The minimal Data view is the schema only: tables are found with ⌘K, the zoom is the wheel / pinch. The bar holds
+// The minimal Data view is the schema only: a table opens from a card (`data:focus`), the zoom is the wheel / pinch. The bar holds
 // just the effect badges of the current scenario step. The endpoints × tables matrix stays in the code (S.tab = 'mx'
 // is not reachable from the interface).
 function buildToolbar() {

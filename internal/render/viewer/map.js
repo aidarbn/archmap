@@ -2,7 +2,7 @@
  * module groups for large repos, selection, drill-in/out with camera animation, crumbs, minimap. */
 
 let sys = null, map = null, fv = null;
-const INSET = 12; // px kept free at the top of every scene (the crumbs live in the header now)
+const INSET = 34; // px kept free at the top of every scene: the crumbs sit over its top-left corner
 // the sequence dock (views/sequence.js) covers a strip at the bottom or on the right of the map: cameras fit into the rest
 const DOCK = { b: 0, r: 0 };
 const dockInsets = (cam) => { cam.insetBottom = DOCK.b; cam.insetRight = DOCK.r; };
@@ -83,6 +83,7 @@ function computeUnits() {
   units = []; U = {}; unitOf = {};
   const add = (u) => { u.chg = chgOf(u.mods); units.push(u); U[u.id] = u; u.mods.forEach((m) => { unitOf[m] = u.id; }); };
   const modUnit = (m) => add({ id: m, kind: 'm', mods: [m], n: (D.byMod[m] || []).length });
+  if (FOCUS) { FOCUS.modList.forEach(modUnit); return; } // a scenario is open: its modules only, no groups
   if (!G.on) { D.allMods.forEach(modUnit); return; }
   const visit = (n) => {
     if (n.mods.length === 1 && n.parent) { modUnit(n.mods[0]); return; }
@@ -107,7 +108,7 @@ function unitLayer(u) {
 const unitTitle = (u) => (u.kind === 'g' ? (u.node.path || t('root')) + '/…' : modLabel(u.id));
 // expand the groups on the path to module m; true when the map changed
 function revealMod(m) {
-  const n = G.on && G.modNode[m];
+  const n = !FOCUS && G.on && G.modNode[m];
   if (!n || unitOf[m] === m) return false;
   let changed = false, deepest = null;
   for (let a = n.mods.length > 1 ? n : n.parent; a && a.parent; a = a.parent) if (!isOpen(a)) { G.userOpen.add(a.id); changed = true; if (!deepest) deepest = a; }
@@ -116,6 +117,74 @@ function revealMod(m) {
   return changed;
 }
 const unitFor = (m) => (map && map.nodes[m] ? m : unitOf[m] || null);
+
+/* ===================== scenario focus: the map of one scenario =====================
+ * While a scenario (a tab's path or any other run) is open the map shows only what takes part in it: the actors that
+ * start its flows, the modules and functions of its steps, the outside systems its steps call, the database when a
+ * step reads or writes a table, the queue when a step is a hand-off. Everything else is not drawn at all. The same
+ * levels, cards and arrows as the full map; on the modules level the participants keep their layer bands and go
+ * left to right in the order the scenario reaches them. "Map" (or ✕) brings the full map back where it was. */
+let FOCUS = null; // {key, mods: Set, modList: [module by first step], fids: Set, acts: Set, exts: Set, actTo: {actor: Set(module)}, extFrom: {ext: Set(module)}}
+let PRE = null;   // the full map before the focus: level, module, function and cameras
+const shownActors = () => (FOCUS ? D.actors.filter((a) => FOCUS.acts.has(a.id)) : D.actors);
+const shownExts = () => (FOCUS ? D.externals.filter((x) => FOCUS.exts.has(x.id)) : D.externals);
+function computeFocus() {
+  const L_ = state.run ? runList() : [];
+  if (!L_.length) return null;
+  const mods = new Set(), modList = [], fids = new Set(), acts = new Set(), exts = new Set(), actTo = {}, extFrom = {};
+  const q = D.externals.find((x) => x.kind === 'queue'), dbs = D.externals.filter((x) => x.kind === 'db');
+  const link = (o, k, m) => { if (m && mods.has(m)) (o[k] = o[k] || new Set()).add(m); };
+  for (let i = 0; i < L_.length; i++) {
+    const s = stepAt(i); if (!s) continue;
+    const m = s.mod && D.allMods.includes(s.mod) ? s.mod : null;
+    if (m && !mods.has(m)) { mods.add(m); modList.push(m); }
+    if (D.fns[s.fid]) fids.add(s.fid);
+    if (s.actor) { acts.add(s.actor.id); link(actTo, s.actor.id, m); }
+    s.exts.forEach((x) => { exts.add(x.id); link(extFrom, x.id, m); });
+    if (s.kind === 'async' && q) { exts.add(q.id); link(extFrom, q.id, s.prev && D.fns[s.prev] ? D.fns[s.prev].module : m); }
+    const writes = (s.data || []).length || (s.effects || []).some((e) => /^(INSERT|UPDATE|DELETE|UPSERT|SELECT|READ)\b/i.test(e));
+    if (writes && dbs.length) {
+      const own = dbs.filter((x) => (x.functions || []).includes(s.fid) || (x.modules || []).includes(s.mod));
+      (own.length ? own : dbs.length === 1 ? dbs : []).forEach((x) => { exts.add(x.id); link(extFrom, x.id, m); });
+    }
+  }
+  // the actor of a through path, by name, when its first step is not one of the actor's entry points
+  const an = state.run.actor && String(state.run.actor).trim().toLowerCase();
+  const byName = an && D.actors.find((a) => actorName(a).trim().toLowerCase() === an);
+  if (byName && !acts.size) { acts.add(byName.id); link(actTo, byName.id, modList[0]); }
+  if (!mods.size) return null;
+  const key = [modList.join(','), Array.from(fids).sort().join(','), Array.from(acts).sort().join(','), Array.from(exts).sort().join(',')].join('|');
+  return { key, mods, modList, fids, acts, exts, actTo, extFrom };
+}
+// applyFocus(): the open run changed (opened, a branch taken, closed) — rebuild the levels for its participants.
+// Opening goes to the modules level; closing returns the full map to the level and cameras it had before.
+// toModules: a new scenario was opened — start on the modules level even when another one was open.
+function applyFocus(toModules) {
+  const nf = computeFocus();
+  if ((nf ? nf.key : '') === (FOCUS ? FOCUS.key : '') && !(toModules && nf && state.level !== 1)) { FOCUS = nf; return false; }
+  const entering = !FOCUS && nf, leaving = FOCUS && !nf;
+  if (entering) PRE = { level: state.level, mod: state.mod, fn: state.fn, sys: sys && { ...sys.cam.vb }, map: map && { ...map.cam.vb }, fv: fv && { mod: fv.mod, vb: { ...fv.cam.vb } } };
+  FOCUS = nf;
+  buildSystem(); buildMap(); fitSys(); fitMap();
+  let lvl = state.level;
+  if (entering || (toModules && nf)) lvl = 1;
+  else if (leaving && PRE) {
+    lvl = PRE.level; state.mod = PRE.mod; state.fn = PRE.fn;
+    if (PRE.sys) sys.cam.set(PRE.sys);
+    if (PRE.map) map.cam.set(PRE.map);
+  } else if (lvl >= 2 && !(state.mod && nf.mods.has(state.mod))) lvl = 1;
+  if (lvl >= 2 && !(state.mod && D.byMod[state.mod])) lvl = 1;
+  if (lvl >= 2) { buildFns(state.mod); fitFns(); if (leaving && PRE && PRE.fv && PRE.fv.mod === state.mod) fv.cam.set(PRE.fv.vb); }
+  if (lvl === 3) { if (state.fn && D.fns[state.fn]) buildCode(state.fn, null, defaultFrames(state.fn)); else lvl = 2; }
+  if (leaving) PRE = null;
+  state.level = lvl;
+  SC().forEach((e, i) => e.classList.toggle('hidden', i !== lvl));
+  const sc = SC()[lvl];
+  if (sc && sc.animate && !RM) sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' });
+  if (state.sel && state.sel.t !== 'step') { state.sel = null; renderPanel(); }
+  afterLevel();
+  return true;
+}
 
 /* ===================== selection helpers ===================== */
 function clearSel(svg) {
@@ -166,9 +235,9 @@ function extLabel(x) {
 // ("61 · Админский сервис…"), else the count of handles / the kind
 function sysSub(p, n) {
   if (p.kind === 'actor' || p.actor) {
-    const a = p.a, d = actorDesc(a).desc;
-    if (!d) return cut(actorSub(a), n);
-    return cut((a.eps.length ? a.eps.length + ' · ' : '') + d, n);
+    // the count is of the scenarios the lists show (technical ones are left out — flow.hidden)
+    const a = p.a, d = actorDesc(a).desc, k = visibleOfActor(a).length;
+    return cut((k ? t('scenN', k) + ' · ' : '') + (d || actorSub(a)), n);
   }
   return cut(extDesc(p.ext) || t('kinds')[p.ext.kind] || p.ext.kind, n);
 }
@@ -189,13 +258,13 @@ const SIDES = { top: ['auth'], right: ['payment', 'pos', 'http_api', 'messaging'
 function sysLayout() {
   const P = {}, labels = [];
   // actors: left column
-  const acts = D.actors, AH = 64, AG = 46;
+  const acts = shownActors(), AH = 64, AG = 46;
   const ah = acts.length * (AH + AG) - AG;
   acts.forEach((a, i) => { P[a.id] = { x: -730, y: -ah / 2 + i * (AH + AG), w: 200, h: AH, kind: 'actor', a }; });
   if (acts.length) labels.push({ x: -630, y: -ah / 2 - 22, text: t('kinds').actor });
   // externals: kinds to sides
   const byKind = {};
-  D.externals.forEach((x) => { const k = Object.values(SIDES).some((s) => s.includes(x.kind)) ? x.kind : 'other'; (byKind[k] = byKind[k] || []).push(x); });
+  shownExts().forEach((x) => { const k = Object.values(SIDES).some((s) => s.includes(x.kind)) ? x.kind : 'other'; (byKind[k] = byKind[k] || []).push(x); });
   const side = { top: [], right: [], bottom: [] };
   for (const s in SIDES) SIDES[s].forEach((k) => { if (byKind[k]) side[s].push(k); });
   const colH = (ks) => ks.reduce((h, k) => h + 30 + byKind[k].length * 66, 0);
@@ -283,8 +352,8 @@ function buildSystem() {
     }
     sys.edges.push({ a, b, path, lab: lb, text: lab, mod, mods });
   };
-  D.actors.forEach((a) => edge(a.id, 'svc', actorLabel(a), null, Array.from(a.mods)));
-  D.externals.forEach((x) => edge('svc', x.id, extLabel(x), (x.modules || [])[0], x.modules || []));
+  shownActors().forEach((a) => edge(a.id, 'svc', actorLabel(a), null, Array.from(a.mods)));
+  shownExts().forEach((x) => edge('svc', x.id, extLabel(x), (x.modules || [])[0], x.modules || []));
   sys.extent = bbox(Object.values(sys.nodes).map((n) => n.r).concat(labels.map((l) => ({ x: l.x - 60, y: l.y - 14, w: 120, h: 20 }))));
   wireSelect(svg, sys.cam, selectSys, drillFromSys);
 }
@@ -333,9 +402,11 @@ function buildMap() {
   }));
   const E = Array.from(w, ([k, c]) => { const [a, b] = k.split('\0'); return { a, b, w: c, dash: false }; });
   const present = LAYERS.filter((l) => units.some((u) => unitLayer(u) === l));
-  const cols = Math.max(5, Math.min(8, Math.ceil(Math.sqrt(units.length))));
+  // a scenario: one row per band, in the order the scenario reaches the modules (no reordering sweeps)
+  const perBand = present.map((l) => units.filter((u) => unitLayer(u) === l).length);
+  const cols = FOCUS ? Math.max(1, Math.min(6, ...perBand)) : Math.max(5, Math.min(8, Math.ceil(Math.sqrt(units.length))));
   const lay = layered(units.map((u, i) => ({ id: u.id, layer: present.indexOf(unitLayer(u)), order: i })), E.map((e) => [e.a, e.b]),
-    { w: CW, h: CH, gx: GX, gy: GY, cols, x0: LBL, y0: 120, head: 40, gap: 22 });
+    { w: CW, h: CH, gx: FOCUS ? 44 : GX, gy: GY, cols, x0: LBL, y0: 120, head: 40, gap: 22, sweeps: FOCUS ? 0 : 8 });
   const pos = lay.pos, W = LBL + lay.width + 20;
   const bands = {};
   lay.bands.forEach((b) => { bands[present[b.layer]] = { y: b.y, h: b.h }; });
@@ -350,14 +421,14 @@ function buildMap() {
   const ux = (ids) => { const xs = ids.map((id) => pos[id] && pos[id].x + CW / 2).filter((v) => v != null).sort((a, b) => a - b); return xs.length ? xs[xs.length >> 1] : null; };
   const uy = (ids) => { const ys = ids.map((id) => pos[id] && pos[id].y + CH / 2).filter((v) => v != null).sort((a, b) => a - b); return ys.length ? ys[ys.length >> 1] : null; };
   // actors (top row), placed over their entry modules
-  const acts = D.actors.map((a) => ({ a, tg: uniq(Array.from(a.mods).map((m) => unitOf[m]).filter(Boolean)) }));
+  const acts = shownActors().map((a) => ({ a, tg: uniq(Array.from(FOCUS ? FOCUS.actTo[a.id] || [] : a.mods).map((m) => unitOf[m]).filter(Boolean)) }));
   acts.forEach((o) => { o.x = ux(o.tg); if (o.x == null) o.x = LBL + lay.width / 2; });
   acts.sort((p, q) => p.x - q.x);
   let lastX = -1e9;
   acts.forEach((o) => { o.x = Math.max(o.x - 100, lastX + 214); lastX = o.x; pos[o.a.id] = { x: o.x, y: 30, w: 200, h: 50, actor: true, a: o.a }; });
   // externals (right column), placed level with their adapter modules
   const EX = W + 90;
-  const exts = D.externals.map((x) => ({ x, tg: uniq((x.modules || []).map((m) => unitOf[m]).filter(Boolean)) }));
+  const exts = shownExts().map((x) => ({ x, tg: uniq((FOCUS ? Array.from(FOCUS.extFrom[x.id] || []).concat((x.modules || []).filter((m) => FOCUS.mods.has(m))) : x.modules || []).map((m) => unitOf[m]).filter(Boolean)) }));
   exts.forEach((o) => { o.y = uy(o.tg); if (o.y == null) o.y = 200; });
   exts.sort((p, q) => p.y - q.y);
   let lastY = -1e9;
@@ -554,7 +625,9 @@ function buildFns(mod) {
   const g = S_('g', {}, svg), ge = S_('g', {}, g), gn = S_('g', {}, g), fx = S_('g', {}, g);
   fv = { svg, g, fx, mod, nodes: {}, edges: [], ports: {} };
   const flowSet = new Set(runFids());
-  const all = (D.byMod[mod] || []).slice().sort((a, b) => fnScore(b, flowSet) - fnScore(a, flowSet) || (a < b ? -1 : 1));
+  // a scenario is open: only the functions of this module that are its steps (all of them when it has none here)
+  const own = FOCUS ? (D.byMod[mod] || []).filter((k) => FOCUS.fids.has(k)) : [];
+  const all = (own.length ? own : D.byMod[mod] || []).slice().sort((a, b) => fnScore(b, flowSet) - fnScore(a, flowSet) || (a < b ? -1 : 1));
   const limit = state.fnAll ? 80 : 16;
   let shown = all.slice(0, limit);
   const must = [state.fn, curStep() && curStep().fid].filter((x) => x && D.fns[x] && D.fns[x].module === mod && !shown.includes(x));
@@ -583,8 +656,9 @@ function buildFns(mod) {
   const outP = {}, inP = {};
   shown.forEach((k) => {
     const f = fnInfo(k);
-    f.out.forEach((o) => { const om = D.fns[o].module; if (om !== mod) (outP[om] = outP[om] || []).push([k, o]); });
-    f.in.forEach((o) => { const om = D.fns[o].module; if (om !== mod) (inP[om] = inP[om] || []).push([o, k]); });
+    const part = (om) => !own.length || FOCUS.mods.has(om); // in a scenario: ports to its modules only
+    f.out.forEach((o) => { const om = D.fns[o].module; if (om !== mod && part(om)) (outP[om] = outP[om] || []).push([k, o]); });
+    f.in.forEach((o) => { const om = D.fns[o].module; if (om !== mod && part(om)) (inP[om] = inP[om] || []).push([o, k]); });
   });
   const cs = curStep();
   const keepPort = cs && cs.prev && D.fns[cs.prev] && D.fns[cs.prev].module !== mod && D.fns[cs.fid] && D.fns[cs.fid].module === mod ? D.fns[cs.prev].module : null;
@@ -749,7 +823,11 @@ function focusNode(f) {
 }
 function fitMap(focus) {
   const id = focusNode(focus);
-  if (id && map.pos[id]) { const r = map.pos[id]; map.cam.fit({ x: r.x - 380, y: r.y - 240, w: r.w + 760, h: r.h + 480 }, 20); }
+  if (FOCUS) { // the whole scenario at once, not blown up when it is small, clear of the step card on the right
+    const keep = map.cam.insetRight; map.cam.insetRight = Math.max(keep, (PNL.w || 380) + 20);
+    map.cam.fit({ ...map.extent }, 40, 1150); map.cam.insetRight = keep;
+  }
+  else if (id && map.pos[id]) { const r = map.pos[id]; map.cam.fit({ x: r.x - 380, y: r.y - 240, w: r.w + 760, h: r.h + 480 }, 20); }
   else map.cam.fitTop({ ...map.extent }, 40);
 }
 function fitFns() { fv.cam.fit(fv.extent, 10); }
@@ -870,6 +948,7 @@ function fitCur() { if (state.level === 0) sys.cam.animTo(sys.extent, 30, 0, 300
 function rebuildMap(keep) {
   const lvl = state.level, mod = state.mod, fn = state.fn;
   const cams = keep ? { sys: sys && { ...sys.cam.vb }, map: map && { ...map.cam.vb }, fv: fv && { mod: fv.mod, vb: { ...fv.cam.vb } } } : null;
+  FOCUS = computeFocus(); if (!FOCUS) PRE = null;
   setupGroups();
   buildSystem(); buildMap();
   fitSys(); fitMap();
