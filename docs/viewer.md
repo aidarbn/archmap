@@ -182,8 +182,10 @@ logged and do not break the page.
   `edges`, `extent`), `AM.map.functions`.
 - **Diagrams for other canvases** (the page frames use them): `AM.play.preview(key)` → `{run, steps}` — a run and all its
   step objects without opening it (`state.run` stays); `AM.status` (`views/status.js`): `machine(entity)`,
-  `draw(svgOrG, m, hooks)` → `{edges, nodes, bounds}` (the drawing of the Statuses view; hooks `trClick`, `trDbl`,
-  `nodeClick`, `nodeDbl`, `nodeDown`, all optional), `hot(m, step)`, `paint(drawn, hot)`; `AM.dataER` (`views/data.js`):
+  `plan(m)` (`planMachine`, see Statuses below), `draw(svgOrG, m, hooks)` → `{edges: [{x, xs, g, group?, create?}],
+  nodes, bounds, plan}` (the drawing of the Statuses view; hooks `trClick(e, x, g, edge)`, `trDbl`, `nodeClick`,
+  `nodeDbl`, `nodeDown`, all optional; `compact: true` — a small frame: no captions on the arrows), `sel(m, x, edge)` —
+  the selection of a drawn arrow (`{t: 'sttr', …}`), `hot(m, step)`, `paint(drawn, hot)`; `AM.dataER` (`views/data.js`):
   `has(table)`, `layout(names)` → `{pos, w, h, names}`, `draw(svg, layout, names, {click})` → `{cards, edges, by}` (the
   drawing of the Data view), `paint(drawn, hot)`, `stepTables(step)` → `Map table → {ops, fields}`.
 - **Playback** `AM.play.load(key)` (`'flow:<i>'`, `'journey:<id>'`, `'variant:<id>'`, `'fn:<fid>'`, `'changes'`,
@@ -291,7 +293,37 @@ remove_transition add_flow remove_flow add_step remove_step move_step add_alt re
 fields as in docs/spec.md. Undo/redo (Cmd+Z, Shift+Cmd+Z) replays the inverse operations (computed against the model before
 the op); a text save clears the stacks. Hand-written `.arch` text: `PUT /spec/file`, errors by line.
 
-Statuses (`views/status.js`): transitions get `st` = `both` (described and in code), `code` (`drift: undeclared`, orange)
+Statuses (`views/status.js`) — the layout comes from the code, annotations only caption. `planMachine(m, {text, short,
+group})` is pure (no DOM; `internal/render/stplan_test.go` runs it in node on table cases) and returns where things go:
+`create` — the creations (`нет -> x` of `arch:state`, a transition with `insert` — INSERT … VALUES / a new object);
+`initial` — the created statuses, plus (when no creation is declared with `нет`) the statuses nothing leads into
+but that lead on; `kind` per status — `fail` / `expired` / `ok` by the name (`not_…` is no success), a neutral final
+whose every function is a failure handler (`fail*`, `cancel*` …) is `fail`; `terminal` — no way out, or named final by
+the code (`StateMachine.final`: the case list of `IsFinal` / `IsTerminal…`) or by the spec; `main` — the longest simple
+path from an initial status to the best end (a successful final, then a neutral final, then a successful / neutral
+status; failures are passed through only when that reaches a better end); `side` — the other non-final statuses,
+with a fractional column by their main neighbours (failure-like ones `below`); `finals` — the finals off the main path,
+ordered by the columns of their sources (fewest crossings); `loose` — statuses no transition touches (the shelf "No
+entry in the code"); `noEntry` — any non-initial status nothing moves into; `edges` — one per pair, parallel
+transitions glued (`n` functions, `text`: the first human caption, else the short function name; `cls` main / skip /
+back / side / final / loop / start; `archOnly` — no function, only in `.arch`); `groups` — a final entered from ≥ 3
+statuses gets one bracket instead of the arcs (the most frequent caption of its edges); `any` — "from any status"
+(dropped when the same function also makes the transition from a known status). Captions (`trText`): the `.arch`
+label, an `arch:on` of the function that names the target status (its condition), the clause before `:` / `;` / ` — `
+of its `arch:step`, a scenario caption of the function — ≤ 36 characters; the inspector shows the full text.
+`drawMachine` draws the plan: the main path in one line (accent arrows, captions above the line or over the statuses,
+two lines, the gap sized by the caption), skips along it as arcs above, returns as arcs below, side statuses in rows
+above (failures under it), brackets under the path (dotted ticks from each source, one arrow), the band "Finals"
+(tinted by kind: success green, failure red, expired grey) and the dashed shelf "No entry in the code"; creation is a
+black dot (from the left; from below for a later main status; from above for a final), "from any" a dashed stub with
+its count. Captions dodge each other (`boxes`), the widths are measured in the drawing's font (`textW`, an off-screen
+SVG). Far away (`.sv-svg.far`, < 0.42 px per unit) and in page frames (`compact`) the captions are hidden. The header
+card names the entity, its doc (`StateMachine.doc`) and the counts; a small machine is fitted at ≤ 1.15 px per unit.
+Clicks: a status → `{t: 'status', entity, id}` (card: kind chips, the doc of its constant `StateMachine.docs`, how it
+is entered and left — glued pairs in diagram order with the caption once and their functions with `file:line`, the
+setter a status is handed to — `via`, `insert`), an arrow → `{t: 'sttr', entity, from, to}` / `{…, group: true}` /
+`{…, create: true}` (its functions); Esc closes the card before it leaves the view. Under `archmap serve`
+transitions get `st` = `both` (described and in code), `code` (`drift: undeclared`, orange)
 or `spec` (`drift: not_implemented`, dashed grey); in edit mode: double click empty space adds a status, double click a node
 renames, drag node to node draws a transition (inline `event` or `event "label"`), Del removes a status or the selected
 transition, double click an orange edge adds it to the spec. Planned steps (`planned: true`) are dashed chips on the map

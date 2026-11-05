@@ -171,8 +171,9 @@ function statesFrame(fr) {
   ms.forEach((m) => {
     const g = sv('g', {}, host);
     const r = A.status.draw(g, m, {
+      compact: true, // a frame is small: statuses and the main path, the captions of the arrows are in the Statuses view
       nodeClick: (e, n) => { if (P.cam.justDragged) return; e.stopPropagation(); A.select({ t: 'status', entity: m.ent, id: n }); },
-      trClick: (e, x) => { if (P.cam.justDragged) return; e.stopPropagation(); if (x.fid && D.fns[x.fid]) A.select({ t: 'fn', id: x.fid, why: `${m.ent}: ${x.from || '*'} → ${x.to}` }); },
+      trClick: (e, x, g, ed) => { if (P.cam.justDragged) return; e.stopPropagation(); A.select(A.status.sel(m, x, ed)); },
     });
     const b = r.bounds, bw = Math.max(0, b.x1 - b.x0), bh = Math.max(0, b.y1 - b.y0);
     const lab = sv('text', { x: 0, y: y + 16, class: 'pv-sub' }, host, m.ent);

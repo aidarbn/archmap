@@ -198,8 +198,17 @@ nodes as white cards on a soft shadow, one typeface; and a dark theme.
   docstrings. Then who reads and changes the table and which endpoints reach it.
 - **Statuses** (⋯ → Statuses, or "Statuses ↘" in a card) draws one state machine
   found in the code (status constants and enums, transitions from assignments,
-  `UpdateStatusIfX(...)` calls and SQL, plus `arch:state` lines); the transition
-  of the current step lights up.
+  `UpdateStatusIfX(...)` calls, a status constant handed to a function that
+  writes its status parameter — also through helpers and mappers —, struct
+  literals, SQL `UPDATE … SET` and `INSERT … VALUES`, plus `arch:state` lines).
+  The main path — the longest chain from the initial status to a successful
+  final — runs in one line; side statuses sit above it, the other finals in a
+  band of their own, coloured by meaning; statuses the code never enters are on
+  a shelf of their own. Arrows are captioned with the `arch:step` / `arch:on`
+  text of the function, parallel ones are glued "×N", and when three or more
+  statuses lead into one final, one bracket replaces the arcs. A click on a
+  status or an arrow shows the doc comment of the constant and every function
+  with `file:line`. The transition of the current step lights up.
 
 The interface is bilingual (English and Russian): it follows the browser
 language, `?lang=en` / `?lang=ru` force it, ⋯ → Language switches it. Light and
@@ -477,7 +486,8 @@ from the flow's entry point; `ext` and `state` of a wrong shape; a journey that 
 flow that is not declared, a `then` of an unknown journey, a journey id declared twice. A gap
 in a journey (two neighbouring flows with no link in the code) is a client link (`via:
 "client"`), reported as information. An `arch:state` transition that neither the function nor
-anything it calls makes is a warning (an error with `--strict`). Markup only names and describes,
+anything it calls makes is a warning (an error with `--strict`); on a setter (a function that writes
+the status it gets as a parameter) the status its callers hand to it counts. Markup only names and describes,
 it never changes steps, links or their order: see docs/spec.md, "Annotations do not change the
 logic". The same run checks the `.arch` spec, see below.
 
