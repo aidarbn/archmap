@@ -130,9 +130,15 @@ function scenarioFrame(key, fr) {
   return {
     key, run, steps, label, w, h: steps.length ? h : 60, scenario: true, stepNode, stepLegs,
     draw(g) {
-      const P_ = { nodes: {}, legs: {} };
+      // geo: what a signed pill must keep off (the cards, the lane titles) and the area it must stay in
+      const geo = { cards: Array.from(nodes.values()).map((n) => ({ x: n.x, y: n.y, w: NW, h: NH })), lanes: [], view: { x: -8, y: -8, w: w + 16, h: h + 16 } };
+      const P_ = { nodes: {}, legs: {}, geo };
       if (!steps.length) { sv('text', { x: 0, y: 24, class: 'pv-muted' }, g, tr('pvNoSteps')); return P_; }
-      lanes.forEach((l) => sv('text', { x: laneX[l], y: 12, class: 'pv-lane' }, g, l === 'actor' ? tr('pvActors') : l === 'ext' ? tr('pvExt') : A.t('layers')[l] || l));
+      lanes.forEach((l) => {
+        const s = l === 'actor' ? tr('pvActors') : l === 'ext' ? tr('pvExt') : A.t('layers')[l] || l;
+        sv('text', { x: laneX[l], y: 12, class: 'pv-lane' }, g, s);
+        geo.lanes.push({ x: laneX[l] - 4, y: -2, w: String(s).length * 8 + 8, h: 18 });
+      });
       const gl = sv('g', { class: 'pv-legs' }, g), gn = sv('g', { class: 'pv-nodes' }, g);
       legs.forEach((l) => {
         const a = nodes.get(l.a), b = nodes.get(l.b);
@@ -141,13 +147,17 @@ function scenarioFrame(key, fr) {
         else if (b.x < a.x) { const x1 = a.x, y1 = a.y + NH / 2 + 6, x2 = b.x + NW + 2, y2 = b.y + NH / 2 + 6, k = Math.max(26, (x1 - x2) / 2); d = `M${x1},${y1} C${x1 - k},${y1} ${x2 + k},${y2} ${x2},${y2}`; mx = (x1 + x2) / 2; my = (y1 + y2) / 2; }
         else { const x1 = a.x + NW, y1 = a.y + NH / 2, y2 = b.y + NH / 2, xr = x1 + 34; d = `M${x1},${y1} C${xr},${y1} ${xr},${y2} ${x1 + 2},${y2}`; mx = xr - 8; my = (y1 + y2) / 2; }
         const lg = sv('g', { class: 'pv-leg ' + l.kind }, gl);
-        sv('path', { d, class: 'ln', 'marker-end': 'url(#arr)' }, lg);
+        const ln = sv('path', { d, class: 'ln', 'marker-end': 'url(#arr)' }, lg);
+        // the leader of a signed pill put beside its leg (made once, hidden while the pill sits on the leg)
+        const lead = sv('path', { class: 'lead', display: 'none' }, lg);
         // several steps on one leg: "13…17", the list in the tooltip (what each step does, from the code)
         const n1 = l.steps.map((x) => x + 1), txt = n1.length > 2 ? n1[0] + '…' + n1[n1.length - 1] : n1.join(', '), tw = txt.length * 6.4 + 12;
         const pill = sv('rect', { x: mx - tw / 2, y: my - 9, width: tw, height: 18, rx: 9, class: 'pill' }, lg);
         const no = sv('text', { x: mx, y: my + 4, 'text-anchor': 'middle', class: 'no' }, lg, txt);
         sv('title', null, lg, l.steps.map((x) => tr('pvStep') + ' ' + (x + 1) + ': ' + (A.play.action(steps[x]).full.split('\n')[0] || steps[x].label) + '\n' + steps[x].label).join('\n\n'));
-        lg.pv = { pill, no, txt, tw, mx }; // paintAll signs the current leg with what its step does
+        // paintAll signs the current legs of a step: the main one with what the step does, the others with what the
+        // step does there (kind, b: the leg's kind and target node — 'x:<external id>' for an outside system)
+        lg.pv = { pill, no, txt, tw, mx, my, ln, lead, kind: l.kind, b: l.b, geo };
         P_.legs[l.k] = lg;
       });
       nodes.forEach((n) => {
@@ -442,17 +452,26 @@ function paintAll() {
         const actNow = on && (f.stepLegs[i] || []).some((k) => k.endsWith('>' + id) || k.startsWith(id + '>'));
         pt.nodes[id].classList.toggle('cur', !!cur); pt.nodes[id].classList.toggle('done', !cur && !!done); pt.nodes[id].classList.toggle('touch', !cur && !!actNow);
       });
-      Object.keys(pt.legs || {}).forEach((k) => {
-        const cur = on && (f.stepLegs[i] || []).includes(k), done = on && f.stepLegs.slice(0, i).some((ls) => ls.includes(k));
+      // one pill per step: the main leg (the call / entry; the first secondary one when the step has none) says what
+      // the step does, the secondary legs (database, outside system, queue) what it does there — A.play.legRoles
+      const curKeys = on ? (f.stepLegs[i] || []).filter((k) => pt.legs[k]) : [];
+      const mainK = curKeys.find((k) => pt.legs[k].pv.kind !== 'ext') || curKeys[0] || null;
+      const auxKs = curKeys.filter((k) => k !== mainK);
+      const sign = { taken: [], skip: mainK && pt.legs[mainK].pv.kind !== 'ext' ? auxKs.map((k) => pt.legs[k].pv.b.slice(2)) : [] };
+      // the plain numbers of the other legs: the signed pills keep off them
+      sign.nums = Object.keys(pt.legs || {}).filter((k) => !curKeys.includes(k)).map((k) => { const p = pt.legs[k].pv; return { x: p.mx - p.tw / 2, y: p.my - 9, w: p.tw, h: 18 }; });
+      Object.keys(pt.legs || {}).sort((a, b) => (a === mainK ? -1 : b === mainK ? 1 : 0)).forEach((k) => {
+        const cur = curKeys.includes(k), done = on && f.stepLegs.slice(0, i).some((ls) => ls.includes(k));
         pt.legs[k].classList.toggle('cur', !!cur); pt.legs[k].classList.toggle('done', !cur && !!done);
-        const ln = pt.legs[k].querySelector('.ln'); if (ln) ln.setAttribute('marker-end', cur ? 'url(#arrA)' : 'url(#arr)');
-        signLeg(pt.legs[k], cur ? i : -1, cur ? step : null);
+        pt.legs[k].classList.toggle('aux', cur && k !== mainK);
+        const ln = pt.legs[k].pv.ln; if (ln && ln.getAttribute('marker-end') !== (cur ? 'url(#arrA)' : 'url(#arr)')) ln.setAttribute('marker-end', cur ? 'url(#arrA)' : 'url(#arr)');
+        signLeg(pt.legs[k], cur ? i : -1, cur ? step : null, k === mainK ? 'main' : 'aux', sign);
       });
       if (f.ui && f.ui.title) {
         const ch = on && f.run && f.run.segs.length > 1 && f.run.segs[step.seg] && f.run.segs[step.seg].flow ? f.run.segs[step.seg].flow.name + ' · ' : '';
         const tt = on ? ch + step.label : f.run ? f.run.name : f.refs[0];
         const tx = A.cut(tt, Math.floor((f.fw - 300) / 7.6)), tip = on ? ch + step.label + '\n' + A.play.action(step).full : tt;
-        [[f.ui.title, tx], [f.ui.titleT, tip]].forEach(([e, s]) => { const n = e.firstChild; if (n && n.nodeType === 3 && !n.nextSibling) { if (n.data !== s) n.data = s; } else e.textContent = s; });
+        setTx(f.ui.title, tx); setTx(f.ui.titleT, tip);
       }
       const svgEl = f.g.querySelector('.pf-in'); if (svgEl) svgEl.classList.toggle('stepping', !!on);
       paintBar(f, on ? i : -1);
@@ -470,34 +489,57 @@ function paintAll() {
   });
   paintSel();
   if (A.renderPages) A.renderPages();
-  const n = document.getElementById('hName'); if (n && A.state.view === 'page' && !A.state.run) n.textContent = label(null) || n.textContent;
+  const n = document.getElementById('hName'); if (n && A.state.view === 'page' && !A.state.run) setTx(n, label(null) || n.textContent);
 }
 // signLeg(lg, i, step): the current leg of a scenario frame says what its step does — "8 · requestQR(Payment)" —
 // when the pill is readable at the scale the frame is shown at; else only the number (the step text is in the frame
 // title). i < 0 — back to the plain step numbers.
-function signLeg(lg, i, step) {
+// role: 'main' — the main leg of the step: "8 · requestQR(Payment)"; 'aux' — a secondary one: what the step does there
+// ("UPDATE orders") or only the number. A signed pill that does not fit on its leg goes beside it with a leader
+// (A.placeLabel: off the cards, the lane titles, the other pills and numbers, inside the frame). sign: {taken, nums,
+// skip} shared by the legs of one paint.
+function signLeg(lg, i, step, role, sign) {
   const p = lg.pv; if (!p) return;
-  let txt = p.txt, tw = p.tw;
+  let txt = p.txt, tw = p.tw, pos = { x: p.mx, y: p.my }, ld = null;
   if (i >= 0 && step) {
-    const k = (p.pill.getBoundingClientRect().height || 0) / 18, act = A.play.action(step).short;
-    txt = String(i + 1) + (k >= 0.7 && act ? ' · ' + A.cut(act, 40) : '');
+    const k = (p.pill.getBoundingClientRect().height || 0) / 18;
+    const act = role === 'main' ? A.play.action(step, sign.skip).short : A.play.aux(step, String(p.b).slice(2), p.kind);
+    txt = role === 'main' ? String(i + 1) + (k >= 0.7 && act ? ' · ' + A.cut(act, 40) : '') : k >= 0.7 && act ? act : String(i + 1);
     tw = txt.length * (txt.length > 4 ? 6.6 : 6.4) + 14;
+    if (p.ln.getTotalLength) {
+      // a plain number (a small frame, a secondary leg with nothing to say) leaves its leg only to clear a pill
+      const len = p.ln.getTotalLength(), at = (f) => p.ln.getPointAtLength(len * f), lbl = txt.length > 4;
+      const best = A.placeLabel({
+        w: tw, h: 18, gap: 8, along: [0.5, 0.42, 0.58, 0.34, 0.66].map(at), anchors: [0.5, 0.35, 0.65].map(at), offPen: lbl ? 0 : 120,
+        avoid: [{ rects: sign.taken, k: 8 }, { rects: p.geo.lanes, k: 6 }, { rects: p.geo.cards, k: lbl ? 12 : 0.6 }, { rects: sign.nums, k: 8 }],
+        view: p.geo.view,
+      });
+      pos = best; ld = best.off ? A.leader(best.a, best, tw, 18) : null;
+    }
+    sign.taken.push({ x: pos.x - tw / 2 - 2, y: pos.y - 11, w: tw + 4, h: 22 }); // with a small gap
   }
-  const tn = p.no.firstChild; // the text node is kept: only its data changes
-  if (tn && tn.nodeType === 3) { if (tn.data !== txt) tn.data = txt; } else p.no.textContent = txt;
-  const x = String(p.mx - tw / 2), w = String(tw);
-  if (p.pill.getAttribute('x') !== x) p.pill.setAttribute('x', x);
-  if (p.pill.getAttribute('width') !== w) p.pill.setAttribute('width', w);
+  setTx(p.no, txt); // the text node is kept: only its data changes
+  const att = (e, n, v) => { v = String(v); if (e.getAttribute(n) !== v) e.setAttribute(n, v); };
+  att(p.pill, 'x', pos.x - tw / 2); att(p.pill, 'y', pos.y - 9); att(p.pill, 'width', tw);
+  att(p.no, 'x', pos.x); att(p.no, 'y', pos.y + 4);
+  att(p.lead, 'display', ld ? 'inline' : 'none'); if (ld) att(p.lead, 'd', ld);
 }
 function paintBar(f, i) {
   const u = f.ui; if (!u) return;
   const ov = i < 0, n = f.steps.length;
   u.play.b.style.display = ov && n ? '' : 'none';
   [u.prev, u.no, u.next, u.ov].forEach((x) => { x.b.style.display = ov ? 'none' : ''; });
-  u.no.tx.textContent = ov ? '' : tr('pvStepOf', i + 1, n);
+  setTx(u.no.tx, ov ? '' : tr('pvStepOf', i + 1, n));
   u.prev.b.classList.toggle('off', i <= 0); u.next.b.classList.toggle('off', i >= n - 1);
   const s = ov ? null : f.steps[i];
-  if (f.cap) f.cap.textContent = s ? A.cut(tr('pvStep') + ' ' + (i + 1) + ' · ' + s.label + (s.flow && f.run && f.run.segs.length > 1 ? ' — ' + s.flow.name : ''), Math.floor((f.fw - PAD * 2) / 7.4)) : n ? tr('pvSteps', n) + (f.run && f.run.segs.length > 1 ? ' · ' + f.run.segs.length + ' ' + tr('pvFlow').toLowerCase() : '') + ' · ' + tr('pvKeys') : tr('pvNoSteps');
+  if (f.cap) setTx(f.cap, s ?A.cut(tr('pvStep') + ' ' + (i + 1) + ' · ' + s.label + (s.flow && f.run && f.run.segs.length > 1 ? ' — ' + s.flow.name : ''), Math.floor((f.fw - PAD * 2) / 7.4)) : n ? tr('pvSteps', n) + (f.run && f.run.segs.length > 1 ? ' · ' + f.run.segs.length + ' ' + tr('pvFlow').toLowerCase() : '') + ' · ' + tr('pvKeys') : tr('pvNoSteps'));
+}
+// the text of an element by its one text node: the node stays, only its data changes (textContent would replace the
+// node — two DOM nodes added / removed on every step of a frame)
+function setTx(e, s) {
+  s = String(s);
+  const n = e.firstChild;
+  if (n && n.nodeType === 3 && !n.nextSibling) { if (n.data !== s) n.data = s; } else if (e.textContent !== s || !n) { e.textContent = ''; e.appendChild(document.createTextNode(s)); }
 }
 function paintSel() {
   const s = A.state.sel;
