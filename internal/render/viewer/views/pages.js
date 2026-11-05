@@ -23,6 +23,13 @@ A.addI18n({
     pvOpen: 'Открыть на весь холст', pvStepIt: 'Пройти по шагам', pvStep: 'Шаг', pvFlow: 'Сценарий', pvTouched: 'На этом шаге', pvTables: 'Таблицы', pvStatuses: 'Статусы', pvEntry: 'Вход',
     pvDrawn: { journey: 'путь из arch:journey / arch/*.arch, шаги — по графу вызовов', flow: 'сценарий из arch:flow / arch/*.arch, шаги — по графу вызовов', states: 'машины состояний из кода (arch:state, присваивания статусов)', tables: 'таблицы схемы и связи между ними', api: 'ручки из proto / роутеров с описаниями из кода', module: 'модуль и его функции', note: 'текст из файла страницы' },
     pvKeys: '← / → — шаги, Home — обзор', pvBroken: 'Ссылки на то, чего нет в коде', pvFit: 'Вписать', pvZIn: 'Приблизить', pvZOut: 'Отдалить',
+    peServeOnly: 'Правка страниц доступна в archmap serve', peEmptyHint: 'Перетащите сюда путь, статусы, таблицы, ручки или модуль из навигации',
+    peEmptyOpen: 'Показать навигацию «Система»', peEmptyStatic: 'Добавлять рамки можно в archmap serve',
+    peAlready: 'Уже на странице', peConflict: 'Файл страницы изменён на диске — показана новая версия, повторите действие',
+    peNoConn: 'Нет связи с archmap serve', peBroken: 'Нельзя добавить', peUndone: 'Отменено', peRedone: 'Повторено', peNoUndo: 'Нечего отменять', peNoRedo: 'Нечего повторять',
+    peDelFrame: 'Убрать рамку со страницы', peNote: 'Заметка', peAddNote: '+ Заметка', peNotePh: 'Текст заметки', peNoteKeys: '⌘/Ctrl+Enter — сохранить, Esc — отмена; пустой текст убирает заметку',
+    peEditNote: 'Изменить текст', peDropAdd: (n) => 'Добавить на страницу' + (n > 1 ? ' (' + n + ')' : ''), peDropNo: 'Нельзя',
+    peNoPage: 'Откройте страницу, чтобы добавить на неё', peUndoHint: (/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘Z' : 'Ctrl+Z') + ' — отменить', peRemoved: 'Рамка убрана', peRefRemoved: (r) => r + ' — убрано со страницы',
   },
   en: {
     pvTitle: 'Page', pvNone: 'No such page', pvEmpty: 'The page has no frames',
@@ -33,6 +40,13 @@ A.addI18n({
     pvOpen: 'Open on the whole canvas', pvStepIt: 'Step through', pvStep: 'Step', pvFlow: 'Scenario', pvTouched: 'On this step', pvTables: 'Tables', pvStatuses: 'Statuses', pvEntry: 'Entry',
     pvDrawn: { journey: 'a journey of arch:journey / arch/*.arch, steps by the call graph', flow: 'a scenario of arch:flow / arch/*.arch, steps by the call graph', states: 'state machines of the code (arch:state, status assignments)', tables: 'schema tables and the references between them', api: 'endpoints of proto / routers with their descriptions from the code', module: 'the module and its functions', note: 'text of the page file' },
     pvKeys: '← / → — steps, Home — overview', pvBroken: 'Names something the code does not have', pvFit: 'Fit', pvZIn: 'Zoom in', pvZOut: 'Zoom out',
+    peServeOnly: 'Pages are edited in archmap serve', peEmptyHint: 'Drag a path, statuses, tables, endpoints or a module here from the navigation',
+    peEmptyOpen: 'Show the System navigation', peEmptyStatic: 'Frames are added in archmap serve',
+    peAlready: 'Already on the page', peConflict: 'The page file changed on disk — showing the new version, try again',
+    peNoConn: 'No connection to archmap serve', peBroken: 'Cannot add', peUndone: 'Undone', peRedone: 'Redone', peNoUndo: 'Nothing to undo', peNoRedo: 'Nothing to redo',
+    peDelFrame: 'Take the frame off the page', peNote: 'Note', peAddNote: '+ Note', peNotePh: 'Text of the note', peNoteKeys: '⌘/Ctrl+Enter — save, Esc — cancel; empty text removes the note',
+    peEditNote: 'Edit the text', peDropAdd: (n) => 'Add to the page' + (n > 1 ? ' (' + n + ')' : ''), peDropNo: 'Cannot',
+    peNoPage: 'Open a page to add to it', peUndoHint: (/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘Z' : 'Ctrl+Z') + ' — undo', peRemoved: 'Frame taken off', peRefRemoved: (r) => r + ' taken off the page',
   },
 });
 const tr = (k, ...a) => A.t(k, ...a);
@@ -261,7 +275,8 @@ function moduleFrame(fr) {
 
 /* --- a note: text of the page file --- */
 function noteFrame(fr) {
-  const lines = wrap(fr.text || '', AW, 15, 0);
+  // the line breaks typed in the note stay (an empty line too)
+  const lines = String(fr.text || '').split('\n').flatMap((p) => (p.trim() ? wrap(p, AW, 15, 0) : ['']));
   return { label: '', w: AW, h: lines.length * 22 + 4, draw(g) { textLines(g, 0, 17, lines, 'pv-note', 22); return {}; } };
 }
 
@@ -279,6 +294,11 @@ function mountPages(el) {
   P.zFit = zb('<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>', '', () => fit(true));
   P.zIn = zb('+', '', () => P.cam.zoomAt(0.5, 0.5, 0.8));
   P.svg.addEventListener('click', (e) => { if (P.cam.justDragged || e.target.closest('.pf')) return; A.select({ t: 'page', id: P.cur }); });
+  // editing (archmap serve): "+ Note" in the corner, the hint of an empty page in the middle
+  P.tools = A.h('div', { class: 'pe-tools' }, el);
+  P.addNote = A.h('button', { type: 'button', class: 'pbtn' }, P.tools);
+  P.addNote.onclick = () => noteEditor(null);
+  P.empty = A.h('div', { class: 'pe-empty', hidden: '' }, el);
   P.el = el;
   A.bus.on('resize', () => { if (A.state.view === 'page') fit(false); });
 }
@@ -293,13 +313,21 @@ function fit(anim) {
   if (anim) P.cam.animToVB(vb, 300); else P.cam.set(vb);
 }
 
+// the frames of a page as the file says them: a re-render with the same ones keeps the camera
+const pageSig = (pg) => (pg ? pg.id + '\0' + JSON.stringify(pg.frames.map((f) => [f.kind, f.refs || [], f.text || ''])) : '');
 function render() {
   if (!P.svg) return;
   P.root.innerHTML = ''; P.frames = []; P.extent = null;
   const pg = curPage();
-  paintZoomTips();
+  paintZoomTips(); paintTools(pg);
+  // the camera: the same page with the same frames (a live update of the code) stays where it is; a frame added or
+  // taken off — the page fits again, animated; another page — at once
+  const sig = pageSig(pg), samePage = !!pg && P.sigId === pg.id, keep = samePage && sig === P.sig;
+  P.sig = sig; P.sigId = pg ? pg.id : null;
+  if (samePage && !keep) P.play = null; // the frame indexes moved
+  const place = () => { if (!keep) fit(samePage); };
   if (!pg) { sv('text', { x: 0, y: 0, class: 'pv-muted' }, P.root, tr('pvNone')); P.extent = { x: -50, y: -30, w: 400, h: 80 }; fit(false); return; }
-  if (!pg.frames.length) { sv('text', { x: 0, y: 0, class: 'pv-muted' }, P.root, tr('pvEmpty')); P.extent = { x: -50, y: -30, w: 400, h: 80 }; fit(false); return; }
+  if (!pg.frames.length) { P.extent = { x: -50, y: -30, w: 400, h: 80 }; P.built = P.cur; fit(false); return; }
   const slots = slotsOf(pg);
   // the scenarios first: their steps go first in the module frames
   const frames = [];
@@ -331,7 +359,7 @@ function render() {
   P.built = P.cur;
   if (P.play) { const f = frames[P.play.fi]; if (f && f.scenario) P.play.steps = f.steps; else P.play = null; }
   paintAll();
-  fit(false);
+  place();
 }
 function drawFrame(f) {
   const g = sv('g', { class: 'pf pf-' + f.kind, 'data-fi': f.i, transform: `translate(${f.x},${f.y})` }, P.root);
@@ -346,7 +374,16 @@ function drawFrame(f) {
   if (f.missing.length) sv('text', { x: PAD, y: f.fh - PAD + 4 - (f.scenario ? FOOT : 0), class: 'pf-miss' }, g, '⚠ ' + tr('pvMissing') + ': ' + f.missing.join(', '));
   if (f.scenario) f.cap = sv('text', { x: PAD, y: f.fh - 16, class: 'pf-cap' }, g, '');
   g.addEventListener('click', (e) => { if (P.cam.justDragged) return; e.stopPropagation(); A.select({ t: 'frame', page: P.cur, i: f.i }); });
-  g.addEventListener('dblclick', (e) => { e.stopPropagation(); openFrame(f.i); });
+  g.addEventListener('dblclick', (e) => { e.stopPropagation(); if (f.kind === 'note' && canEdit()) noteEditor(f.i); else openFrame(f.i); });
+  if (canEdit()) {
+    // × above the frame at the right, on hover and on the selected frame (archmap serve)
+    const del = sv('g', { class: 'pf-del', role: 'button', 'aria-label': tr('peDelFrame') }, g), x = f.fw - 24;
+    sv('rect', { x, y: -26, width: 24, height: 22, rx: 6 }, del);
+    sv('path', { d: `M${x + 8},-19 l8,8 M${x + 16},-19 l-8,8`, class: 'x' }, del);
+    sv('title', null, del, tr('peDelFrame') + ' — Delete');
+    del.addEventListener('click', (e) => { e.stopPropagation(); if (!P.cam.justDragged) removeFrame(f.i); });
+    del.addEventListener('dblclick', (e) => e.stopPropagation());
+  }
   f.g = g;
 }
 // the buttons of a scenario frame: Overview · ‹ k/N › (or "▶ Step through" on the overview)
@@ -549,9 +586,16 @@ A.registerPanel('frame', (sel) => {
   if (fr.kind === 'tables' || fr.kind === 'states' || fr.kind === 'api' || fr.kind === 'module') h += `<h3>${esc(tr('pvKind')[fr.kind])}</h3><div class="tbl-pills">${(fr.refs || []).map((r) => `<span class="chip mono"${(fr.missing || []).includes(r) ? ' style="color:var(--crit-text)"' : ''}>${esc(r)}</span>`).join('')}</div>`;
   if ((fr.missing || []).length) h += `<p class="loc" style="color:var(--crit-text)">⚠ ${esc(tr('pvMissing'))}: ${esc(fr.missing.join(', '))}</p>`;
   h += `<div class="loc">${esc((pg.file || '') + ':' + fr.line)}</div>`;
-  h += '<div class="btnrow">' + (fr.kind !== 'note' ? `<button class="pbtn primary" data-act="pvopen">${esc(tr('pvOpen'))}</button>` : '') + (f && f.scenario && f.steps.length ? `<button class="pbtn" data-act="pvstep">${esc(tr('pvStepIt'))}</button>` : '') + '</div>';
+  h += '<div class="btnrow">' + (fr.kind !== 'note' ? `<button class="pbtn primary" data-act="pvopen">${esc(tr('pvOpen'))}</button>` : '') + (f && f.scenario && f.steps.length ? `<button class="pbtn" data-act="pvstep">${esc(tr('pvStepIt'))}</button>` : '') +
+    (canEdit() && fr.kind === 'note' ? `<button class="pbtn primary" data-act="penote">${esc(tr('peEditNote'))}</button>` : '') +
+    (canEdit() ? `<button class="pbtn" data-act="pedel" title="Delete">${esc(tr('peDelFrame'))}</button>` : '') + '</div>';
   h += `<p class="loc" style="margin-top:14px">${esc(tr('pvDbl'))}</p>`;
-  return { html: h, after: (p) => { wirePanel(p); const o = p.querySelector('[data-act="pvopen"]'); if (o) o.onclick = () => openFrame(sel.i); const s = p.querySelector('[data-act="pvstep"]'); if (s) s.onclick = () => goStep(sel.i, 0); p.querySelectorAll('[data-go]').forEach((li) => { li.onclick = () => goStep(sel.i, +li.getAttribute('data-go')); }); } };
+  return { html: h, after: (p) => {
+    wirePanel(p);
+    const on = (act, fn) => { const b = p.querySelector(`[data-act="${act}"]`); if (b) b.onclick = fn; };
+    on('pvopen', () => openFrame(sel.i)); on('pvstep', () => goStep(sel.i, 0)); on('penote', () => noteEditor(sel.i)); on('pedel', () => removeFrame(sel.i));
+    p.querySelectorAll('[data-go]').forEach((li) => { li.onclick = () => goStep(sel.i, +li.getAttribute('data-go')); });
+  } };
 });
 A.registerPanel('pstep', (sel) => {
   const f = P.frames[sel.fi], s = f && f.steps[sel.i]; if (!s) return '';
@@ -573,10 +617,188 @@ function wirePanel(p) {
   p.querySelectorAll('[data-pf]').forEach((li) => { li.onclick = () => focusFrame(+li.getAttribute('data-pf')); });
 }
 
+/* ---------- editing (archmap serve) ----------
+ * Every edit is one POST /spec/page (internal/serve): the server changes only the lines of the page block in its file,
+ * checks that what is added exists in the code, writes atomically and answers with the checked model — the page is
+ * redrawn from it at once, the live rebuild (SSE) follows. Each edit carries the page as shown here (`expect`): a page
+ * changed on disk meanwhile is not overwritten (409 — the new version is shown). The answer has the texts before and
+ * after: ⌘Z / Ctrl+Z puts the last edit back (⌘⇧Z / Ctrl+Y — again), only while the file is still what was written.
+ * In a static map (no D.live) nothing here is offered. */
+const canEdit = () => !!D.live;
+const ED = { undo: [], redo: [], q: Promise.resolve(), tt: 0 };
+function toast(msg, kind) {
+  let el = document.getElementById('peToast');
+  if (!el) el = A.h('div', { id: 'peToast', class: 'pe-toast', role: 'status', 'aria-live': 'polite' }, document.body);
+  el.textContent = msg; el.className = 'pe-toast on' + (kind ? ' ' + kind : '');
+  clearTimeout(ED.tt); ED.tt = setTimeout(() => { el.className = 'pe-toast'; }, kind === 'err' ? 6500 : 2600);
+}
+const viewOfPage = (pg) => ({ name: pg.name, frames: pg.frames.map((f) => ({ kind: f.kind, refs: f.refs || [], text: f.text || '' })) });
+const errOf = (j, res) => (j && (j.error || (j.errors && j.errors[0] && j.errors[0].msg))) || 'HTTP ' + res.status;
+// the checked model of the answer: its pages replace the ones on screen
+function applyModel(m) {
+  if (!m || !D.M) return;
+  D.M.spec = D.M.spec ? Object.assign({}, D.M.spec, { pages: m.pages || [] }) : m;
+  const gone = P.cur && !pageOf(P.cur);
+  if (gone) { P.cur = null; P.play = null; if (A.state.view === 'page') { A.openPage('system'); } }
+  P.built = null;
+  if (A.state.view === 'page' && P.cur) render();
+  const s = A.state.sel;
+  if (s && (s.t === 'frame' || s.t === 'pstep') && s.page === P.cur && !(curPage() && curPage().frames[s.i != null ? s.i : s.fi])) A.select({ t: 'page', id: P.cur });
+  else if (A.renderPanel) A.renderPanel();
+  if (A.renderPages) A.renderPages();
+  if (A.side) A.side.render();
+}
+// pageOp(op, {record, quiet}) → the answer, {error} (quiet: the caller shows it) or null (conflict / no connection)
+function pageOp(op, o = {}) {
+  const run = async () => {
+    if (!canEdit()) { toast(tr('peServeOnly')); return null; }
+    if (op.page && op.op !== 'create' && op.op !== 'restore' && !op.expect) { const pg = pageOf(op.page); if (pg) op = Object.assign({ expect: viewOfPage(pg) }, op); }
+    let res, j;
+    try {
+      res = await fetch('/spec/page', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(op) });
+      j = await res.json().catch(() => ({}));
+    } catch (e) { toast(tr('peNoConn'), 'err'); return null; }
+    if (res.status === 409) { applyModel(j.model); toast(tr('peConflict'), 'err'); return null; }
+    if (!res.ok) { const msg = (res.status === 422 ? tr('peBroken') + ': ' : '') + errOf(j, res); if (!o.quiet) toast(msg, 'err'); return { error: msg }; }
+    if (j.notice === 'already') toast(tr('peAlready'));
+    if ((j.edits || []).length && o.record !== false) { ED.undo.push(j.edits); if (ED.undo.length > 100) ED.undo.shift(); ED.redo = []; }
+    applyModel(j.model);
+    return j;
+  };
+  ED.q = ED.q.then(run, run);
+  return ED.q;
+}
+async function undo(again) {
+  const from = again ? ED.redo : ED.undo, to = again ? ED.undo : ED.redo;
+  const edits = from.pop();
+  if (!edits) { toast(tr(again ? 'peNoRedo' : 'peNoUndo')); return; }
+  const j = await pageOp({ op: 'restore', files: edits.map((e) => ({ path: e.path, text: e.before, expect: e.after })) }, { record: false });
+  if (!j) return; // changed on disk: this step is gone
+  if (j.error) { from.push(edits); return; }
+  to.push(j.edits);
+  toast(tr(again ? 'peRedone' : 'peUndone'));
+  // a page that came back (a delete undone): open it
+  if (A.state.view !== 'page' || !P.cur) { const pg = pagesOf().find((p) => edits.some((e) => e.path === p.file && e.before != null)); if (pg) open(pg.id); }
+}
+async function removeFrame(i) {
+  if (!P.cur) return;
+  const j = await pageOp({ op: 'remove_frame', page: P.cur, index: i });
+  if (j && !j.error) toast(tr('peRemoved') + ' · ' + tr('peUndoHint'));
+}
+// Delete: the selected frame, or the selected table / endpoint / status / module out of its frame
+function deleteSelected() {
+  const s = A.state.sel, pg = curPage(); if (!s || !pg || A.state.run) return false;
+  if (s.t === 'frame' && s.page === P.cur) { removeFrame(s.i); return true; }
+  const find = (kind, list, key) => { for (let i = 0; i < pg.frames.length; i++) { const f = pg.frames[i]; if (f.kind !== kind) continue; const j = (list(f) || []).indexOf(key); if (j >= 0) return { i, ref: f.refs[j] }; } return null; };
+  const hit = s.t === 'table' ? find('tables', (f) => f.refs, s.id) : s.t === 'ep' ? find('api', (f) => f.endpoints, s.id) : s.t === 'mod' ? find('module', (f) => f.modules, s.id) : s.t === 'status' && !s.id ? find('states', (f) => f.machines, s.entity) : null;
+  if (!hit) return false;
+  pageOp({ op: 'remove_ref', page: P.cur, index: hit.i, refs: [hit.ref] }).then((j) => { if (j && !j.error) toast(tr('peRefRemoved', hit.ref) + ' · ' + tr('peUndoHint')); });
+  return true;
+}
+
+/* the text of a note, typed in place: over the frame (or, for a new note, in the middle of the canvas) */
+function noteEditor(fi) {
+  if (!canEdit()) { toast(tr('peServeOnly')); return; }
+  const pg = curPage(); if (!pg || !P.el) return;
+  closeNote();
+  const r0 = P.el.getBoundingClientRect();
+  let x = Math.max(16, r0.width / 2 - 230), y = 76, w = 460, h = 170;
+  const f = fi != null ? P.frames[fi] : null;
+  if (f && f.g) { const r = f.g.querySelector('.pf-bg').getBoundingClientRect(); x = Math.max(8, r.left - r0.left); y = Math.max(8, r.top - r0.top); w = Math.max(320, r.width); h = Math.max(140, Math.min(r.height, r0.height - y - 60)); }
+  const box = A.h('div', { class: 'pe-note', style: `left:${x}px;top:${y}px;width:${w}px` }, P.el);
+  const ta = A.h('textarea', { class: 'pe-note-ta', placeholder: tr('peNotePh'), 'aria-label': tr('peNote'), style: `height:${h}px` }, box);
+  A.h('div', { class: 'pe-note-hint' }, box, esc(tr('peNoteKeys')));
+  const old = f ? pg.frames[fi].text || '' : '';
+  ta.value = old;
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    const v = ta.value.replace(/\r/g, '');
+    box.remove(); P.note = null;
+    if (!save) return;
+    if (fi == null) { if (v.trim()) pageOp({ op: 'add_note', page: pg.id, text: v }); return; }
+    if (!v.trim()) pageOp({ op: 'remove_frame', page: pg.id, index: fi });
+    else if (v !== old) pageOp({ op: 'set_note', page: pg.id, index: fi, text: v });
+  };
+  ta.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); finish(true); }
+  });
+  ta.addEventListener('blur', () => finish(true));
+  ['pointerdown', 'wheel', 'dblclick', 'click'].forEach((ev) => box.addEventListener(ev, (e) => e.stopPropagation()));
+  P.note = { box, finish };
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function closeNote() { if (P.note) P.note.finish(true); }
+
+// the corner tools and the hint of an empty page
+function paintTools(pg) {
+  if (!P.tools) return;
+  const edit = canEdit() && !!pg;
+  P.tools.hidden = !edit;
+  P.addNote.textContent = tr('peAddNote'); P.addNote.title = tr('peNote');
+  const empty = !!pg && !pg.frames.length;
+  P.empty.hidden = !empty;
+  if (empty) {
+    P.empty.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg>` +
+      `<p>${esc(canEdit() ? tr('peEmptyHint') : tr('pvEmpty'))}</p>` +
+      (canEdit() ? `<button type="button" class="pbtn" data-act="srcnav">${esc(tr('peEmptyOpen'))}</button>` : `<p class="sub">${esc(tr('peEmptyStatic'))}</p>`);
+    const b = P.empty.querySelector('[data-act="srcnav"]'); if (b) b.onclick = () => { if (A.side.setSource) A.side.setSource(true); };
+  }
+}
+
+/* dropping things of the System navigation on the page (side.js drags them): items [{kind, refs, label}] */
+const RANK = (k) => (k === 'journey' || k === 'flow' ? 0 : k === 'states' ? 1 : 2);
+function accepts(items) {
+  if (!canEdit()) return { ok: false, why: tr('peServeOnly') };
+  const pg = curPage(); if (!pg || A.state.view !== 'page') return { ok: false, why: tr('peNoPage') };
+  const bad = items.find((x) => x.why); if (bad) return { ok: false, why: bad.why };
+  const n = newRefs(pg, items).reduce((s, x) => s + x.refs.length, 0);
+  if (!n) return { ok: false, dup: true, why: tr('peAlready') };
+  return { ok: true, n, why: tr('peDropAdd', n) };
+}
+// what is not on the page yet, by kind: an endpoint / state machine / module counts as there under any name that
+// resolves to it (CancelOrder and TabletsService.CancelOrder are one endpoint)
+function newRefs(pg, items) {
+  const have = (kind, ref, key) => pg.frames.some((f) => f.kind === kind && ((f.refs || []).includes(ref) ||
+    (kind === 'api' && (f.endpoints || []).includes(key)) || (kind === 'states' && (f.machines || []).includes(key)) || (kind === 'module' && (f.modules || []).includes(key))));
+  const by = new Map();
+  items.forEach((x) => x.refs.forEach((r, j) => {
+    const key = x.keys ? x.keys[j] : r;
+    if (have(x.kind, r, key)) return;
+    if (!by.has(x.kind)) by.set(x.kind, []);
+    if (!by.get(x.kind).includes(r)) by.get(x.kind).push(r);
+  }));
+  return Array.from(by, ([kind, refs]) => ({ kind, refs }));
+}
+async function addItems(items) {
+  const pg = curPage(); if (!pg) return;
+  const add = newRefs(pg, items);
+  if (!add.length) { toast(tr('peAlready')); return; }
+  for (const x of add) await pageOp({ op: 'add', page: pg.id, kind: x.kind, refs: x.refs });
+}
+// move frame i before / after frame j (the order of the lines; the layout keeps the large diagrams on top)
+function moveFrame(i, j, after) {
+  const pg = curPage(); if (!pg || i === j) return;
+  const order = pg.frames.map((_, k) => k).filter((k) => k !== i);
+  const to = order.indexOf(j) + (after ? 1 : 0);
+  if (to === i) return;
+  pageOp({ op: 'move_frame', page: pg.id, index: i, to });
+}
+window.addEventListener('keydown', (e) => {
+  const tg = e.target.tagName;
+  if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable || !canEdit()) return;
+  const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
+  if (mod && e.code === 'KeyZ' && (ED.undo.length || ED.redo.length)) { e.preventDefault(); undo(e.shiftKey); }
+  else if (mod && e.code === 'KeyY' && ED.redo.length) { e.preventDefault(); undo(true); }
+});
+
 /* ---------- keys ---------- */
 function onKey(e) {
   if (A.state.view !== 'page' || !P.frames.length) return false;
   const k = e.key;
+  if ((k === 'Delete' || k === 'Backspace') && canEdit()) return deleteSelected();
   if (k !== 'ArrowRight' && k !== 'ArrowLeft' && k !== 'Home' && !(k === ' ' && e.target.tagName !== 'BUTTON')) return false;
   let fi = P.play ? P.play.fi : -1;
   if (fi < 0) { const s = A.state.sel; fi = s && s.t === 'frame' && P.frames[s.i] && P.frames[s.i].scenario ? s.i : P.frames.findIndex((f) => f.scenario && f.steps.length); }
@@ -603,6 +825,8 @@ A.registerView({
 A.pages = {
   get cur() { return P.cur; }, has: (id) => !!pageOf(id), open, back, forget: () => { P.ret = null; },
   tree, selKey, ancestors, label, render,
+  // editing (archmap serve; side.js: the page list, dragging from the System navigation, the order in the tree)
+  edit: { get can() { return canEdit(); }, op: pageOp, undo, toast, accepts, add: addItems, move: moveFrame, rank: RANK, removeFrame, note: noteEditor, get el() { return P.el; }, get undoN() { return ED.undo.length; } },
   // for tests and the ?debug=1 audit: the frames on the canvas
   get frames() { return P.frames.map((f) => ({ i: f.i, kind: f.kind, x: f.x, y: f.y, w: f.fw, h: f.fh, k: f.k, lit: f.g ? f.g.classList.contains('lit') : false })); },
   step: (fi, i) => goStep(fi, i),

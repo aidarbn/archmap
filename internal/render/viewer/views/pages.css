@@ -87,3 +87,31 @@
 
 /* the tree of a page: refs the code does not have */
 .slist .ti.bad .nm { color: var(--crit-text); }
+
+/* editing (archmap serve): the × of a frame, "+ Note", the hint of an empty page, the note editor, the toast */
+.pf-del { cursor: pointer; opacity: 0; transition: opacity 100ms; }
+.pf:hover .pf-del, .pf.sel .pf-del { opacity: 1; }
+.pf-del rect { fill: var(--surface); stroke: var(--line-2); }
+.pf-del .x { stroke: var(--text-2); stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.pf-del:hover rect { fill: color-mix(in oklab, var(--critical) 12%, var(--surface)); stroke: var(--critical); }
+.pf-del:hover .x { stroke: var(--crit-text); }
+.pe-tools { position: absolute; right: 12px; top: 10px; z-index: 6; display: flex; gap: 6px; }
+.pe-tools[hidden] { display: none; }
+.pe-empty { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4; width: min(440px, calc(100% - 48px)); padding: 26px 28px; text-align: center;
+  border: 1.5px dashed var(--line-2); border-radius: 14px; color: var(--text-2); background: color-mix(in oklab, var(--surface) 70%, transparent); transition: border-color 120ms, background-color 120ms; }
+.pe-empty[hidden] { display: none; }
+.pe-empty svg { width: 30px; height: 30px; fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.pe-empty p { margin: 10px 0 14px; font-size: 13.5px; line-height: 1.45; }
+.pe-empty p.sub { margin: 0; font-size: 12px; color: var(--muted); }
+/* a drop on the page: the canvas (and the hint) light up — accent when it can be added, red when it cannot */
+.view.pe-drop-ok { box-shadow: inset 0 0 0 2px var(--accent); }
+.view.pe-drop-no { box-shadow: inset 0 0 0 2px var(--critical); }
+.view.pe-drop-ok .pe-empty { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
+.view.pe-drop-no .pe-empty { border-color: var(--critical); }
+.pe-note { position: absolute; z-index: 9; display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1.5px solid var(--accent); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-2); }
+.pe-note-ta { width: 100%; min-height: 90px; resize: vertical; border: 0; outline: none; background: transparent; color: var(--text); font: 15px/1.45 var(--font); padding: 6px 8px; }
+.pe-note-hint { font-size: 11.5px; color: var(--muted); padding: 0 8px 2px; }
+.pe-toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px); z-index: 50; max-width: min(640px, calc(100vw - 40px)); padding: 9px 14px; border-radius: 10px;
+  background: var(--text); color: var(--bg); font-size: 13px; line-height: 1.4; box-shadow: var(--shadow-2); opacity: 0; pointer-events: none; transition: opacity 160ms, transform 160ms; }
+.pe-toast.on { opacity: 1; transform: translate(-50%, 0); }
+.pe-toast.err { background: var(--critical); color: #fff; }

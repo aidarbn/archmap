@@ -123,7 +123,8 @@ func (s *Server) Seq() int {
 }
 
 // Handler returns the HTTP handler: GET / , /data.json, /events, /src, /spec
-// and the two writers of the specification, POST /spec/ops and PUT /spec/file.
+// and the writers of the specification, POST /spec/ops, PUT /spec/file and
+// POST /spec/page (page edits from the viewer).
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
@@ -132,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/spec", s.handleSpec)
 	mux.HandleFunc("/spec/ops", s.handleSpecOps)
 	mux.HandleFunc("/spec/file", s.handleSpecFile)
+	mux.HandleFunc("/spec/page", s.handleSpecPage)
 	if !s.opts.NoSrc {
 		mux.HandleFunc("/src", s.handleSrc)
 	}
@@ -139,9 +141,9 @@ func (s *Server) Handler() http.Handler {
 }
 
 // writers are the only endpoints that take a body: path -> method.
-var writers = map[string]string{"/spec/ops": http.MethodPost, "/spec/file": http.MethodPut}
+var writers = map[string]string{"/spec/ops": http.MethodPost, "/spec/file": http.MethodPut, "/spec/page": http.MethodPost}
 
-// guard allows GET/HEAD, plus POST /spec/ops and PUT /spec/file, and rejects
+// guard allows GET/HEAD, plus the writers above, and rejects
 // foreign Host headers (DNS rebinding). A write must be JSON and must not come
 // from another origin: a form or a fetch from a foreign page is refused (a JSON
 // content type forces a CORS preflight, which this server never grants).

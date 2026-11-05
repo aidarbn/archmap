@@ -372,34 +372,50 @@ func isEndpointRef(s string) bool {
 	return s != "" && !strings.ContainsAny(s, " \t\"#") && !strings.Contains(s, "->")
 }
 
-func formatPage(pg *Page) string {
-	var sb strings.Builder
+// pageHeader is the `page` line of a page, without the newline: the shortest
+// form that parses back to the same id and name.
+func pageHeader(id, name string) string {
 	switch {
-	case pg.Name == "" || pg.Name == pg.ID:
-		sb.WriteString("page " + pg.ID + "\n")
-	case Slug(pg.Name) == pg.ID:
-		sb.WriteString("page " + quote(pg.Name) + "\n")
+	case name == "" || name == id:
+		return "page " + id
+	case Slug(name) == id:
+		return "page " + quote(name)
 	default:
-		sb.WriteString("page " + pg.ID + " " + quote(pg.Name) + "\n")
+		return "page " + id + " " + quote(name)
 	}
-	// `kind value` with the values in one column (one space after the longest kind)
+}
+
+// frameValue is what follows the keyword on a frame line.
+func frameValue(fr Frame) string {
+	if fr.Kind == FrameNote {
+		return quote(fr.Text)
+	}
+	parts := make([]string, len(fr.Refs))
+	for k, r := range fr.Refs {
+		if strings.ContainsAny(r, " \t,#\"") {
+			r = quote(r)
+		}
+		parts[k] = r
+	}
+	return strings.Join(parts, ", ")
+}
+
+// framesWidth is the width of the longest keyword of the frames: the values
+// stand in one column, one space after it.
+func framesWidth(frames []Frame) int {
 	w := 0
-	for _, fr := range pg.Frames {
+	for _, fr := range frames {
 		w = max(w, width(fr.Kind))
 	}
+	return w
+}
+
+func formatPage(pg *Page) string {
+	var sb strings.Builder
+	sb.WriteString(pageHeader(pg.ID, pg.Name) + "\n")
+	w := framesWidth(pg.Frames)
 	for _, fr := range pg.Frames {
-		val := quote(fr.Text)
-		if fr.Kind != FrameNote {
-			parts := make([]string, len(fr.Refs))
-			for k, r := range fr.Refs {
-				if strings.ContainsAny(r, " \t,") {
-					r = quote(r)
-				}
-				parts[k] = r
-			}
-			val = strings.Join(parts, ", ")
-		}
-		sb.WriteString("  " + fr.Kind + strings.Repeat(" ", w-width(fr.Kind)+1) + val + "\n")
+		sb.WriteString("  " + fr.Kind + strings.Repeat(" ", w-width(fr.Kind)+1) + frameValue(fr) + "\n")
 	}
 	return sb.String()
 }

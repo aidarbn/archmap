@@ -25,6 +25,14 @@ addI18n({
     chFocusOn: 'Только холст', chFocusOff: 'Вернуть панели',
     pgPages: 'Страницы', pgSystem: 'Система', pgFold: 'Свернуть список страниц', pgUnfold: 'Показать список страниц',
     pgBuiltin: 'Страница archmap: строится из кода', pgUser: (f) => 'Страница из ' + f, pgBad: 'Есть ссылки на то, чего нет в коде (archmap lint)',
+    peNew: 'Новая страница', peNamePh: 'Имя страницы', peNameEmpty: 'Введите имя страницы', peNameDup: (n) => 'Страница «' + n + '» уже есть',
+    peDelPage: 'Удалить страницу', peDelConfirm: (n, f) => 'Удалить страницу «' + n + '»?\n\nФайл ' + f + ' будет изменён или удалён на диске (⌘Z — вернуть).',
+    peDeleted: (n) => 'Страница «' + n + '» удалена', peRenameTip: 'Двойной клик — переименовать',
+    peTabPage: 'Страница', peTabSys: 'Система', peTabTip: 'Навигация «Система» — источник: перетащите элементы на холст страницы',
+    peSrcHint: 'Перетащите на страницу · ⌘/Shift — несколько · двойной клик — добавить',
+    peNoRefJ: 'этот путь собран автоматически — на страницу кладутся пути arch:journey', peNoRefF: 'у сценария нет id — на страницу кладутся сценарии arch:flow',
+    peNoFn: 'функция — положите на страницу её модуль', peNoActor: 'пользователи и внешние системы рисуются внутри диаграмм', peNoSec: 'раздел целиком нельзя — выберите элементы внутри',
+    peNoEp: 'у ручки нет однозначного имени', peOrderNo: 'большие диаграммы (пути, статусы) всегда стоят выше — порядок только внутри своей группы',
   },
   en: {
     nvSys: 'System', nvActors: 'Users', nvMods: 'Modules', nvExt: 'Outside systems', nvData: 'Data', nvApi: 'API', nvStatus: 'Statuses',
@@ -35,12 +43,21 @@ addI18n({
     chFocusOn: 'Canvas only', chFocusOff: 'Bring the panels back',
     pgPages: 'Pages', pgSystem: 'System', pgFold: 'Fold the page list', pgUnfold: 'Show the page list',
     pgBuiltin: 'An archmap page: built from the code', pgUser: (f) => 'A page from ' + f, pgBad: 'Names something the code does not have (archmap lint)',
+    peNew: 'New page', peNamePh: 'Page name', peNameEmpty: 'Type a name for the page', peNameDup: (n) => 'There is a page “' + n + '” already',
+    peDelPage: 'Delete the page', peDelConfirm: (n, f) => 'Delete the page “' + n + '”?\n\nThe file ' + f + ' is changed or removed on disk (⌘Z brings it back).',
+    peDeleted: (n) => 'Page “' + n + '” deleted', peRenameTip: 'Double-click to rename',
+    peTabPage: 'Page', peTabSys: 'System', peTabTip: 'The System navigation as a source: drag items onto the page canvas',
+    peSrcHint: 'Drag onto the page · ⌘/Shift — several · double-click — add',
+    peNoRefJ: 'this path is assembled automatically — pages take arch:journey paths', peNoRefF: 'the scenario has no id — pages take arch:flow scenarios',
+    peNoFn: 'a function — put its module on the page', peNoActor: 'users and outside systems are drawn inside the diagrams', peNoSec: 'not a whole section — pick the items inside',
+    peNoEp: 'the endpoint has no unambiguous name', peOrderNo: 'large diagrams (paths, statuses) always stay on top — order within their group only',
   },
 });
 
 // open: nodes unfolded by hand (the root and Scenarios by default); last: the node clicked last (a view without a
 // selection of its own — Statuses — keeps it marked)
-const SIDE = { hidden: false, q: '', open: new Set(['sys', 'sec:scen', 'scp', 'scs']), w: 0, last: null, lastView: null };
+// src: the System navigation shown as the source of a user page (archmap serve); picks: the rows picked in it
+const SIDE = { hidden: false, q: '', open: new Set(['sys', 'sec:scen', 'scp', 'scs']), w: 0, last: null, lastView: null, src: false, picks: new Set() };
 const SIDE_W = { def: 260, min: 200, max: 420 };
 const IC = (d) => `<svg class="ico" viewBox="0 0 14 14" aria-hidden="true">${d}</svg>`;
 const SIDE_ICON = {
@@ -63,6 +80,8 @@ const SIDE_ICON = {
   page: IC('<path d="M3.5 1.5h5l2.5 2.5v8.5h-7.5z"/><path d="M8.5 1.5V4H11"/>'),
   frame: IC('<path d="M4 1.5v11M10 1.5v11M1.5 4h11M1.5 10h11"/>'),
   note: IC('<rect x="2" y="2" width="10" height="10" rx="1.5"/><path d="M4.5 5h5M4.5 7.5h5M4.5 10h3"/>'),
+  plus: IC('<path d="M7 2.5v9M2.5 7h9"/>'),
+  trash: IC('<path d="M2.5 4h9M5.5 4V2.5h3V4M3.8 4l.6 7.5h5.2l.6-7.5"/>'),
 };
 
 /* ---------- pages ----------
@@ -95,39 +114,293 @@ function openPage(id) {
   if (p.view === 'map' && state.level > 0) up(0);
   renderPages(); renderSide(); paintHName(); writeHash();
 }
+/* Editing the list (archmap serve only; views/pages.js sends the edits): "+" in the header — the name is typed right
+ * in the list (Enter — create, Esc — cancel), a double click on a page of arch/pages — rename in place, the bin at
+ * its right — delete (with a confirmation). In a static map "+" is greyed out and says where it works. */
+const PGE = { add: false, ren: null, err: '', val: '', focus: false, busy: false, last: { id: null, at: 0 } };
+const canEditPages = () => !!(AM.pages && AM.pages.edit && AM.pages.edit.can);
+const peToast = (m, k) => { if (AM.pages && AM.pages.edit) AM.pages.edit.toast(m, k); };
+function nameRow(v, mode) {
+  return `<div class="pg pgin${PGE.err ? ' err' : ''}">${SIDE_ICON.page}<input class="pgname" data-mode="${mode}" value="${esc(v)}" placeholder="${esc(t('peNamePh'))}" aria-label="${esc(t('peNamePh'))}" maxlength="120" spellcheck="false" autocomplete="off"></div>` +
+    `<div class="pgerr" role="alert"${PGE.err ? '' : ' hidden'}>${esc(PGE.err)}</div>`;
+}
 function renderPages() {
   const box = $('#pages'); if (!box || !D.F) return;
-  const all = pageList(), cur = curPage();
+  const ae = document.activeElement;
+  if (ae && ae.tagName === 'INPUT' && box.contains(ae)) return; // a name is being typed: the list waits
+  const all = pageList(), cur = curPage(), live = canEditPages();
   const chev = `<span class="chev${PG.fold ? '' : ' on'}">${SIDE_ICON.chev}</span>`;
-  let h = `<button type="button" class="pgh" data-pgfold="1" title="${esc(t(PG.fold ? 'pgUnfold' : 'pgFold'))}" aria-expanded="${!PG.fold}">${chev}<span class="nm">${esc(t('pgPages'))}</span>` +
-    (PG.fold ? `<span class="cur">${esc(cur.name)}</span>` : `<span class="ct">${all.length}</span>`) + '</button>';
+  let h = '<div class="pghr">' + `<button type="button" class="pgh" data-pgfold="1" title="${esc(t(PG.fold ? 'pgUnfold' : 'pgFold'))}" aria-expanded="${!PG.fold}">${chev}<span class="nm">${esc(t('pgPages'))}</span>` +
+    (PG.fold ? `<span class="cur">${esc(cur.name)}</span>` : `<span class="ct">${all.length}</span>`) + '</button>' +
+    (hasView('page') ? `<button type="button" class="pgadd${live ? '' : ' off'}" data-pgadd="1" title="${esc(live ? t('peNew') : t('peServeOnly'))}" aria-label="${esc(t('peNew'))}"${live ? '' : ' aria-disabled="true"'}>${SIDE_ICON.plus}</button>` : '') + '</div>';
   if (!PG.fold) {
     h += '<div class="pgl" role="listbox" aria-label="' + esc(t('pgPages')) + '">';
     all.forEach((p, i) => {
       if (p.user && (i === 0 || !all[i - 1].user)) h += '<div class="pgsep" role="separator"></div>';
-      const tip = p.name + '\n' + (p.user ? t('pgUser', p.page.file || 'arch/pages') : t('pgBuiltin')) + (p.bad ? '\n' + t('pgBad') : '');
-      h += `<button type="button" role="option" class="pg${p.id === cur.id ? ' cur' : ''}${p.bad ? ' bad' : ''}" data-pg="${esc(p.id)}" title="${esc(tip)}" aria-selected="${p.id === cur.id}">${SIDE_ICON[p.icon]}<span class="nm">${esc(p.name)}</span>${p.user ? `<span class="ct">${(p.page.frames || []).length}</span>` : ''}</button>`;
+      if (p.user && PGE.ren === p.page.id) { h += nameRow(PGE.val, 'ren'); return; }
+      const tip = p.name + '\n' + (p.user ? t('pgUser', p.page.file || 'arch/pages') + (live ? '\n' + t('peRenameTip') : '') : t('pgBuiltin')) + (p.bad ? '\n' + t('pgBad') : '');
+      h += `<div class="pgr"><button type="button" role="option" class="pg${p.id === cur.id ? ' cur' : ''}${p.bad ? ' bad' : ''}" data-pg="${esc(p.id)}" title="${esc(tip)}" aria-selected="${p.id === cur.id}">${SIDE_ICON[p.icon]}<span class="nm">${esc(p.name)}</span>${p.user ? `<span class="ct">${(p.page.frames || []).length}</span>` : ''}</button>` +
+        (p.user && live ? `<button type="button" class="pgdel" data-pgdel="${esc(p.page.id)}" title="${esc(t('peDelPage'))}" aria-label="${esc(t('peDelPage') + ' ' + p.name)}">${SIDE_ICON.trash}</button>` : '') + '</div>';
     });
+    if (PGE.add) { if (!all.some((p) => p.user)) h += '<div class="pgsep" role="separator"></div>'; h += nameRow(PGE.val, 'add'); }
     h += '</div>';
   }
+  const st = box.querySelector('.pgl') ? box.querySelector('.pgl').scrollTop : 0;
   box.innerHTML = h;
+  // the list keeps its scroll; a page opened (a new one at the end) is scrolled into it
+  const l = box.querySelector('.pgl'), c = box.querySelector('.pg.cur, .pgin');
+  if (l) {
+    l.scrollTop = st;
+    if (c && (PGE.seen !== cur.id || c.classList.contains('pgin'))) { const lb = l.getBoundingClientRect(), cb = c.getBoundingClientRect(); if (cb.bottom > lb.bottom) l.scrollTop += cb.bottom - lb.bottom + 4; else if (cb.top < lb.top) l.scrollTop -= lb.top - cb.top + 4; }
+  }
+  PGE.seen = cur.id;
+  const inp = box.querySelector('input.pgname');
+  if (inp && PGE.focus) { PGE.focus = false; inp.focus(); if (PGE.ren) inp.select(); else inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+function nameErr(msg) {
+  PGE.err = msg || '';
+  const box = $('#pages'), row = box.querySelector('.pgin'), er = box.querySelector('.pgerr');
+  if (row) row.classList.toggle('err', !!msg);
+  if (er) { er.textContent = PGE.err; er.hidden = !msg; }
+}
+function startName(mode, id) {
+  if (!canEditPages()) { peToast(t('peServeOnly')); return; }
+  PGE.add = mode === 'add'; PGE.ren = mode === 'ren' ? id : null; PGE.err = ''; PGE.focus = true;
+  PGE.val = mode === 'ren' ? (userPages().find((p) => p.id === id) || {}).name || '' : '';
+  if (PG.fold) PG.fold = false;
+  const ae = document.activeElement; if (ae && ae.blur) ae.blur();
+  renderPages();
+}
+function endName() {
+  PGE.add = false; PGE.ren = null; PGE.err = ''; PGE.val = '';
+  const ae = document.activeElement; if (ae && ae.tagName === 'INPUT' && $('#pages').contains(ae)) { PGE.busy = true; ae.blur(); PGE.busy = false; }
+  renderPages();
+}
+async function commitName(mode, v) {
+  if (PGE.busy) return;
+  const name = String(v || '').trim();
+  PGE.val = v;
+  const self = mode === 'ren' ? userPages().find((p) => p.id === PGE.ren) : null;
+  if (mode === 'ren' && (!self || name === self.name)) { endName(); return; }
+  if (!name) { if (mode === 'add') endName(); else nameErr(t('peNameEmpty')); return; }
+  const dup = userPages().find((p) => String(p.name).trim().toLowerCase() === name.toLowerCase() && (!self || p.id !== self.id));
+  if (dup) { nameErr(t('peNameDup', dup.name)); return; }
+  PGE.busy = true;
+  const j = await AM.pages.edit.op(mode === 'add' ? { op: 'create', name } : { op: 'rename', page: self.id, name }, { quiet: true });
+  PGE.busy = false;
+  if (!j) return;
+  if (j.error) { nameErr(j.error); return; }
+  endName();
+  if (mode === 'add' && j.page && AM.pages.has(j.page)) { SIDE.src = true; SIDE.picks.clear(); AM.pages.open(j.page); }
+}
+async function deletePage(id) {
+  const p = userPages().find((x) => x.id === id); if (!p) return;
+  if (!window.confirm(t('peDelConfirm', p.name, p.file || 'arch/pages'))) return;
+  const j = await AM.pages.edit.op({ op: 'delete', page: id });
+  if (j && !j.error) peToast(t('peDeleted', p.name) + ' · ' + t('peUndoHint'));
 }
 function setupPages() {
   try { PG.fold = localStorage.getItem('archmap.pages.fold') === '1'; } catch (e) { /* file:// without storage */ }
-  $('#pages').addEventListener('click', (e) => {
+  const box = $('#pages');
+  box.addEventListener('click', (e) => {
     if (e.target.closest('[data-pgfold]')) {
       PG.fold = !PG.fold;
       try { localStorage.setItem('archmap.pages.fold', PG.fold ? '1' : '0'); } catch (er) { /* ignore */ }
       renderPages(); return;
     }
-    const b = e.target.closest('[data-pg]'); if (b) openPage(b.getAttribute('data-pg'));
+    if (e.target.closest('[data-pgadd]')) { startName('add'); return; }
+    const d = e.target.closest('[data-pgdel]'); if (d) { deletePage(d.getAttribute('data-pgdel')); return; }
+    const b = e.target.closest('[data-pg]'); if (!b) return;
+    const id = b.getAttribute('data-pg'), now = Date.now(), p = pageList().find((x) => x.id === id);
+    // a double click: the list is redrawn by the first click, so it is told by time and page, not by the element
+    if (p && p.user && PGE.last.id === id && now - PGE.last.at < 450) { PGE.last = { id: null, at: 0 }; if (canEditPages()) startName('ren', p.page.id); else peToast(t('peServeOnly')); return; }
+    PGE.last = { id, at: now };
+    openPage(id);
+  });
+  box.addEventListener('keydown', (e) => {
+    const inp = e.target.closest('input.pgname');
+    if (inp) {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commitName(inp.getAttribute('data-mode'), inp.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); endName(); }
+      return;
+    }
+    const b = e.target.closest('[data-pg]');
+    if (b && e.key === 'F2') { const p = pageList().find((x) => x.id === b.getAttribute('data-pg')); if (p && p.user) { e.preventDefault(); startName('ren', p.page.id); } }
+  });
+  box.addEventListener('input', (e) => { if (e.target.closest('input.pgname')) { PGE.val = e.target.value; if (PGE.err) nameErr(''); } });
+  box.addEventListener('focusout', (e) => {
+    const inp = e.target.closest && e.target.closest('input.pgname');
+    if (inp && !PGE.busy) commitName(inp.getAttribute('data-mode'), inp.value);
   });
   renderPages();
 }
+
+/* ---------- a user page: its tree, or the System navigation as the source of what goes on it ---------- */
+// the tabs "Page | System" over the tree: only on a page of arch/pages under archmap serve
+const srcTabs = () => state.view === 'page' && !state.run && curPage().user && canEditPages();
+const isSrc = () => SIDE.src && srcTabs();
+function paintTabs() {
+  const el = $('#sideTabs'); if (!el) return;
+  const on = srcTabs();
+  el.hidden = !on;
+  if (!on) return;
+  el.innerHTML = `<button type="button" role="tab" data-stab="page" aria-selected="${!SIDE.src}">${esc(t('peTabPage'))}</button>` +
+    `<button type="button" role="tab" data-stab="sys" aria-selected="${SIDE.src}" title="${esc(t('peTabTip'))}">${SIDE_ICON.plus}${esc(t('peTabSys'))}</button>`;
+}
+function setSource(on) {
+  SIDE.src = !!on; SIDE.picks.clear();
+  if (on && SIDE.hidden) setSideHidden(false);
+  paintTabs(); renderSide();
+}
+// what a row of the System navigation puts on a page: {kind, refs, keys, label} or {why} — why it cannot
+const refFlows = () => { const s = new Set(((D.M.spec || {}).flows || []).map((f) => f.id)); Object.values(D.fns).forEach((fn) => ((fn.arch && fn.arch.flows) || []).forEach((d) => s.add(d.id))); return s; };
+const refJourneys = () => { const s = new Set(((D.M.spec || {}).journeys || []).map((j) => j.id)); Object.values(D.fns).forEach((fn) => ((fn.arch && fn.arch.journeys) || []).forEach((d) => s.add(d.id))); return s; };
+function epRef(i) {
+  const eps = D.endpoints || [], e = eps[i]; if (!e) return null;
+  const hit = (x, r) => (x.name && x.name === r) || (x.service && x.name && x.service + '.' + x.name === r) || (x.path && x.path === r) || (x.method && x.path && (x.method + ' ' + x.path).toLowerCase() === r.toLowerCase());
+  const cands = [e.name, e.service && e.name ? e.service + '.' + e.name : '', e.path, e.method && e.path ? e.method + ' ' + e.path : ''].filter(Boolean);
+  return cands.find((c) => eps.filter((x) => hit(x, c)).length === 1) || null;
+}
+function itemOf(key) {
+  const n = NAV.get(key), label = n ? n.name : key, no = (why) => ({ why, label, icon: n && n.icon });
+  let m;
+  if ((m = /^r:journey:(.+?)(?:@\d+)?$/.exec(key))) return refJourneys().has(m[1]) ? { kind: 'journey', refs: [m[1]], keys: [m[1]], label, icon: 'path' } : no(t('peNoRefJ'));
+  if ((m = /^rs?:flow:(\d+)$/.exec(key))) { const fl = D.flows.find((x) => x.i === +m[1]); return fl && fl.id && refFlows().has(fl.id) ? { kind: 'flow', refs: [fl.id], keys: [fl.id], label, icon: 'flow' } : no(t('peNoRefF')); }
+  if (key.startsWith('s:')) return { kind: 'states', refs: [key.slice(2)], keys: [key.slice(2)], label, icon: 'status' };
+  if (key.startsWith('t:')) return { kind: 'tables', refs: [key.slice(2)], keys: [key.slice(2)], label, icon: 'table' };
+  if (key.startsWith('m:')) return { kind: 'module', refs: [key.slice(2)], keys: [key.slice(2)], label, icon: 'mod' };
+  if (key.startsWith('e:')) { const i = +key.slice(2), r = epRef(i); return r ? { kind: 'api', refs: [r], keys: [i], label, icon: 'ep' } : no(t('peNoEp')); }
+  if (key.startsWith('svc:')) {
+    const svc = key.slice(4), is = (D.endpoints || []).map((e, i) => ((e.service || (e.kind === 'grpc' ? 'gRPC' : 'HTTP')) === svc ? i : -1)).filter((i) => i >= 0);
+    const ok = is.filter((i) => epRef(i));
+    return ok.length ? { kind: 'api', refs: ok.map(epRef), keys: ok, label, icon: 'api' } : no(t('peNoEp'));
+  }
+  if (key.startsWith('f:')) return no(t('peNoFn'));
+  if (key.startsWith('a:') || key.startsWith('x:')) return no(t('peNoActor'));
+  return no(t('peNoSec'));
+}
+// the items a drag (or a double click) of row key takes: the picked rows when key is one of them
+const dragItems = (key) => (SIDE.picks.has(key) && SIDE.picks.size > 1 ? Array.from(SIDE.picks) : [key]).map(itemOf);
+function paintPicks() { $('#sideList').querySelectorAll('.ti[data-k]').forEach((el) => el.classList.toggle('pick', SIDE.picks.has(el.getAttribute('data-k')))); }
+function addToPage(keys) {
+  const items = keys.map(itemOf), v = AM.pages.edit.accepts(items);
+  if (!v.ok) { peToast((v.dup ? '' : t('peDropNo') + ': ') + v.why, v.dup ? '' : 'err'); return; }
+  AM.pages.edit.add(items);
+}
+
+/* dragging with the pointer (works with a mouse, a pen and WebDriver alike): System rows onto the page — the canvas,
+ * the "Page" tab (held over it, the tab opens and the page tree takes the drop), the page in the list; the frames of
+ * the page tree up and down to reorder. The ghost says what a drop does here: add, already there, or why not. */
+const DRAG = { st: null, quiet: 0, tabT: 0 };
+function dropTarget(x, y) {
+  const el = document.elementFromPoint(x, y); if (!el) return null;
+  const pv = AM.pages && AM.pages.edit.el;
+  if (pv && pv.contains(el)) return { kind: 'canvas', el: pv };
+  const tab = el.closest('[data-stab="page"]'); if (tab) return { kind: 'tab', el: tab };
+  const pg = el.closest('.pg.cur'); if (pg && curPage().user) return { kind: 'list', el: pg };
+  if (!isSrc() && $('#sideList').contains(el)) return { kind: 'tree', el: $('#sideList') };
+  return null;
+}
+function clearDropMarks() {
+  document.querySelectorAll('.pe-drop-ok, .pe-drop-no').forEach((e) => e.classList.remove('pe-drop-ok', 'pe-drop-no'));
+  const l = $('#sideList .dropline'); if (l) l.remove();
+}
+function dragMove(e) {
+  const s = DRAG.st; if (!s) return;
+  if (!s.on) {
+    if (Math.hypot(e.clientX - s.x, e.clientY - s.y) < 5) return;
+    s.on = true;
+    s.items = s.mode === 'add' ? dragItems(s.key) : null;
+    const n = NAV.get(s.key), lab = s.items ? (s.items[0].label + (s.items.length > 1 ? '  +' + (s.items.length - 1) : '')) : n ? n.name : '';
+    const ic = s.items ? s.items[0].icon : n && n.icon;
+    s.ghost = H('div', { class: 'pe-ghost' }, document.body, (ic && SIDE_ICON[ic] ? SIDE_ICON[ic] : '') + `<span class="nm">${esc(lab)}</span><span class="vd"></span>`);
+    document.body.classList.add('pe-dragging');
+  }
+  s.ghost.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 12}px)`;
+  clearDropMarks();
+  const vd = s.ghost.querySelector('.vd');
+  let cls = '', msg = '';
+  if (s.mode === 'add') {
+    const tg = dropTarget(e.clientX, e.clientY);
+    if (tg && tg.kind === 'tab') { if (!DRAG.tabT) DRAG.tabT = setTimeout(() => { DRAG.tabT = 0; if (DRAG.st && SIDE.src) { SIDE.src = false; paintTabs(); renderSide(); } }, 450); }
+    else if (DRAG.tabT) { clearTimeout(DRAG.tabT); DRAG.tabT = 0; }
+    s.target = tg;
+    if (tg) {
+      const v = AM.pages.edit.accepts(s.items);
+      s.ok = v.ok; cls = v.ok ? 'ok' : v.dup ? 'dup' : 'no'; msg = v.ok ? v.why : (v.dup ? '' : t('peDropNo') + ': ') + v.why;
+      if (!v.dup) tg.el.classList.add(v.ok ? 'pe-drop-ok' : 'pe-drop-no'); // already there: neither yes nor red
+    }
+  } else {
+    // reorder: the frame row under the pointer, before or after it, within the same group
+    const box = $('#sideList'), rows = Array.from(box.querySelectorAll('.ti[data-k]')).filter((r) => /^pf:\d+$/.test(r.getAttribute('data-k')));
+    s.target = null;
+    if (box.contains(document.elementFromPoint(e.clientX, e.clientY)) && rows.length) {
+      let best = null;
+      rows.forEach((r) => { const b = r.getBoundingClientRect(), d = e.clientY < b.top ? b.top - e.clientY : e.clientY > b.bottom ? e.clientY - b.bottom : 0; if (!best || d < best.d) best = { r, b, d }; });
+      const j = +best.r.getAttribute('data-k').slice(3), after = e.clientY > best.b.top + best.b.height / 2, i = +s.key.slice(3);
+      const pg = curPage().page, rank = AM.pages.edit.rank, ok = j !== i && rank(pg.frames[i].kind) === rank(pg.frames[j].kind);
+      s.target = { j, after }; s.ok = ok;
+      const bb = box.getBoundingClientRect(), line = H('div', { class: 'dropline' + (ok ? '' : ' no') }, box);
+      line.style.top = (after ? best.b.bottom : best.b.top) - bb.top + box.scrollTop - 1 + 'px';
+      cls = ok ? 'ok' : 'no'; msg = ok ? '' : t('peOrderNo');
+      if (j === i) { cls = ''; msg = ''; line.remove(); }
+    }
+  }
+  s.ghost.className = 'pe-ghost' + (cls ? ' ' + cls : '');
+  vd.textContent = msg;
+}
+function dragEnd(e, cancel) {
+  const s = DRAG.st; DRAG.st = null;
+  window.removeEventListener('pointermove', dragMove); window.removeEventListener('pointerup', dragUp); window.removeEventListener('pointercancel', dragCancel); window.removeEventListener('keydown', dragKey, true);
+  if (DRAG.tabT) { clearTimeout(DRAG.tabT); DRAG.tabT = 0; }
+  if (!s || !s.on) return;
+  DRAG.quiet = Date.now(); // the click that ends a drag does nothing
+  if (s.ghost) s.ghost.remove();
+  document.body.classList.remove('pe-dragging');
+  clearDropMarks();
+  if (cancel || !s.target) return;
+  if (s.mode === 'add') {
+    if (s.ok) AM.pages.edit.add(s.items);
+    else { const v = AM.pages.edit.accepts(s.items); peToast((v.dup ? '' : t('peDropNo') + ': ') + v.why, v.dup ? '' : 'err'); }
+  } else if (s.ok) AM.pages.edit.move(+s.key.slice(3), s.target.j, s.target.after);
+}
+const dragUp = (e) => dragEnd(e, false), dragCancel = (e) => dragEnd(e, true);
+const dragKey = (e) => { if (e.key === 'Escape' && DRAG.st && DRAG.st.on) { e.preventDefault(); e.stopPropagation(); dragEnd(e, true); } };
+function setupDrag() {
+  const box = $('#sideList');
+  box.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || DRAG.st) return;
+    const r = e.target.closest('.ti[data-k]'); if (!r || e.target.closest('[data-tog]')) return;
+    const key = r.getAttribute('data-k');
+    const mode = isSrc() ? 'add' : srcTabs() && /^pf:\d+$/.test(key) ? 'move' : null;
+    if (!mode) return;
+    DRAG.st = { mode, key, x: e.clientX, y: e.clientY, on: false };
+    window.addEventListener('pointermove', dragMove); window.addEventListener('pointerup', dragUp); window.addEventListener('pointercancel', dragCancel); window.addEventListener('keydown', dragKey, true);
+  });
+  box.addEventListener('dblclick', (e) => {
+    if (!isSrc()) return;
+    const r = e.target.closest('.ti[data-k]'); if (!r || e.target.closest('[data-tog]')) return;
+    const key = r.getAttribute('data-k');
+    addToPage(SIDE.picks.has(key) && SIDE.picks.size > 1 ? Array.from(SIDE.picks) : [key]);
+  });
+  box.addEventListener('keydown', (e) => {
+    if (!isSrc() || e.key !== 'Enter') return;
+    const r = e.target.closest('.ti[data-k]'); if (!r) return;
+    e.preventDefault(); e.stopPropagation();
+    const key = r.getAttribute('data-k');
+    addToPage(SIDE.picks.has(key) && SIDE.picks.size > 1 ? Array.from(SIDE.picks) : [key]);
+  });
+  const tabs = H('div', { class: 'stabs', id: 'sideTabs', role: 'tablist', hidden: '' });
+  box.parentNode.insertBefore(tabs, box);
+  tabs.addEventListener('click', (e) => { const b = e.target.closest('[data-stab]'); if (b) setSource(b.getAttribute('data-stab') === 'sys'); });
+}
+
 // the tree of the current page: System — the whole navigation; Data / API / Statuses — their section of it; a page of
-// arch/pages — its frames and what is in them (views/pages.js)
+// arch/pages — its frames and what is in them (views/pages.js), or the System navigation while it is the source
 function pageTree() {
   const p = curPage();
+  if (p.user && isSrc()) return navTree();
   if (p.user && AM.pages) return AM.pages.tree(p.page);
   const full = navTree();
   if (!p.sec) return full;
@@ -346,7 +619,8 @@ function revealSel() {
 function treeRow(n, d, open, hasKids, cur) {
   const chev = hasKids ? `<span class="chev${open ? ' on' : ''}" data-tog="${esc(n.key)}" title="${esc(t(open ? 'sdFold' : 'sdUnfold'))}">${SIDE_ICON.chev}</span>` : '<span class="chev"></span>';
   const tip = (n.title || n.name) + (n.win ? '\n' + t('nvWin') : '');
-  return `<button type="button" class="ti${n.cls ? ' ' + n.cls : ''}${n.key.startsWith('sec:') || n.key === 'scp' || n.key === 'scs' || n.key === 'sca' || n.key === 'sys' ? ' sec' : ''}${cur ? ' cur' : ''}" style="--d:${d}" data-k="${esc(n.key)}" title="${esc(tip)}"${hasKids ? ` aria-expanded="${open}"` : ''}${cur ? ' aria-current="true"' : ''}>` +
+  const src = isSrc(), drag = src || (srcTabs() && /^pf:\d+$/.test(n.key));
+  return `<button type="button" class="ti${n.cls ? ' ' + n.cls : ''}${n.key.startsWith('sec:') || n.key === 'scp' || n.key === 'scs' || n.key === 'sca' || n.key === 'sys' ? ' sec' : ''}${cur && !src ? ' cur' : ''}${src && SIDE.picks.has(n.key) ? ' pick' : ''}${drag ? ' dz' : ''}" style="--d:${d}" data-k="${esc(n.key)}" title="${esc(tip)}"${hasKids ? ` aria-expanded="${open}"` : ''}${cur ? ' aria-current="true"' : ''}>` +
     chev + (n.icon ? SIDE_ICON[n.icon] : '') + (n.no != null ? `<span class="no">${n.no}</span>` : '') + `<span class="nm">${esc(n.name)}</span>` + (n.count != null ? `<span class="ct">${n.count}</span>` : '') + '</button>';
 }
 let NAV = new Map(); // key -> node, for the clicks
@@ -372,8 +646,9 @@ function renderSide() {
     if (open) sub = ks.map((c) => walk(c, d + 1));
     return treeRow(n, d, open, d > 0 && hasKids, isCur(n)) + sub.join('');
   };
+  paintTabs();
   const h = walk(pageTree(), 0);
-  box.innerHTML = h || `<div class="sn">${esc(t('sdNone'))}</div>`;
+  box.innerHTML = (isSrc() ? `<div class="shint">${esc(t('peSrcHint'))}</div>` : '') + (h || `<div class="sn">${esc(t('sdNone'))}</div>`);
   box.scrollTop = top;
   const c = box.querySelector('.ti.cur');
   if (c && SIDE.reveal) { SIDE.reveal = false; c.scrollIntoView({ block: 'nearest' }); }
@@ -522,6 +797,14 @@ function setupSide() {
     if (tg) { const k = tg.getAttribute('data-tog'); if (SIDE.open.has(k)) SIDE.open.delete(k); else SIDE.open.add(k); renderSide(); return; }
     const r = e.target.closest('[data-k]'); if (!r) return;
     const n = NAV.get(r.getAttribute('data-k')); if (!n) return;
+    if (Date.now() - DRAG.quiet < 350) return; // the end of a drag
+    // the System navigation as the source of a page: a click picks (⌘/Ctrl/Shift — several), a folder folds
+    if (isSrc()) {
+      const it = itemOf(n.key);
+      if (!it.refs && kidsOf(n).length && !(e.metaKey || e.ctrlKey || e.shiftKey)) { if (SIDE.open.has(n.key)) SIDE.open.delete(n.key); else SIDE.open.add(n.key); renderSide(); return; }
+      if (e.metaKey || e.ctrlKey || e.shiftKey) { if (SIDE.picks.has(n.key)) SIDE.picks.delete(n.key); else SIDE.picks.add(n.key); } else { SIDE.picks.clear(); SIDE.picks.add(n.key); }
+      paintPicks(); return;
+    }
     closeMenu();
     if (n.act) {
       // another row of the tree leaves the open scenario: back to the full map first
@@ -547,9 +830,10 @@ function setupSide() {
   bus.on('lang', () => { paintSide(); renderSide(); renderPages(); });
   bus.on('data', () => { paintSide(); renderSide(); renderPages(); });
   bus.on('live', () => { renderPages(); renderSide(); paintHName(); });
-  setupPages();
+  setupPages(); setupDrag();
+  bus.on('data', () => SIDE.picks.clear());
   paintSide(); renderSide();
 }
 
-Object.assign(AM, { pageList, curPage, openPage, renderPages, side: { render: renderSide, setHidden: setSideHidden, setWidth: setSideWidth, get hidden() { return SIDE.hidden; }, get width() { return SIDE.w || SIDE_W.def; }, groups: sideGroups, realDesc, openScenario, hashRun },
+Object.assign(AM, { pageList, curPage, openPage, renderPages, side: { render: renderSide, setSource, get source() { return isSrc(); }, setHidden: setSideHidden, setWidth: setSideWidth, get hidden() { return SIDE.hidden; }, get width() { return SIDE.w || SIDE_W.def; }, groups: sideGroups, realDesc, openScenario, hashRun },
   chrome: { setTop: setTopHidden, setFocus, get top() { return CHR.top; }, get focus() { return !!CHR.focus; } } });
