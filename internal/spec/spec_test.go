@@ -484,7 +484,7 @@ journey j1: kaspi-pay > ghost
 	if len(by[CodeNoFunc]) != 1 || by[CodeNoFunc][0].Line != 13 || len(by[CodeAmbiguous]) != 1 || !strings.Contains(by[CodeAmbiguous][0].Msg, "pay/other.go::Other.other") {
 		t.Errorf("funcs: %+v %+v", by[CodeNoFunc], by[CodeAmbiguous])
 	}
-	if u := by[CodeUnreachable]; len(u) != 1 || u[0].Line != 11 || u[0].Severity != SevWarning {
+	if u := by[CodeUnreachable]; len(u) != 1 || u[0].Line != 11 || u[0].Severity != SevError {
 		t.Errorf("unreachable: %+v", u)
 	}
 	if p := by[CodePlanned]; len(p) != 1 || p[0].Severity != SevInfo {

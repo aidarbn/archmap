@@ -393,8 +393,11 @@ syntax errors (with the line); a `step` or `on -> …` that names a flow that is
 not declared; a flow id declared twice; a step that cannot be reached by calls
 from the flow's entry point; `ext` and `state` of a wrong shape; a journey that names a
 flow that is not declared, a `then` of an unknown journey, a journey id declared twice. A gap
-in a journey (two neighbouring flows with no link in the code) is a warning and does not change
-the exit code. The same run checks the `.arch` spec, see below.
+in a journey (two neighbouring flows with no link in the code) is a client link (`via:
+"client"`), reported as information. An `arch:state` transition that neither the function nor
+anything it calls makes is a warning (an error with `--strict`). Markup only names and describes,
+it never changes steps, links or their order: see docs/spec.md, "Annotations do not change the
+logic". The same run checks the `.arch` spec, see below.
 
 It also prints, as information that never fails the run, how much of the system is described in
 the code:

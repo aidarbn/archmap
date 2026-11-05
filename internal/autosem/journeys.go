@@ -17,9 +17,12 @@ const (
 
 // Link kinds of a journey.
 const (
-	ViaOn       = "on"       // arch:on <cond> -> flow
-	ViaQueue    = "queue"    // a step puts a job on a queue whose handler is the entry point of the next flow
-	ViaDeclared = "declared" // the order was written by hand (arch:then / list form) and the code shows no link
+	ViaOn    = "on"    // arch:on <cond> -> flow
+	ViaQueue = "queue" // a step puts a job on a queue whose handler is the entry point of the next flow
+	// ViaClient: the order was written by hand (arch:journey / arch:then /
+	// spec) and the code shows no link — knowledge from outside the code: the
+	// client calls the next flow itself. Not an error; drawn dashed.
+	ViaClient = "client"
 )
 
 // Link is an edge of a journey between two of its flows (flow ids).
@@ -236,7 +239,7 @@ func (g *graph) buildJourneys(flows []Flow) []Journey {
 				}
 			}
 			if n == 0 {
-				l := Link{From: flows[a].ID, To: flows[b].ID, Via: ViaDeclared}
+				l := Link{From: flows[a].ID, To: flows[b].ID, Via: ViaClient}
 				if !seenLink[l] {
 					seenLink[l] = true
 					j.Links = append(j.Links, l)

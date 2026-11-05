@@ -135,12 +135,26 @@ func Check(s *Set, f *facts.Facts, reach func(entry string) map[string]bool) (Mo
 	dupes(s, add)
 
 	codeFlows, codeJourneys := map[string]bool{}, map[string]bool{}
-	for _, fn := range f.Functions {
+	codeEntry := map[string]string{} // flow id -> entry point (first in file, line order)
+	before := func(a, b string) bool {
+		x, y := f.Functions[a], f.Functions[b]
+		if x.File != y.File {
+			return x.File < y.File
+		}
+		if x.Start != y.Start {
+			return x.Start < y.Start
+		}
+		return a < b
+	}
+	for fid, fn := range f.Functions {
 		if fn.Arch == nil {
 			continue
 		}
 		for _, d := range fn.Arch.Flows {
 			codeFlows[d.ID] = true
+			if e, ok := codeEntry[d.ID]; !ok || before(fid, e) {
+				codeEntry[d.ID] = fid
+			}
 		}
 		for _, j := range fn.Arch.Journeys {
 			codeJourneys[j.ID] = true
@@ -203,7 +217,10 @@ func Check(s *Set, f *facts.Facts, reach func(entry string) map[string]bool) (Mo
 	for i := range m.Flows {
 		fl := &m.Flows[i]
 		fl.Code = codeFlows[fl.ID]
-		prev, first := "", ""
+		// the order of steps comes from the call graph, not from the file
+		// (autosem orders them); a step must only be reachable from the entry
+		// point: the arch:flow function, else the first resolved step
+		entry := codeEntry[fl.ID]
 		for k := range fl.Steps {
 			s := &fl.Steps[k]
 			if s.Planned {
@@ -230,14 +247,14 @@ func Check(s *Set, f *facts.Facts, reach func(entry string) map[string]bool) (Mo
 				add(fl.File, s.Line, SevError, CodeNoFunc, "flow %s: step %q: no such function in the code", fl.ID, s.Ref)
 				continue
 			}
-			if prev != "" && prev != fid && reach != nil && !reach(prev)[fid] && !reach(first)[fid] {
+			if entry == "" {
+				entry = fid
+				continue
+			}
+			if fid != entry && reach != nil && !reach(entry)[fid] {
 				s.Drift = DriftUnreachable
-				add(fl.File, s.Line, SevWarning, CodeUnreachable, "flow %s: step %s is not reachable by calls from the previous step %s", fl.ID, s.Ref, f.Functions[prev].Name)
+				add(fl.File, s.Line, SevError, CodeUnreachable, "flow %s: step %s is not reachable by calls from the entry point %s", fl.ID, s.Ref, f.Functions[entry].Name)
 			}
-			if first == "" {
-				first = fid
-			}
-			prev = fid
 		}
 		for _, a := range fl.Alts {
 			if a.Flow != "" && !specFlows[a.Flow] && !codeFlows[a.Flow] {

@@ -92,7 +92,7 @@ func TestDeclaredJourney(t *testing.T) {
 	if want := []string{"order", "qr", "verify", "confirm"}; !reflect.DeepEqual(j.Flows, want) {
 		t.Fatalf("flows %v", j.Flows)
 	}
-	want := []Link{{"order", "qr", ViaOn, "need pay"}, {"qr", "verify", ViaQueue, ""}, {"verify", "confirm", ViaDeclared, ""}}
+	want := []Link{{"order", "qr", ViaOn, "need pay"}, {"qr", "verify", ViaQueue, ""}, {"verify", "confirm", ViaClient, ""}}
 	if !reflect.DeepEqual(j.Links, want) {
 		t.Fatalf("links %+v", j.Links)
 	}
