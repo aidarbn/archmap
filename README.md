@@ -231,6 +231,8 @@ archmap render  --facts facts.json --out arch.html [--no-src]
 archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
 archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
 archmap lint    [--root DIR] [--format text|json] [--tests] [--strict] [--missing-docs]
+archmap diff    [--root DIR] [--base REF | --base-root DIR] [--format text|markdown|json]
+                [--lang en|ru] [--out FILE] [--fail-on broken] [--tests]
 archmap version
 ```
 
@@ -255,6 +257,10 @@ archmap version
   turns that endpoint off).
 - `lint` checks `arch:` scenario markup, see [Annotating flows](#annotating-flows),
   and the optional `arch/*.arch` spec against the code, see [Designing with .arch](#designing-with-arch).
+- `diff` compares the diagrams (scenarios, journeys, state machines) of the tree
+  with a base revision (`--base origin/main` by default, or `--base-root DIR`)
+  and prints what appeared, disappeared, changed or broke — as text, JSON or a
+  Markdown PR comment. See [CI: diagrams diff in PRs](docs/diff.md#ci-diagrams-diff-in-prs).
 
 ## Annotating flows
 
