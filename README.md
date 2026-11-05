@@ -20,12 +20,37 @@ How the viewer is built and how to add a view: [docs/viewer.md](docs/viewer.md).
 The page is a desktop layout in the manner of Figma (≥ 1200 px wide; there is
 no mobile layout): a thin toolbar on top and three docked columns under it —
 the sidebar, the canvas, the inspector. Nothing floats over the map but the
-crumbs and the zoom block in its corners. The look follows claude.ai: a warm
-cream canvas with a faint dotted grid, slightly darker warm panels without
-shadows, thin warm borders, serif headings (the project name, the inspector
-titles, the scenario and step names) over a sans interface, soft radii, the
-Claude terracotta as the one accent (the current step, the selection, the main
-button), dusty layer colours; and a dark theme in the same spirit.
+crumbs and the zoom block in its corners. The look is archmap's own design
+system (see **Design** below): a clean cool-white canvas, white panels on
+hairlines, graphite text, one blue accent for the selection and the steps,
+nodes as white cards on a soft shadow, one typeface; and a dark theme.
+
+### Design
+
+- **Colour** — canvas `#F7F8FA` (no grid or pattern), panels `#FFFFFF`,
+  hairlines `#E6E8EC`; text `#1A1D23`, secondary `#5B6270` (≥ 4.5:1 on white
+  and on the canvas), tertiary `#8A919E` only for large or unimportant text.
+  One accent `#2F6BFF` (hover `#255BE0`, selection fill `#EAF1FF`); success
+  `#1F9D55`, warning `#C27A00`, error `#D93D3D`, only where they mean
+  something. Layers — a calm cool set: cerulean, violet, teal, amber, slate,
+  rose, shown as a thin strip at the left of a card.
+- **Map** — nodes are white cards without a border, radius 10 px, a soft
+  two-layer shadow; the selected one gets a 2 px accent rim and a deeper
+  shadow. Layer bands are a faint `#F0F2F5` fill with a small caps label.
+  Arrows `#C9CED6`, 1.25 px; the active path in the accent. Step numbers: the
+  current one a blue disc with a white figure, passed ones light blue, future
+  ones grey dashed; a client step is dashed in the accent and signed "client".
+- **Type** — one family, `Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+  system-ui, sans-serif` (`cv11`, `ss01`); headings in the same family at
+  weight 600 on the scale 12 / 13 / 15 / 18 / 22; code in `ui-monospace`.
+  Tree rows 28 px, inspector padding 16 px.
+- **Controls** — radius 8 px; secondary buttons white on a `#E6E8EC` rim, the
+  main one accent with white text; 1.5 px line icons.
+- **Dark** — canvas `#0F1115`, panels `#16191F`, hairlines `#262A33`, text
+  `#E8EAEE`, secondary `#A3A9B5`, accent `#5B8CFF`, cards `#1C2028` on a
+  tight shadow; text contrast ≥ 4.5:1.
+
+### Layout
 
 - **Toolbar** (40 px): at the left the logo (a click goes back to the whole
   system, or closes an open scenario), the live dot under `archmap serve` and
@@ -92,8 +117,8 @@ button), dusty layer colours; and a dark theme in the same spirit.
   description when the code has one (an actor: `61 scenarios · Admin service…`;
   the count leaves out technical scenarios).
 - **Inspector** — a docked column at the right (300 px; drag its left edge for
-  240–480 px; `]` or its toolbar button hide and show it): sections with serif
-  titles, calm "label — value" rows. **With nothing selected it shows the
+  240–480 px; `]` or its toolbar button hide and show it): sections with small
+  bold titles, calm "label — value" rows. **With nothing selected it shows the
   system overview** — what the
   system does (the project description), the counts, who uses it and which
   outside systems it talks to, each with a line of description (a name opens
