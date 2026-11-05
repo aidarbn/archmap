@@ -29,7 +29,7 @@ addI18n({
 });
 
 /* ---------- matching ---------- */
-const SR = { open: false, act: 0, items: [] };
+const SR = { open: false, act: 0, items: [], openG: new Set() };
 const lc = (s) => String(s || '').toLowerCase();
 // score of a name against a query token: higher is better, 0 — no match
 function tokScore(name, tok) {
@@ -117,13 +117,28 @@ function paletteItems(q) {
   const toks = lc(q).split(/\s+/).filter(Boolean);
   const by = (a, b) => b.sc - a.sc || (String(a.id) < String(b.id) ? -1 : 1);
   const cmds = commands().map((c) => Object.assign(c, { sc: toks.length ? hits([c.nm].concat(c.alt || []), toks) : 1 })).filter((c) => c.sc);
+  if (!toks.length) return cmds.concat(scenarioTree()); // an empty query: the commands and every scenario by actor
   const g = { cmd: cmds, run: searchFlows(toks) };
-  if (toks.length) {
-    const code = searchCode(toks), data = searchData(toks);
-    Object.assign(g, { mod: code.mods, fn: code.fns, file: code.files, ep: data.eps, table: data.tbls, status: data.sts });
-  }
+  const code = searchCode(toks), data = searchData(toks);
+  Object.assign(g, { mod: code.mods, fn: code.fns, file: code.files, ep: data.eps, table: data.tbls, status: data.sts });
   const out = [];
   GROUPS.forEach(([k, , max]) => { if (g[k]) (k === 'cmd' ? g[k] : g[k].sort(by)).slice(0, max).forEach((o) => out.push(o)); });
+  return out;
+}
+// every scenario grouped by actor (through paths in the group of their actor), folded groups: a header row per
+// actor toggles its rows (SR.openG keeps what is unfolded while the page lives)
+function scenarioTree() {
+  const groups = flowGroups('').map((gr) => ({ name: gr.name, auto: gr.auto, items: gr.items.map((fl) => ({ k: 'run', id: 'flow:' + fl.i, nm: fl.name, sb: fl.exit ? cut(fl.exit, 60) : t('pkStepsN', fl.steps.length), sc: 0, sec: 'run', ind: true })) }));
+  jvJourneys().forEach((j) => {
+    const nm = (j.actor || '').trim(), gr = groups.find((x) => !x.auto && x.name.toLowerCase() === nm.toLowerCase()) || (() => { const x = { name: nm || t('pkPath'), items: [] }; groups.unshift(x); return x; })();
+    gr.items.unshift({ k: 'run', id: 'journey:' + j.id, nm: j.name, sb: t('pkPath'), sc: 0, sec: 'run', ind: true });
+  });
+  const out = [];
+  groups.forEach((gr) => {
+    const open = SR.openG.has(gr.name);
+    out.push({ k: 'grp', id: gr.name, nm: gr.name, n: gr.items.length, open, sec: 'run' });
+    if (open) gr.items.forEach((o) => out.push(o));
+  });
   return out;
 }
 
@@ -136,12 +151,13 @@ function srRow(o, i) {
   } else if (o.k === 'mod') { ico = '▢'; nm = short(o.id); sub = cut(modDesc(o.id), 60) || (D.byMod[o.id] || []).length + ' ' + t('fnShort'); code = true; }
   else if (o.k === 'file') { ico = '▤'; nm = o.id.split('/').pop(); sub = cutL(o.id, 46); code = true; }
   else if (o.k === 'run') { ico = '▶'; nm = o.nm; sub = o.sb; }
+  else if (o.k === 'grp') { ico = o.open ? '▾' : '▸'; nm = o.nm; sub = String(o.n); }
   else if (o.k === 'ep') { const e = D.endpoints[o.id]; ico = '⇄'; nm = (e.method ? e.method + ' ' : '') + (e.path || e.name || ''); sub = e.desc ? cut(e.desc, 70) : e.service || e.kind || ''; code = true; }
   else if (o.k === 'table') { const tb = D.tables[o.id]; ico = '▦'; nm = o.id; sub = cut(tb.desc || '', 60) || t('pkColsN', (tb.fields || []).length); code = true; }
   else if (o.k === 'status') { const m = D.states[o.id] || {}; ico = '◎'; nm = o.id; sub = t('pkStatesN', (m.states || []).length); code = true; }
   else { ico = '›'; nm = o.nm; sub = o.kbd ? `<kbd>${esc(o.kbd)}</kbd>` : o.cur ? '✓' : ''; }
   const subHTML = o.k === 'cmd' ? sub : esc(sub);
-  return `<div class="qi${code ? ' code' : ''}${i === SR.act ? ' act' : ''}" role="option" data-i="${i}" title="${esc(o.k === 'fn' || o.k === 'file' ? o.id : nm)}"><b class="ico">${ico}</b><span class="nm">${esc(nm)}</span>${st}<span class="sb">${subHTML}</span></div>`;
+  return `<div class="qi${code ? ' code' : ''}${o.k === 'grp' ? ' qgrp' : ''}${o.ind ? ' ind' : ''}${i === SR.act ? ' act' : ''}" role="option"${o.k === 'grp' ? ` aria-expanded="${o.open}"` : ''} data-i="${i}" title="${esc(o.k === 'fn' || o.k === 'file' ? o.id : nm)}"><b class="ico">${ico}</b><span class="nm">${esc(nm)}</span>${st}<span class="sb">${subHTML}</span></div>`;
 }
 function drawSearch() {
   const q = $('#q').value, pop = $('#qpop');
@@ -149,7 +165,7 @@ function drawSearch() {
   SR.act = Math.max(0, Math.min(SR.act, SR.items.length - 1));
   let h = '', last = '';
   const hd = Object.fromEntries(GROUPS.map(([k, label]) => [k, label]));
-  SR.items.forEach((o, i) => { if (o.k !== last) { last = o.k; h += `<div class="gh">${esc(t(hd[o.k]))}</div>`; } h += srRow(o, i); });
+  SR.items.forEach((o, i) => { const sec = o.sec || o.k; if (sec !== last) { last = sec; h += `<div class="gh">${esc(t(hd[sec]))}</div>`; } h += srRow(o, i); });
   if (!SR.items.length) h = `<div class="none">${esc(t('searchNone'))}</div>`;
   h += `<div class="hint">${esc(t('searchHint'))}</div>`;
   pop.innerHTML = h; pop.hidden = false; SR.open = true; $('#q').setAttribute('aria-expanded', 'true');
@@ -182,6 +198,10 @@ function runItem(o, code) {
 }
 function pickSearch(i, code) {
   const o = SR.items[i]; if (!o) return;
+  if (o.k === 'grp') { // fold / unfold an actor's scenarios; the palette stays open on the same row
+    if (SR.openG.has(o.id)) SR.openG.delete(o.id); else SR.openG.add(o.id);
+    SR.act = i; drawSearch(); markSearch(true); return;
+  }
   closeSearch(); $('#q').value = ''; $('#q').blur();
   runItem(o, code);
 }

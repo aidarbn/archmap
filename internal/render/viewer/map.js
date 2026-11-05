@@ -126,6 +126,7 @@ function clearPlay(svg) { svg.classList.remove('play'); svg.querySelectorAll('.h
 function wireSelect(svg, cam, onSel, onDrill) {
   svg.addEventListener('click', (e) => {
     if (cam && cam.justDragged) return;
+    if (pathClick(e)) return; // a scenario is open: the node of the next step steps forward
     clearPlay(svg);
     const n = e.target.closest('.n');
     onSel(n ? n.getAttribute('data-id') : null);
@@ -819,6 +820,7 @@ function setLevel(lvl, fid) {
 function afterLevel() {
   $('.zoomctl').style.display = state.level === 3 ? 'none' : '';
   renderCrumbs();
+  drawPath(); // an open scenario: its path on the new level
   bus.emit('level', state.level);
 }
 // the crumbs in the header: where I am — system › modules › module › function (a click goes back up);
@@ -900,6 +902,7 @@ function restorePlay() {
   if (state.level === 0) hotOn(sys.nodes, 'svc');
   else if (state.level === 1) { const b = unitFor(s.mod), a = s.prev && D.fns[s.prev] ? unitFor(D.fns[s.prev].module) : null; hotOn(map.nodes, b); if (a) { hotOn(map.nodes, a); hotEdge(map.edges, a, b); } }
   else if (state.level === 2) hotOn(fv.nodes, s.fid);
+  drawPath();
 }
 
 Object.assign(AM, {
