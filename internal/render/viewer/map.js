@@ -119,7 +119,7 @@ function revealMod(m) {
 const unitFor = (m) => (map && map.nodes[m] ? m : unitOf[m] || null);
 
 /* ===================== scenario focus: the map of one scenario =====================
- * While a scenario (a tab's path or any other run) is open the map shows only what takes part in it: the actors that
+ * While a scenario (a path or a scenario of the list, or any other run) is open the map shows only what takes part in it: the actors that
  * start its flows, the modules and functions of its steps, the outside systems its steps call, the database when a
  * step reads or writes a table, the queue when a step is a hand-off. Everything else is not drawn at all. The same
  * levels, cards and arrows as the full map; on the modules level the participants keep their layer bands and go

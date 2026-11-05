@@ -54,7 +54,7 @@ function actorHTML(a) {
   if (ad.file) h += `<dt>${esc(t('dsWhere'))}</dt><dd class="mono" style="font-size:11.5px">${esc(ad.file)}${ad.line ? ':' + ad.line : ''}${ad.from ? ` <span class="md" style="color:var(--muted)">· ${esc(t('dsSrc')[ad.from] || '')}</span>` : ''}</dd>`;
   if (si && si.impl) h += `<dt>${esc(t('dsImpl'))}</dt><dd class="mono" style="font-size:11.5px">${esc(si.impl)}${si.implFile ? ' · ' + esc(si.implFile.split('/').pop()) + ':' + si.implLine : ''}</dd>`;
   h += '</dl>';
-  // scenarios of the actor: its through paths (they are also tabs), then its visible scenarios (technical ones are
+  // scenarios of the actor: its through paths (they are also in the list), then its visible scenarios (technical ones are
   // left out — flow.hidden); the rest of them are the ▶ of the endpoint rows below
   const me = actorName(a).trim().toLowerCase(), MAXF = 12;
   const own = visibleOfActor(a).map((fl, i) => [fl, i]).sort((p, q) => (q[0].top ? 1 : 0) - (p[0].top ? 1 : 0) || p[1] - q[1]).map((p) => p[0]);

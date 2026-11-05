@@ -40,7 +40,7 @@ button, select, input { font: inherit; color: inherit; }
 .app { display: grid; grid-template-rows: 48px 1fr auto; height: 100vh; }
 .mono { font-family: var(--mono); }
 
-/* header: the brand (back to the system), the tabs (map and through paths), ⋯ */
+/* header: the brand (back to the system) and ⋯, nothing else */
 header { position: relative; display: flex; align-items: center; gap: 14px; padding: 0 14px 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: none; border: 0; background: none; padding: 4px 6px; border-radius: 8px; cursor: pointer; color: var(--text); }
 .brand:hover { background: var(--surface-2); }
@@ -322,15 +322,45 @@ main.presize { user-select: none; cursor: col-resize; }
 @media (max-width: 1500px) { .split { grid-template-columns: 320px 1fr; } }
 @media (max-width: 1200px) { .brand .meta, .chg .lbl { display: none; } }
 
-/* tabs (nav.js): "Map" and one tab per through path; they scroll sideways without a bar when they do not fit */
-.tabs { display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-behavior: smooth;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%); padding: 0 12px 0 6px; }
-.tabs::-webkit-scrollbar { display: none; }
-.tab { position: relative; flex: none; max-width: 220px; border: 0; background: none; padding: 0 10px; cursor: pointer; color: var(--text-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tab:hover { color: var(--text); }
-.tab[aria-selected="true"] { color: var(--text); font-weight: 600; }
-.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 2px; background: var(--accent); }
-.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 6px; }
+/* the scenario list (side.js): a narrow column at the left of the stage; the stage starts right of it, so the crumbs
+ * and the map move with it. main.noside hides it (the chevron or `[`) */
+main { --sw: 264px; }
+main.noside { --sw: 0px; }
+main > .stage { left: var(--sw); }
+.side { position: absolute; left: 0; top: 0; bottom: 0; width: var(--sw); z-index: 8; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); min-height: 0; overflow: hidden; }
+main.noside > .side { visibility: hidden; border: 0; }
+.side .sq { padding: 10px 10px 4px; flex: none; }
+.side .sq[hidden] { display: none; }
+.side .sq input { width: 100%; height: 28px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-2); padding: 0 9px; font-size: 12.5px; outline: none; }
+.side .sq input:focus { border-color: var(--accent); background: var(--surface); }
+.slist { flex: 1; min-height: 0; overflow: auto; padding: 4px 6px 16px; scrollbar-width: thin; }
+.slist .sh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 8px 8px 4px; }
+.slist .sn { padding: 12px 8px; color: var(--muted); font-size: 12px; }
+.slist button { display: flex; width: 100%; border: 0; background: none; text-align: left; cursor: pointer; color: var(--text); border-radius: 7px; }
+.slist button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.slist .si { flex-direction: column; gap: 1px; padding: 6px 8px; }
+.slist .si:hover { background: var(--surface-2); }
+.slist .si.cur { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.slist .si .nm { font-size: 12.5px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.slist .si.j .nm { font-weight: 600; }
+.slist .si .ds { font-size: 11.5px; line-height: 1.3; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.slist .si.f .ds { -webkit-line-clamp: 1; }
+.slist .si .mt { font-size: 11px; color: var(--muted); }
+.slist .sg { align-items: center; gap: 6px; padding: 6px 8px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.slist .sg:hover { background: var(--surface-2); color: var(--text); }
+.slist .sg .ar { width: 10px; color: var(--muted); font-size: 10px; flex: none; }
+.slist .sg .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slist .sg .n { font-weight: 500; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.slist .sk { margin: 0 0 6px 14px; padding-left: 6px; border-left: 1px solid var(--line-2); }
+.slist .sk-i { align-items: baseline; gap: 6px; padding: 3px 6px; font-size: 11.5px; color: var(--text-2); }
+.slist .sk-i:hover { background: var(--surface-2); color: var(--text); }
+.slist .sk-i i { font-style: normal; color: var(--muted); font-size: 10.5px; width: 12px; flex: none; font-variant-numeric: tabular-nums; }
+.slist .sk-i span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slist .sk-i.cur { color: var(--text); font-weight: 600; }
+.slist .sk-i.cur i { color: var(--accent); }
+.sidetog { position: absolute; left: var(--sw); top: 50%; transform: translateY(-50%); z-index: 9; width: 14px; height: 44px; padding: 0; border: 1px solid var(--line); border-left: 0; border-radius: 0 7px 7px 0; background: var(--surface); color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; }
+.sidetog:hover { color: var(--text); background: var(--surface-2); }
+.sidetog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* ⋯: views, language, theme */
 .more { position: relative; flex: none; }
 .morebtn { border-color: transparent; background: none; font-size: 16px; letter-spacing: 1px; color: var(--muted); }

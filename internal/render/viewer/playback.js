@@ -1,5 +1,5 @@
 /* playback.js — scenarios: a run of steps through the map levels, branches (continue in another flow or
- * exit), effects and status badges, the scenario bar. A scenario is opened from a tab (nav.js) or a card and goes only by
+ * exit), effects and status badges, the scenario bar. A scenario is opened from the list (side.js) or a card and goes only by
  * hand: → / ← or the bar's arrows. There is no auto play and nothing opens by itself.
  *
  * A run is {key, name, desc, actor, exit, segs: [{flow|null, steps: [fid]}]}; segs grow when a branch
