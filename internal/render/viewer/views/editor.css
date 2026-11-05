@@ -1,5 +1,5 @@
 /* views/editor.css — the drawing editor: header switch, tabs of the right panel, scenarios, text, drift, planned steps */
-.iconbtn[aria-pressed="true"]#editBtn { background: var(--accent); color: #fff; border-color: var(--accent); }
+.iconbtn[aria-pressed="true"]#editBtn { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .edtools { display: inline-flex; align-items: center; gap: 6px; }
 .edtools[hidden] { display: none; }
 .iconbtn:disabled { opacity: .4; cursor: default; }

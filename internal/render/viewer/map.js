@@ -302,9 +302,9 @@ function buildSystem() {
   // service card
   const PJ = D.F.project || {};
   const sv = S_('g', { class: 'n', 'data-id': 'svc' }, gn);
-  S_('rect', { x: SVC.x, y: SVC.y, width: SVC.w, height: SVC.h, rx: 18, class: 'card', style: 'stroke-width:1.5' }, sv);
+  S_('rect', { x: SVC.x, y: SVC.y, width: SVC.w, height: SVC.h, rx: 18, class: 'card' }, sv);
   const title = PJ.name || D.M.title || D.F.repo || 'repo';
-  const tt = S_('text', { x: SVC.x + 24, y: SVC.y + 40, class: 't1 ttl', style: 'font-size:24px;letter-spacing:-.01em' }, sv, cut(title, 26));
+  const tt = S_('text', { x: SVC.x + 24, y: SVC.y + 40, class: 't1 ttl', style: 'font-size:22px' }, sv, cut(title, 26));
   const langs = Object.entries(D.F.langs || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map((x) => x[0]).join(', ');
   const meta = S_('text', { x: SVC.x + 24, y: SVC.y + 40, class: 't3 mono' }, sv, cut((D.F.repo && D.F.repo !== title ? D.F.repo + ' · ' : '') + langs, 34));
   requestAnimationFrame(() => { try { meta.setAttribute('x', SVC.x + 34 + tt.getComputedTextLength()); } catch (e) { /* hidden */ } });
@@ -414,7 +414,6 @@ function buildMap() {
   for (const l of present) {
     const b = bands[l], bg = S_('g', { class: 'band' }, gb);
     S_('rect', { x: 0, y: b.y, width: W, height: b.h, rx: 14 }, bg);
-    S_('rect', { x: 0, y: b.y + 14, width: 3, height: b.h - 28, rx: 1.5, fill: LCOLOR[l], style: 'stroke:none' }, bg);
     S_('text', { x: 18, y: b.y + 26 }, bg, t('layers')[l]);
     wrapText(t('layerSub')[l], 20, 3).forEach((ln, i) => S_('text', { x: 18, y: b.y + 44 + i * 16, class: 'bsub' }, bg, ln));
   }
@@ -524,7 +523,6 @@ function mapCard(gn, u, r) {
   const m = u.id, l = layerOf(m);
   const n = S_('g', { class: 'n', 'data-id': m }, gn);
   S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'card' }, n);
-  S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, fill: LCOLOR[l], opacity: l === 'infra' || l === 'other' ? .05 : .07, style: 'pointer-events:none' }, n);
   S_('rect', { x: r.x + 10, y: r.y + 12, width: 3, height: r.h - 24, rx: 1.5, fill: LCOLOR[l], class: 'acc' }, n);
   const nm = short(m), parts = nm.split('/'), lastp = parts.pop();
   S_('text', { x: r.x + 20, y: r.y + 24, class: 't3 lod-o', style: 'font-size:13px' }, n, cutL(parts.join('/'), 22));
@@ -547,7 +545,6 @@ function groupCard(gn, u, r) {
   const l = unitLayer(u), n = S_('g', { class: 'n grp-n', 'data-id': u.id }, gn);
   S_('rect', { x: r.x + 5, y: r.y + 5, width: r.w, height: r.h, rx: 10, class: 'stack' }, n);
   S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'card' }, n);
-  S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, fill: LCOLOR[l], opacity: .07, style: 'pointer-events:none' }, n);
   S_('rect', { x: r.x + 10, y: r.y + 12, width: 3, height: r.h - 24, rx: 1.5, fill: LCOLOR[l], class: 'acc' }, n);
   const p = u.node.path || t('root'), parts = p.split('/'), lastp = parts.pop();
   S_('text', { x: r.x + 20, y: r.y + 50, class: 't1 lod-o', style: 'font-size:19px' }, n, cut(lastp + '/…', 16));
@@ -560,7 +557,7 @@ function groupCard(gn, u, r) {
 }
 function extCard(gn, id, r) {
   const n = S_('g', { class: 'n x', 'data-id': id }, gn);
-  S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: r.actor ? 25 : 10, class: 'card', style: 'stroke-dasharray:4 3' }, n);
+  S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: r.actor ? 25 : 10, class: 'card dash' }, n);
   if (r.actor) actorIcon(n, r.x + 14, r.y + 12); else sysIcon(n, r.ext.kind, r.x + 14, r.y + 17);
   const name = r.actor ? actorName(r.a) : r.ext.name;
   S_('text', { x: r.x + 48, y: r.y + (r.actor ? 22 : 24), class: 't1' }, n, cut(name, 18));
@@ -657,8 +654,7 @@ function buildFns(mod) {
   const frame = { x: fr.x - 30, y: 40, w: Math.max(fr.w + 60, 700), h: fr.y + fr.h - 40 + 50 };
   if (frame.w > fr.w + 60) frame.x = fr.x + fr.w / 2 - frame.w / 2;
   const l = layerOf(mod);
-  S_('rect', { x: frame.x, y: frame.y, width: frame.w, height: frame.h, rx: 18, fill: 'var(--surface)', stroke: 'var(--line-2)', filter: 'url(#sh)' }, ge);
-  S_('rect', { x: frame.x, y: frame.y, width: frame.w, height: frame.h, rx: 18, fill: LCOLOR[l], opacity: .045 }, ge);
+  S_('rect', { x: frame.x, y: frame.y, width: frame.w, height: frame.h, rx: 18, class: 'frame' }, ge);
   S_('rect', { x: frame.x + 18, y: frame.y + 18, width: 4, height: 30, rx: 2, fill: LCOLOR[l] }, ge);
   S_('text', { x: frame.x + 32, y: frame.y + 32, class: 'ttl', style: 'font-size:22px;fill:var(--text)' }, ge, cutL(short(mod), 60));
   S_('text', { x: frame.x + 32, y: frame.y + 56, style: 'font-size:14px;fill:var(--text-2)' }, ge, `${cut(modDesc(mod) || modRole(mod), 70)} · ${t('shown')} ${shown.length} ${t('of')} ${all.length}`);
@@ -682,7 +678,7 @@ function buildFns(mod) {
     ks.forEach((m, i) => {
       const r = { x: left + i * 222, y, w: 200, h: 40 };
       const n = S_('g', { class: 'n port', 'data-id': 'port:' + dir + ':' + m }, gn);
-      S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 20, class: 'card', style: 'stroke-dasharray:3 3' }, n);
+      S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 20, class: 'card dash' }, n);
       S_('circle', { cx: r.x + 18, cy: r.y + 20, r: 5, fill: LCOLOR[layerOf(m)] }, n);
       S_('text', { x: r.x + 32, y: r.y + 25, class: 't2 mono', style: 'font-size:14px' }, n, cutL(short(m), 21));
       S_('title', {}, n, modLabel(m));
