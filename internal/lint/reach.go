@@ -129,7 +129,8 @@ func UnbackedStates(f *facts.Facts) []UnbackedState {
 					reach[fid] = autosem.Reachable(f, fid)
 				}
 				for _, t := range sm.Transitions {
-					if t.Source == "code" && t.To == st.To && reach[fid][t.Fid] {
+					// the annotated function makes it, a function it calls does, or it is the setter a caller hands the status to
+					if t.Source == "code" && t.To == st.To && (reach[fid][t.Fid] || t.Via == fid) {
 						backed = true
 						break
 					}

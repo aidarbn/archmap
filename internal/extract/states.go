@@ -43,6 +43,41 @@ type machine struct {
 	seen        map[string]bool
 	refs        map[string]string // code token -> label
 	values      map[string]string // string value -> label
+	doc         string            // first paragraph of the type / const block comment
+	docs        map[string]string // label -> comment of its constant
+}
+
+// note keeps the comment of a state constant (the first one wins).
+func (m *machine) note(label, doc string) {
+	if doc = strings.TrimSpace(doc); doc == "" || label == "" {
+		return
+	}
+	if m.docs == nil {
+		m.docs = map[string]string{}
+	}
+	if m.docs[label] == "" {
+		m.docs[label] = doc
+	}
+}
+
+// firstPara is the first paragraph of comment lines, joined, cut to 300 runes.
+func firstPara(lines []string) string {
+	var out []string
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			if len(out) > 0 {
+				break
+			}
+			continue
+		}
+		out = append(out, l)
+	}
+	s := strings.Join(out, " ")
+	if r := []rune(s); len(r) > 300 {
+		s = strings.TrimSpace(string(r[:299])) + "…"
+	}
+	return s
 }
 
 func (m *machine) add(token, value, label string) {
@@ -134,18 +169,46 @@ func collectMachines(files []stFile) []*machine {
 	return out
 }
 
+var goTypeLine = regexp.MustCompile(`^\s*type\s+(\w+)\s+\w`)
+
 func goMachines(set *machineSet, f stFile) {
 	lines := strings.Split(f.Text, "\n")
 	inBlock := false
 	prevTyp, prevIota := "", false
+	// comments: the run of // lines right above the current line, the doc of the
+	// open const block, and the doc of each status-like type of the file
+	var above, blockDoc []string
+	typeDoc := map[string]string{}
 	for _, ln := range lines {
+		trailing := ""
+		if t := strings.TrimSpace(ln); strings.HasPrefix(t, "//") {
+			above = append(above, strings.TrimSpace(strings.TrimPrefix(t, "//")))
+			continue
+		}
+		doc := above
+		above = nil
 		if i := strings.Index(ln, "//"); i >= 0 && !strings.Contains(ln[:i], `"`) {
+			trailing = strings.TrimSpace(ln[i+2:])
 			ln = ln[:i]
+		} else if i := strings.LastIndex(ln, "//"); i >= 0 && strings.Count(ln[:i], `"`)%2 == 0 && strings.Count(ln[:i], "`")%2 == 0 {
+			trailing = strings.TrimSpace(ln[i+2:])
+			ln = ln[:i]
+		}
+		if m := goTypeLine.FindStringSubmatch(ln); m != nil && statusTypeRe.MatchString(m[1]) {
+			if d := firstPara(doc); d != "" {
+				typeDoc[m[1]] = d
+				for _, mm := range set.list {
+					if mm.module == f.Module && mm.key == m[1] {
+						mm.doc = d
+					}
+				}
+			}
 		}
 		var name, typ, rhs string
 		switch {
 		case goConstBlock.MatchString(ln):
 			inBlock, prevTyp, prevIota = true, "", false
+			blockDoc = doc
 			continue
 		case inBlock && strings.TrimSpace(ln) == ")":
 			inBlock = false
@@ -172,9 +235,15 @@ func goMachines(set *machineSet, f stFile) {
 			typ = typ[i+1:]
 		}
 		val, isStr := unq(rhs)
+		memberDoc := trailing
+		if memberDoc == "" {
+			memberDoc = firstPara(doc)
+		}
+		var mach *machine
+		label := ""
 		switch {
 		case typ != "" && statusTypeRe.MatchString(typ):
-			label := name
+			label = name
 			if isStr {
 				label = val
 			} else if strings.HasPrefix(name, typ) && len(name) > len(typ) {
@@ -184,13 +253,75 @@ func goMachines(set *machineSet, f stFile) {
 			if isStr {
 				v = val
 			}
-			set.get(f.Module, typ).add(name, v, label)
+			mach = set.get(f.Module, typ)
+			mach.add(name, v, label)
 		case typ == "" && isStr:
 			if m := constPrefixRe.FindStringSubmatch(name); m != nil {
-				set.get(f.Module, m[1]).add(name, val, val)
+				label = val
+				mach = set.get(f.Module, m[1])
+				mach.add(name, val, val)
+			}
+		}
+		if mach == nil {
+			continue
+		}
+		mach.note(label, memberDoc)
+		if mach.doc == "" {
+			if d := typeDoc[mach.key]; d != "" {
+				mach.doc = d
+			} else if inBlock {
+				mach.doc = firstPara(blockDoc)
+			} else {
+				mach.doc = firstPara(doc)
 			}
 		}
 	}
+}
+
+var (
+	goFinalFunc = regexp.MustCompile(`(?m)^func\s+(?:\([^)]*\)\s*)?(?:Is|is)?\w*(?:Final|Terminal|Finished|Closed)\w*\s*\(`)
+	goCaseList  = regexp.MustCompile(`(?s)case\s+([^:]+):\s*return\s+true\b`)
+	goIdent     = regexp.MustCompile(`[A-Za-z_][\w.]*`)
+)
+
+// goFinals reads the final states the code names itself: in a function called
+// IsFinal / IsTerminal… (also a method), the constants of a `case …: return true`.
+func goFinals(f stFile, tokens map[string][]*machine) map[*machine][]string {
+	if f.Lang != "go" {
+		return nil
+	}
+	var out map[*machine][]string
+	for _, loc := range goFinalFunc.FindAllStringIndex(f.Text, -1) {
+		rest := f.Text[loc[1]:]
+		end := strings.Index(rest, "\n}")
+		if end < 0 {
+			continue
+		}
+		for _, cm := range goCaseList.FindAllStringSubmatch(rest[:end], -1) {
+			for _, id := range goIdent.FindAllString(cm[1], -1) {
+				if i := strings.LastIndex(id, "."); i >= 0 {
+					id = id[i+1:]
+				}
+				ms := tokens[id]
+				if len(ms) != 1 {
+					continue
+				}
+				m := ms[0]
+				if out == nil {
+					out = map[*machine][]string{}
+				}
+				l := m.refs[id]
+				dup := false
+				for _, x := range out[m] {
+					dup = dup || x == l
+				}
+				if !dup {
+					out[m] = append(out[m], l)
+				}
+			}
+		}
+	}
+	return out
 }
 
 func pyMachines(set *machineSet, f stFile) {
@@ -451,6 +582,257 @@ type funcEvidence struct {
 	to     []mlabel
 	from   map[*machine][]string
 	ifFrom map[*machine]string
+	// via: the status was passed to a setter (a function that writes its
+	// status parameter) — label -> fid of the setter; insert: the status is the
+	// value of a new row (INSERT … VALUES), not a change of an existing one.
+	via    map[mlabel]string
+	noFrom map[mlabel]bool // the source is unknown whatever the comparisons say (mappedEvidence)
+	insert map[mlabel]bool
+}
+
+func (e *funcEvidence) addVia(m *machine, l, fid string) {
+	e.addTo(m, l)
+	if e.via == nil {
+		e.via = map[mlabel]string{}
+	}
+	if _, ok := e.via[mlabel{m, l}]; !ok {
+		e.via[mlabel{m, l}] = fid
+	}
+}
+
+func (e *funcEvidence) addNew(m *machine, l string) {
+	e.addTo(m, l)
+	if e.insert == nil {
+		e.insert = map[mlabel]bool{}
+	}
+	e.insert[mlabel{m, l}] = true
+}
+
+// setters are the functions that write a status they get as a parameter
+// (x.Status = status, Params{Status: string(status)}, or by handing it on to
+// another setter): name -> fid, "" when two functions share the name.
+type setters map[string]string
+
+var (
+	goSigRe      = regexp.MustCompile(`(?s)^\s*func\s*(?:\([^)]*\)\s*)?(\w+)\s*(?:\[[^\]]*\])?\s*\(([^)]*)\)`)
+	statusParam  = regexp.MustCompile(`(?i)^(?:new|next|target|to)?_?(?:status|state|stage|phase)$`)
+	readCallRe   = regexp.MustCompile(`^(?:List|Get|Find|Count|Select|Search|Filter|Query|Has|Exists|Is|Check|Fetch|Load|Read|Lookup|Where)`)
+	fieldKeyRe   = regexp.MustCompile(`(\w+)\s*:\s*(?:[\w.]+\(\s*)?$`)
+	braceTypeRe  = regexp.MustCompile(`([A-Za-z_][\w.]*)\s*$`)
+	sqlInsert    = regexp.MustCompile(`(?is)\binsert\s+into\s+[\w.]+\s*\(([^)]*)\)\s*values\s*\(`)
+	sqlStatusCol = regexp.MustCompile(`(?i)^(?:\w+\.)?\w*(?:status|state|stage|phase)\w*$`)
+)
+
+// goParams returns the name and the status-like parameters of a Go function
+// whose text starts at its signature.
+func goParams(text string, ms []*machine) (string, []string) {
+	m := goSigRe.FindStringSubmatch(text)
+	if m == nil {
+		return "", nil
+	}
+	var names, out []string
+	for _, part := range strings.Split(m[2], ",") {
+		f := strings.Fields(part)
+		if len(f) == 0 {
+			continue
+		}
+		names = append(names, f[0])
+		if len(f) < 2 { // `a, b T`: the type comes later
+			continue
+		}
+		typ := strings.TrimLeft(f[len(f)-1], "*[]")
+		if i := strings.LastIndex(typ, "."); i >= 0 {
+			typ = typ[i+1:]
+		}
+		isM := false
+		for _, mm := range ms {
+			isM = isM || mm.key == typ
+		}
+		for _, n := range names {
+			if statusParam.MatchString(n) || isM {
+				out = append(out, n)
+			}
+		}
+		names = nil
+	}
+	return m[1], out
+}
+
+// findSetters: functions with a status parameter that they write into a
+// status field, or hand on to another setter (two rounds of helpers).
+func findSetters(bodies map[string]string, ms []*machine) setters {
+	type cand struct {
+		name, fid, body string
+		params          []string
+	}
+	var cs []cand
+	for fid, body := range bodies {
+		name, ps := goParams(body, ms)
+		if name != "" && len(ps) > 0 {
+			cs = append(cs, cand{name, fid, body, ps})
+		}
+	}
+	sort.Slice(cs, func(i, j int) bool { return cs[i].fid < cs[j].fid })
+	out := setters{}
+	add := func(c cand) {
+		if f, ok := out[c.name]; ok && f != c.fid {
+			out[c.name] = ""
+			return
+		}
+		out[c.name] = c.fid
+	}
+	isSet := func(c cand) bool {
+		for _, p := range c.params {
+			q := regexp.QuoteMeta(p)
+			if regexp.MustCompile(`\b\w*(?:Status|State|Stage|Phase|status|state)\w*\s*(?::|=)\s*[&*]?(?:[\w.]+\(\s*)?[*]?`+q+`\b`).MatchString(c.body) &&
+				!regexp.MustCompile(`[=!]=\s*[*]?`+q+`\b`).MatchString(c.body) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, c := range cs {
+		if isSet(c) {
+			add(c)
+		}
+	}
+	for round := 0; round < 2; round++ {
+		for _, c := range cs {
+			if _, ok := out[c.name]; ok {
+				continue
+			}
+			for _, p := range c.params {
+				for _, cm := range regexp.MustCompile(`\b(\w+)\s*\(([^()]*\b`+regexp.QuoteMeta(p)+`\b[^()]*)\)`).FindAllStringSubmatch(c.body, -1) {
+					if _, ok := out[cm[1]]; ok && cm[1] != c.name {
+						add(c)
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// outerCalls lists the calls open at pos from the inside out (at most n): `a.Set(ctx, string(X` → [string, Set].
+func outerCalls(masked string, pos, n int) []string {
+	var out []string
+	depth := 0
+	for i := pos - 1; i >= 0 && len(out) < n; i-- {
+		switch masked[i] {
+		case ')', ']', '}':
+			depth++
+		case '(', '[', '{':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if masked[i] != '(' {
+				return out
+			}
+			m := calleeRe.FindStringSubmatch(masked[:i])
+			if m == nil {
+				return out
+			}
+			name := m[1]
+			if j := strings.LastIndex(name, "."); j >= 0 {
+				name = name[j+1:]
+			}
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+var defName = regexp.MustCompile(`^\s*(?:func\s*(?:\([^)]*\)\s*)?|(?:async\s+)?def\s+|(?:async\s+)?function\s+)(\w+)`)
+
+var sqlComment = regexp.MustCompile(`--[^\n]*`)
+
+var createRe = regexp.MustCompile(`^(?:Create|Insert|New|Add|Register|Build|Make)`)
+
+var convCall = regexp.MustCompile(`^(?:string|int|int32|int64|uint8|str|String|Number)$`)
+
+// setterCall: the status at pos is an argument of a setter (through a conversion) → fid of the setter.
+func setterCall(masked string, pos int, set setters) (string, bool) {
+	for _, c := range outerCalls(masked, pos, 2) {
+		if fid, ok := set[c]; ok && !readCallRe.MatchString(c) {
+			return fid, true
+		}
+		if !convCall.MatchString(c) {
+			return "", false
+		}
+	}
+	return "", false
+}
+
+// braceType is the type of the composite literal open at pos (`Params{ … `), "" when none in reach.
+func braceType(masked string, pos int) string {
+	depth := 0
+	for i := pos - 1; i >= 0; i-- {
+		switch masked[i] {
+		case '}':
+			depth++
+		case '{':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if m := braceTypeRe.FindStringSubmatch(masked[:i]); m != nil {
+				n := m[1]
+				if j := strings.LastIndex(n, "."); j >= 0 {
+					n = n[j+1:]
+				}
+				return n
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// sqlInsertEvidence: INSERT INTO t (…, status, …) VALUES (…, 'new', …) creates a row in that status.
+func sqlInsertEvidence(ev *funcEvidence, sql string, values map[string][]*machine) {
+	sql = sqlComment.ReplaceAllString(sql, "")
+	loc := sqlInsert.FindStringSubmatchIndex(sql)
+	if loc == nil {
+		return
+	}
+	cols := strings.Split(sql[loc[2]:loc[3]], ",")
+	var vals []string
+	depth, start := 0, loc[1]
+	for i := loc[1]; i < len(sql); i++ {
+		c := sql[i]
+		if c == '(' {
+			depth++
+		} else if c == ')' && depth > 0 {
+			depth--
+		} else if (c == ',' && depth == 0) || (c == ')' && depth == 0) {
+			vals = append(vals, strings.TrimSpace(sql[start:i]))
+			start = i + 1
+			if c == ')' {
+				break
+			}
+		}
+	}
+	for i, col := range cols {
+		if i >= len(vals) || !sqlStatusCol.MatchString(strings.TrimSpace(col)) {
+			continue
+		}
+		v := vals[i]
+		if len(v) < 2 || v[0] != '\'' || v[len(v)-1] != '\'' {
+			continue
+		}
+		v = v[1 : len(v)-1]
+		mach := pickMachine(sql, []string{v}, values)
+		if mach == nil {
+			continue
+		}
+		l := mach.values[v]
+		ev.addTo(mach, l)
+		if ev.insert == nil {
+			ev.insert = map[mlabel]bool{}
+		}
+		ev.insert[mlabel{mach, l}] = true
+	}
 }
 
 type mlabel struct {
@@ -514,6 +896,25 @@ func ctxKind(masked string, start, end int, language string) (kind, callee strin
 		}
 		return "to", ""
 	}
+	// a field of a composite literal: Params{Status: string(StatusPaid)} — a write unless the type reads (ListFilter…)
+	if language == "go" || language == "js" || language == "ts" || language == "tsx" || language == "jsx" {
+		if fm := fieldKeyRe.FindStringSubmatch(before); fm != nil && statusWord.MatchString(fm[1]) && !caseBefore.MatchString(before) {
+			if t := braceType(masked, start); t != "" && !readCallRe.MatchString(t) && !regexp.MustCompile(`(?i)filter|query|where|search`).MatchString(t) {
+				// a new object (&Order{…}, CreateOrderParams{…}, NewX(…, Params{…})) is born in that status
+				bi := strings.LastIndex(masked[:start], t+"{")
+				outer := ""
+				if bi >= 0 {
+					if oc := outerCalls(masked, bi, 1); len(oc) > 0 {
+						outer = oc[0]
+					}
+				}
+				if createRe.MatchString(t) || createRe.MatchString(outer) || (outer == "" && !regexp.MustCompile(`Params$|Args$|Input$|Update`).MatchString(t)) {
+					return "new", ""
+				}
+				return "to", ""
+			}
+		}
+	}
 	if c := unclosedCall(masked, start); c != "" {
 		prefix := strings.TrimRight(before, " \t,(")
 		if prefix != "" && transCallee.MatchString(c) && !strings.HasSuffix(prefix, ":") {
@@ -528,20 +929,28 @@ func normalize(s string) string {
 }
 
 // analyzeFunc collects state evidence from the statements of one function.
-func analyzeFunc(sts []stmt, ms []*machine, tokens map[string][]*machine, values map[string][]*machine, consts, queries map[string]string, language string) funcEvidence {
+func analyzeFunc(sts []stmt, ms []*machine, tokens map[string][]*machine, values map[string][]*machine, consts, queries map[string]string, language string, set setters, ret map[string][]mlabel) funcEvidence {
 	var ev funcEvidence
 	usedSQL := map[string]bool{}
-	for _, st := range sts {
+	// the function's own name (a handler named like the sqlc query) is not a use of the query
+	self := ""
+	if len(sts) > 0 {
+		if m := defName.FindStringSubmatch(sts[0].masked); m != nil {
+			self = m[1]
+		}
+	}
+	for si, st := range sts {
 		for _, loc := range chainRe.FindAllStringIndex(st.masked, -1) {
 			chain := strings.Join(strings.Fields(strings.ReplaceAll(st.masked[loc[0]:loc[1]], " ", "")), "")
 			segs := strings.Split(chain, ".")
 			for len(segs) > 1 && (segs[len(segs)-1] == "value" || segs[len(segs)-1] == "name") && language != "go" {
 				segs = segs[:len(segs)-1]
 			}
-			if name := segs[len(segs)-1]; !usedSQL[name] {
+			if name := segs[len(segs)-1]; !usedSQL[name] && !(si == 0 && name == self) {
 				if q := consts[name] + queries[name]; q != "" {
 					usedSQL[name] = true
 					sqlEvidence(&ev, q, values)
+					sqlInsertEvidence(&ev, q, values)
 				}
 			}
 			var cands []*machine
@@ -562,7 +971,11 @@ func analyzeFunc(sts []stmt, ms []*machine, tokens map[string][]*machine, values
 			case "from":
 				ev.addFrom(m, label)
 			case "to":
-				ev.addTo(m, label)
+				if fid, ok := set[callee]; ok && callee != "" {
+					ev.addVia(m, label, fid)
+				} else {
+					ev.addTo(m, label)
+				}
 				if mm := ifSuffix.FindStringSubmatch(callee); mm != nil {
 					for _, l := range m.labels {
 						if normalize(l) == normalize(mm[1]) {
@@ -572,6 +985,12 @@ func analyzeFunc(sts []stmt, ms []*machine, tokens map[string][]*machine, values
 							ev.ifFrom[m] = l
 						}
 					}
+				}
+			case "new":
+				ev.addNew(m, label)
+			case "":
+				if fid, ok := setterCall(st.masked, loc[0], set); ok {
+					ev.addVia(m, label, fid)
 				}
 			}
 		}
@@ -592,11 +1011,19 @@ func analyzeFunc(sts []stmt, ms []*machine, tokens map[string][]*machine, values
 					ok = callee != "" && statusWord.MatchString(callee) || callee == "" && true
 				case "from":
 					ok = statusNear(st.masked, start, l.end+1)
+				case "new":
+					ev.addNew(m, label)
+				case "":
+					if fid, isSet := setterCall(st.masked, start, set); isSet {
+						ev.addVia(m, label, fid)
+					}
 				}
 				if !ok {
 					continue
 				}
-				if kind == "to" {
+				if fid, isSet := set[callee]; kind == "to" && isSet && callee != "" {
+					ev.addVia(m, label, fid)
+				} else if kind == "to" {
 					ev.addTo(m, label)
 				} else {
 					ev.addFrom(m, label)
@@ -604,10 +1031,100 @@ func analyzeFunc(sts []stmt, ms []*machine, tokens map[string][]*machine, values
 			}
 			if len(l.val) > 12 {
 				sqlEvidence(&ev, l.val, values)
+				sqlInsertEvidence(&ev, l.val, values)
 			}
 		}
 	}
+	mappedEvidence(&ev, sts, set, ret)
 	return ev
+}
+
+var goAssignCall = regexp.MustCompile(`\b(\w+)\s*:?=\s*(?:[\w.]+\.)?(\w+)\s*\(`)
+
+// mappedEvidence: v := MapXToStatus(…) and then Setter(…, v): every status the mapper returns can be
+// written. The source is not known (the comparisons around are on the new value), so From stays empty.
+func mappedEvidence(ev *funcEvidence, sts []stmt, set setters, ret map[string][]mlabel) {
+	if len(ret) == 0 || len(set) == 0 {
+		return
+	}
+	vars := map[string][]mlabel{}
+	for _, st := range sts {
+		for _, m := range goAssignCall.FindAllStringSubmatch(st.masked, -1) {
+			if ls, ok := ret[m[2]]; ok {
+				vars[m[1]] = ls
+			}
+		}
+	}
+	for v, ls := range vars {
+		re := regexp.MustCompile(`\b` + regexp.QuoteMeta(v) + `\b`)
+		for _, st := range sts {
+			for _, loc := range re.FindAllStringIndex(st.masked, -1) {
+				fid, ok := setterCall(st.masked, loc[0], set)
+				if !ok {
+					continue
+				}
+				for _, l := range ls {
+					ev.addVia(l.m, l.label, fid)
+					if ev.noFrom == nil {
+						ev.noFrom = map[mlabel]bool{}
+					}
+					ev.noFrom[l] = true
+				}
+			}
+		}
+	}
+}
+
+var goReturnTok = regexp.MustCompile(`\breturn\s+(?:\w+\.)?(\w+)\s*(?:\n|$|;|,\s*nil)`)
+
+// statusReturners: functions that return the constants of one machine (a mapper) → those states.
+func statusReturners(bodies map[string]string, tokens map[string][]*machine) map[string][]mlabel {
+	out := map[string][]mlabel{}
+	amb := map[string]bool{}
+	for _, body := range bodies {
+		name, _ := goParams(body, nil)
+		if name == "" {
+			if m := goSigRe.FindStringSubmatch(body); m != nil {
+				name = m[1]
+			}
+		}
+		if name == "" {
+			continue
+		}
+		var m *machine
+		var ls []mlabel
+		ok := true
+		for _, r := range goReturnTok.FindAllStringSubmatch(body, -1) {
+			ms := tokens[r[1]]
+			if len(ms) != 1 {
+				continue
+			}
+			if m != nil && ms[0] != m {
+				ok = false
+				break
+			}
+			m = ms[0]
+			l := mlabel{m, m.refs[r[1]]}
+			dup := false
+			for _, x := range ls {
+				dup = dup || x == l
+			}
+			if !dup {
+				ls = append(ls, l)
+			}
+		}
+		if !ok || m == nil || len(ls) < 2 {
+			continue
+		}
+		if _, seen := out[name]; seen {
+			amb[name] = true
+		}
+		out[name] = ls
+	}
+	for n := range amb {
+		delete(out, n)
+	}
+	return out
 }
 
 // statusNear reports whether a status-like name is the other side of the comparison.
@@ -623,7 +1140,23 @@ func statusNear(masked string, start, end int) bool {
 	return false
 }
 
-var sqlTable = regexp.MustCompile(`(?i)\bupdate\s+(?:only\s+)?(?:\w+\.)?(\w+)`)
+var sqlTable = regexp.MustCompile(`(?i)\bupdate\s+(?:only\s+)?(?:\w+\.)?(\w+)|\binsert\s+into\s+(?:\w+\.)?(\w+)`)
+
+// tableNames: the machine key names the table — orders → OrderStatus, kaspi_certificates → KaspiCertStatus
+// (every word of the table, singular, or its first four letters, is in the key).
+func tableNames(table, key string) bool {
+	k := strings.ToLower(key)
+	for _, w := range strings.Split(table, "_") {
+		w = strings.TrimSuffix(w, "s")
+		if w == "" {
+			continue
+		}
+		if !strings.Contains(k, w) && (len(w) < 4 || !strings.Contains(k, w[:4])) {
+			return false
+		}
+	}
+	return true
+}
 
 // pickMachine chooses the machine an SQL statement works on: the one that has
 // all the quoted states of the statement, and if several do, the one named
@@ -643,10 +1176,10 @@ func pickMachine(sql string, vals []string, values map[string][]*machine) *machi
 	}
 	if len(cands) > 1 {
 		if t := sqlTable.FindStringSubmatch(sql); t != nil {
-			tbl := strings.TrimSuffix(strings.ToLower(t[1]), "s") // orders -> order
+			tbl := strings.ToLower(t[1] + t[2])
 			var named []*machine
 			for _, m := range cands {
-				if strings.Contains(strings.ToLower(m.key), tbl) {
+				if tableNames(tbl, m.key) {
 					named = append(named, m)
 				}
 			}
@@ -660,6 +1193,7 @@ func pickMachine(sql string, vals []string, values map[string][]*machine) *machi
 }
 
 func sqlEvidence(ev *funcEvidence, sql string, values map[string][]*machine) {
+	sql = sqlComment.ReplaceAllString(sql, "") // "-- WHERE на status …" in a comment must not cut the SET off
 	w := sqlWhere.FindString(sql)
 	m := sqlSet.FindStringSubmatch(strings.TrimSuffix(sql, w)) // SET lives before WHERE
 	if m == nil {
@@ -724,10 +1258,10 @@ func detectStates(files []stFile, funcs []stFunc, queries map[string]string) map
 	}
 	seen := map[tkey]bool{}
 	res := map[*machine]*facts.StateMachine{}
-	for _, fn := range funcs {
+	bodyOf := func(fn stFunc) (stFile, string, bool) {
 		f, ok := byFile[fn.File]
 		if !ok {
-			continue
+			return f, "", false
 		}
 		lines, ok := lineCache[fn.File]
 		if !ok {
@@ -735,18 +1269,47 @@ func detectStates(files []stFile, funcs []stFunc, queries map[string]string) map
 			lineCache[fn.File] = lines
 		}
 		if fn.Start < 1 || fn.End > len(lines) || fn.Start > fn.End {
+			return f, "", false
+		}
+		return f, strings.Join(lines[fn.Start-1:fn.End], "\n"), true
+	}
+	goBodies := map[string]string{}
+	for _, fn := range funcs {
+		if f, body, ok := bodyOf(fn); ok && f.Lang == "go" {
+			goBodies[fn.Fid] = body
+		}
+	}
+	set := findSetters(goBodies, ms)
+	ret := statusReturners(goBodies, tokens)
+	for _, fn := range funcs {
+		f, body, ok := bodyOf(fn)
+		if !ok {
 			continue
 		}
-		body := strings.Join(lines[fn.Start-1:fn.End], "\n")
 		consts, done := constCache[fn.File]
 		if !done {
 			consts = sqlConsts(f)
 			constCache[fn.File] = consts
 		}
-		ev := analyzeFunc(statements(body, f.Lang), ms, tokens, values, consts, queries, f.Lang)
+		ev := analyzeFunc(statements(body, f.Lang), ms, tokens, values, consts, queries, f.Lang, set, ret)
 		for _, t := range ev.to {
+			if ev.insert[t] { // a new row: created in this status, there is no source
+				k := tkey{t.m, "", t.label, fn.Fid}
+				if !seen[k] {
+					seen[k] = true
+					sm := res[t.m]
+					if sm == nil {
+						sm = &facts.StateMachine{States: append([]string(nil), t.m.labels...)}
+						res[t.m] = sm
+					}
+					sm.Transitions = append(sm.Transitions, facts.Transition{To: t.label, Fid: fn.Fid, Source: "code", Insert: true})
+				}
+				continue
+			}
 			froms := []string{}
-			if l := ev.ifFrom[t.m]; l != "" {
+			if ev.noFrom[t] {
+				froms = []string{""}
+			} else if l := ev.ifFrom[t.m]; l != "" {
 				froms = []string{l}
 			} else {
 				for _, l := range ev.from[t.m] {
@@ -769,12 +1332,23 @@ func detectStates(files []stFile, funcs []stFunc, queries map[string]string) map
 					sm = &facts.StateMachine{States: append([]string(nil), t.m.labels...)}
 					res[t.m] = sm
 				}
-				sm.Transitions = append(sm.Transitions, facts.Transition{From: from, To: t.label, Fid: fn.Fid, Source: "code"})
+				sm.Transitions = append(sm.Transitions, facts.Transition{From: from, To: t.label, Fid: fn.Fid, Source: "code", Via: ev.via[t]})
 			}
+		}
+	}
+	finals := map[*machine][]string{}
+	for _, f := range files {
+		for m, l := range goFinals(f, tokens) {
+			finals[m] = append(finals[m], l...)
 		}
 	}
 	out := map[string]*facts.StateMachine{}
 	for m, sm := range res {
+		sm.Doc = m.doc
+		if len(m.docs) > 0 {
+			sm.Docs = m.docs
+		}
+		sm.Final = finals[m]
 		sort.SliceStable(sm.Transitions, func(i, j int) bool {
 			a, b := sm.Transitions[i], sm.Transitions[j]
 			if a.Fid != b.Fid {
@@ -878,6 +1452,14 @@ func mergeAnnotatedStates(out *facts.Facts) {
 		for _, k := range keys {
 			if strings.ToLower(k) == e {
 				return k
+			}
+		}
+		// Order → OrderStatus before OrderMetaStatus: the entity name plus the suffix alone first
+		for _, suf := range []string{"status", "state", "stage", "phase"} {
+			for _, k := range keys {
+				if strings.ToLower(k) == e+suf {
+					return k
+				}
 			}
 		}
 		for _, k := range keys {
