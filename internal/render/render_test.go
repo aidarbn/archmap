@@ -2,6 +2,7 @@ package render
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -275,4 +276,94 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("the search palette is left in the page: %q", s)
 		}
 	}
+}
+
+// The core sources (coreJS, then main.js) are glued into one script with one shared scope, after the inline part of
+// shell.html: a name declared at the top level of two of them is a SyntaxError that kills the whole page. The views
+// are wrapped in blocks of their own and may reuse names. Checked on a rendered page: every part between the
+// "/* --- <name> --- */" marks is parsed for its top-level declarations; then, when node is installed, the whole
+// script goes through node --check.
+func TestAssembledScriptCompiles(t *testing.T) {
+	out, err := HTML([]byte(`{"repo":"demo","functions":{"a::f":{"module":"a","name":"f","sig":"func f()"}}}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(out)
+	i, j := strings.Index(html, "<script>"), strings.LastIndex(html, "</script>")
+	if i < 0 || j < i || strings.Count(strings.ToLower(html), "<script") != 1 {
+		t.Fatal("the page must have exactly one script block")
+	}
+	script := html[i+len("<script>") : j]
+	// the parts of the script: the preamble of shell.html, then each source by its mark
+	type part struct{ name, src string }
+	shared := map[string]bool{lastJS: true}
+	for _, n := range coreJS {
+		shared[n] = true
+	}
+	mark := regexp.MustCompile(`(?m)^/\* --- (\S+) --- \*/\n`)
+	locs := mark.FindAllStringSubmatchIndex(script, -1)
+	if len(locs) == 0 {
+		t.Fatal("no source marks in the script")
+	}
+	parts := []part{{"shell.html", script[:locs[0][0]]}}
+	seen := map[string]bool{}
+	for k, l := range locs {
+		end := len(script)
+		if k+1 < len(locs) {
+			end = locs[k+1][0]
+		}
+		name := script[l[2]:l[3]]
+		seen[name] = true
+		if shared[name] {
+			parts = append(parts, part{name, script[l[1]:end]})
+		}
+	}
+	for n := range shared {
+		if !seen[n] {
+			t.Errorf("%s is not in the assembled script", n)
+		}
+	}
+	where, total := map[string]string{}, 0
+	for _, p := range parts {
+		decls, err := topDecls(p.src)
+		if err != nil {
+			t.Fatalf("%s: %v", p.name, err)
+		}
+		own := map[string]bool{}
+		for _, d := range decls {
+			total++
+			if own[d.name] && d.lexical {
+				t.Errorf("%s: %q declared twice", p.name, d.name)
+			}
+			own[d.name] = own[d.name] || d.lexical
+			if w, ok := where[d.name]; ok && w != p.name {
+				t.Errorf("%q is declared at the top level of both %s and %s (one shared script scope)", d.name, w, p.name)
+			} else if !ok {
+				where[d.name] = p.name
+			}
+		}
+	}
+	// the parser must really see the declarations (a broken one would find none and pass)
+	for _, want := range []string{"DATA", "Cam", "BACK", "doStep", "drawPath", "setView"} {
+		if _, ok := where[want]; !ok {
+			t.Errorf("top-level declaration %q not found: the declaration parser is off", want)
+		}
+	}
+	if total < 300 {
+		t.Errorf("only %d top-level declarations found: the declaration parser is off", total)
+	}
+
+	t.Run("node --check", func(t *testing.T) {
+		node, err := exec.LookPath("node")
+		if err != nil {
+			t.Skip("node is not installed: the syntax check of the assembled script is skipped")
+		}
+		f := filepath.Join(t.TempDir(), "viewer.js")
+		if err := os.WriteFile(f, []byte(script), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if b, err := exec.Command(node, "--check", f).CombinedOutput(); err != nil {
+			t.Fatalf("node --check on the assembled script: %v\n%s", err, b)
+		}
+	})
 }
