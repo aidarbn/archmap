@@ -28,6 +28,7 @@ const (
 	CodeNotImpl     = "not-implemented"
 	CodeStateRef    = "unknown-state"
 	CodeModuleRef   = "unknown-module"
+	CodePageRef     = "unknown-page-ref" // a page frame names something the code does not have
 )
 
 // Finding is one result of Check: a place in a spec file or in the code.
@@ -283,6 +284,23 @@ func Check(s *Set, f *facts.Facts, reach func(entry string) map[string]bool) (Mo
 			}
 		}
 	}
+
+	// pages: every reference must point to something the code (or the spec) has
+	allFlows, allJourneys := map[string]bool{}, map[string]bool{}
+	for id := range specFlows {
+		allFlows[id] = true
+	}
+	for id := range codeFlows {
+		allFlows[id] = true
+	}
+	for _, j := range m.Journeys {
+		allJourneys[j.ID] = true
+	}
+	for id := range codeJourneys {
+		allJourneys[id] = true
+	}
+	checkPages(&m, f, allFlows, allJourneys, add)
+
 	sort.SliceStable(out, func(a, b int) bool {
 		if out[a].File != out[b].File {
 			return out[a].File < out[b].File
@@ -334,6 +352,9 @@ func dupes(s *Set, add func(file string, line int, sev, code, format string, a .
 		}
 		for _, j := range f.Doc.Journeys {
 			check("journey", j.ID, f.Path, j.Line)
+		}
+		for _, pg := range f.Doc.Pages {
+			check("page", pg.ID, f.Path, pg.Line)
 		}
 	}
 }

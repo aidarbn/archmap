@@ -34,6 +34,7 @@ type Result struct {
 	// The .arch specification (arch/*.arch):
 	Spec      bool `json:"spec"`       // spec files declare something
 	SpecFlows int  `json:"spec_flows"` // flows declared in the spec
+	Pages     int  `json:"pages"`      // pages declared in the spec (arch/pages/*.arch and others)
 	Planned   int  `json:"planned"`    // planned steps (no code yet)
 	// ClientLinks counts the journey links with no link in the code (via
 	// "client": the client calls the next flow); listed in Info.
@@ -234,6 +235,7 @@ func RunWith(root string, f *facts.Facts, set *spec.Set) Result {
 		m, findings := spec.Check(set, f, reachFn)
 		res.Spec = true
 		res.SpecFlows = len(m.Flows)
+		res.Pages = len(m.Pages)
 		for _, x := range findings {
 			p := Problem{File: x.File, Line: x.Line, Msg: x.Msg}
 			switch x.Severity {

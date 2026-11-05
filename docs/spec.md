@@ -5,13 +5,15 @@ operations and the HTTP endpoints of `archmap serve`. It is written for the
 editor in the viewer: the editor never writes text, it sends operations and
 renders the model.
 
-The directory is optional. All `*.arch` files directly in `<root>/arch` are read
-(not recursive; names match `[A-Za-z0-9_][A-Za-z0-9_.-]*.arch`). The language
-describes behaviour only: what happens and in which order, not how.
+The directory is optional. All `*.arch` files directly in `<root>/arch` and in
+`<root>/arch/pages` are read (no other subdirectories; names match
+`[A-Za-z0-9_][A-Za-z0-9_.-]*.arch`). The language describes behaviour only: what
+happens and in which order, not how. Pages (`page`, see "Pages") pick diagrams
+to show together and change none of them.
 
 ## Grammar
 
-Line oriented. A block starts at column 0 with `states`, `flow` or `journey`; its
+Line oriented. A block starts at column 0 with `states`, `flow`, `journey` or `page`; its
 body lines are indented (spaces or tabs). `#` starts a comment outside quotes.
 Strings are in double quotes with the escapes `\"`, `\\`, `\n`. Identifiers
 (`id`) are letters, digits, `_`, `-`, `.`, not starting with `-` or `.`; latin is
@@ -19,7 +21,7 @@ the convention, other letters are accepted (real code has states such as `нет
 
 ```
 file     = { block } .
-block    = states | flow | journey .
+block    = states | flow | journey | page .
 
 states   = "states" Entity NL { "  " statesline NL } .
 statesline = "state" names                          # states without a transition
@@ -36,11 +38,19 @@ flowline = "actor" text
          | "exit" text .
 
 journey  = "journey" id [ string ] ":" flowid { ">" flowid } NL .
+
+page     = "page" ( string | id [ string ] ) NL { "  " frame NL } .   # id = slug of the name when omitted
+frame    = "journey" journeyid | "flow" flowid      # one id per line
+         | "states" refs | "tables" refs | "module" refs
+         | "api" apirefs                            # Name | Service.Name | /path | "METHOD /path"
+         | "note" text .
+refs     = word { ( "," | " " ) word } .
 text     = string | words to the end of the line .
 ```
 
 Canonical output (what the server writes): blocks in the order states, flows,
-journeys (each in its order), two-space indent, columns of `states` transitions
+journeys, pages (each in its order), two-space indent, the values of a page's
+frames in one column (one space after the longest keyword), columns of `states` transitions
 (arrow, `on`, label) and `step`s (ref, `ext`, caption) padded with three spaces,
 `actor` bare unless it needs quotes, `exit` always quoted, one blank line between
 blocks, a newline at the end. `Parse(Format(x)) == x`.
@@ -71,6 +81,58 @@ Step references are resolved against the code by the fid suffix or the name:
 exact fid, then `file.go::Func` suffix, then `Type.Method` / `Func` equal to the
 part after `::`, then a `.Method` suffix. The first tier with one match wins; with
 several matches the step is *ambiguous* (an error that lists up to 5 candidates).
+
+## Pages
+
+A page is a set of diagrams shown together, like a page in Figma. The usual place
+is `arch/pages/<name>.arch`; a `page` block is accepted in any `arch/*.arch`.
+
+```
+# Оплата заказа через Kaspi QR
+page "Оплата Kaspi"
+  journey guest-pay-kaspi
+  states  Order, Payment
+  tables  orders, payments, kaspi_payment_details
+  api     RequestKaspiQRForOrder, CancelOrder
+  module  services/kaspi
+  note    "Гость платит Kaspi QR на планшете; затем заказ уходит в кассу."
+
+page menu-sync "Синхронизация меню"
+  journey menu-sync-pos
+  states  SyncRunStatus
+```
+
+- **Id** — `page <id> "Name"`, or `page "Name"` with the id made from the name
+  (lower case, letters and digits of any script kept, the rest folded into `-`:
+  `оплата-kaspi`), or `page <id>` (the name is the id). Ids are unique over all
+  files (a second one is a `duplicate` error).
+- **One line is one frame**, in the order of the lines; each frame is a separate
+  diagram drawn by the viewer **from the code**, the page only says which:
+
+  | Line | The diagram | The names must be |
+  |------|-------------|-------------------|
+  | `journey <id>` | the journey: participants in layers, overview → steps | a journey of `arch:journey` or `arch/*.arch` |
+  | `flow <id>` | the scenario, the same way | a flow of `arch:flow` or `arch/*.arch` |
+  | `states A, B` | the state machine of each entity | an entity with a state machine in the code (`Order` finds `OrderStatus`, as `states` does) or a `states` block |
+  | `tables a, b` | these tables and the references between them | tables of the schema or of a data access |
+  | `api X, Y` | a compact list of the endpoints with their descriptions | an endpoint: `Name`, `Service.Name`, the URL path or `"METHOD /path"`; a name of several endpoints is an error that lists them |
+  | `module m` | the module and its functions | a module path, exact or a unique suffix (`services/kaspi` for `internal/services/kaspi`) |
+  | `note "…"` | the text | — |
+
+- **Layout** (enrich `layout`, `internal/spec.LayoutPage`): a grid of 4 columns;
+  journeys and flows first, then state machines, each 2 columns wide; then the
+  rest, 1 column, in the order of the lines; left to right, a frame that does not
+  fit the row starts the next one. The viewer sizes columns and rows by the
+  diagrams in them.
+- In the JSON model `pages[]` is `{id, name, frames, comment?, file, line, layout}`;
+  a frame is `{kind, refs?, text?, line, machines?, endpoints?, modules?,
+  missing?}`: `machines` — the `facts.states` key per `states` ref, `endpoints` —
+  the index in `facts.endpoints` per `api` ref (`-1` when none), `modules` — the
+  module per `module` ref, `missing` — the refs that point nowhere. `layout` is
+  `[{frame, row, col, span}]`.
+- `archmap diff` reports pages that appeared, are gone or changed (a frame line
+  added or removed, the name), and a reference that points nowhere as a broken
+  diagram (`page-ref`).
 
 ## JSON model
 
@@ -281,6 +343,10 @@ warnings too. Text output prints `path:line: message`, warnings as `warning: …
   entity's `states`.
 - info: every planned step (counted in `planned`).
 - warning: a planned step `in <module>` that names no module of the code.
+- error (`unknown-page-ref`): a page frame names a journey, flow, entity, table,
+  endpoint or module the code (and the spec) does not have, or an endpoint /
+  module name that matches several; `file:line` of the frame. A page declared
+  twice is a `duplicate`. The JSON output counts pages in `pages`.
 
 `arch:step`, `arch:on` and `arch:journey` in the code may name flows that only the
 spec declares.

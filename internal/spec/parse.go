@@ -152,6 +152,7 @@ type parser struct {
 	st *States
 	fl *Flow
 	jn *Journey
+	pg *Page
 
 	pending []string // comment lines waiting for the next header
 }
@@ -198,7 +199,7 @@ func Parse(file, text string) (*Doc, []Error) {
 }
 
 func (p *parser) header(n int, ts []tok) {
-	p.st, p.fl, p.jn = nil, nil, nil
+	p.st, p.fl, p.jn, p.pg = nil, nil, nil, nil
 	kw := ts[0]
 	switch kw.s {
 	case "states":
@@ -220,12 +221,18 @@ func (p *parser) header(n int, ts []tok) {
 		p.doc.Flows = append(p.doc.Flows, p.fl)
 	case "journey":
 		p.journey(n, ts)
+	case "page":
+		p.page(n, ts)
 	default:
 		if kw.s == "step" || kw.s == "actor" || kw.s == "exit" || kw.s == "alt" || kw.s == "final" || kw.s == "state" {
 			p.errAt(n, kw.col, "`%s` must be indented inside states/flow", kw.s)
 			return
 		}
-		p.errAt(n, kw.col, "unknown block %q (expected states, flow or journey)", kw.s)
+		if isFrameKind(kw.s) && kw.s != FrameJourney {
+			p.errAt(n, kw.col, "`%s` must be indented inside a page", kw.s)
+			return
+		}
+		p.errAt(n, kw.col, "unknown block %q (expected states, flow, journey or page)", kw.s)
 	}
 }
 
@@ -283,8 +290,10 @@ func (p *parser) body(n int, ts []tok) {
 		p.flowLine(n, ts)
 	case p.jn != nil:
 		p.errAt(n, ts[0].col, "a journey has no body; write it on one line")
+	case p.pg != nil:
+		p.pageLine(n, ts)
 	default:
-		p.errAt(n, ts[0].col, "indented line outside of states/flow")
+		p.errAt(n, ts[0].col, "indented line outside of states/flow/page")
 	}
 }
 
