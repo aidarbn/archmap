@@ -605,8 +605,7 @@ svg.pathmode .elabel { opacity: .2; }
 .pleg.br .pnum rect { stroke-dasharray: 3 2; }
 .pleg.br .pnum text { fill: var(--text-2); font-size: 10.5px; }
 .pleg.br:hover .pnum rect { stroke: var(--accent); }
-/* one soft glow when the current leg appears (no timers: a CSS animation that runs once) */
-.pleg.cur.flash .v { animation: plglow .9s ease-out 1; }
-@keyframes plglow { 0% { stroke-width: 7; opacity: .6; } 100% { stroke-width: 3; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .pleg.cur.flash .v { animation: none; } }
+/* the soft glow of the current leg is a Web Animation (playback.js drawPath): once per real step change, a new step
+ * cancels the one still running. Not the .flash class: that one fades the hop pulse out to nothing. */
+.e.ghost { visibility: hidden; }
 .pleg .v, .pleg .hit { vector-effect: non-scaling-stroke; }
