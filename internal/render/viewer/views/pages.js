@@ -505,7 +505,9 @@ function paintSel() {
 }
 
 /* ---------- opening a frame on the whole canvas ---------- */
-function openFrame(fi) {
+// a step down (nav.js): Esc / Back come to this page again, with its camera
+function openFrame(fi) { return A.navBatch ? A.navBatch(() => { A.navPush(); return openFrame_(fi); }) : openFrame_(fi); }
+function openFrame_(fi) {
   const f = P.frames[fi]; if (!f) return;
   const back = P.cur;
   const go = () => { P.ret = back; };
@@ -523,8 +525,9 @@ function openFrame(fi) {
   }
 }
 // Esc: stepping stops first; a frame open on the whole canvas comes back to its page
+function stopStepping() { if (A.state.view === 'page' && P.play && !A.state.run) { overview(P.play.fi); return true; } return false; }
 function back() {
-  if (A.state.view === 'page' && P.play && !A.state.run) { overview(P.play.fi); return true; }
+  if (stopStepping()) return true;
   if (!P.ret) return false;
   const id = P.ret; P.ret = null;
   if (A.state.run) A.play.close();
@@ -853,7 +856,10 @@ A.registerView({
 });
 
 A.pages = {
-  get cur() { return P.cur; }, has: (id) => !!pageOf(id), open, back, forget: () => { P.ret = null; },
+  get cur() { return P.cur; }, has: (id) => !!pageOf(id), open, back, stopStepping,
+  // the camera of the canvas, for "back" (nav.js) to put the page where it was
+  camVb: () => (P.cam ? { ...P.cam.vb } : null), setCam: (vb) => { if (P.cam && vb) P.cam.set(vb); },
+  forget: () => { P.ret = null; },
   tree, selKey, ancestors, label, render,
   // editing (archmap serve; side.js: the page list, dragging from the System navigation, the order in the tree)
   edit: { get can() { return canEdit(); }, op: pageOp, undo, toast, accepts, add: addItems, move: moveFrame, rank: RANK, removeFrame, note: noteEditor, get el() { return P.el; }, get undoN() { return ED.undo.length; } },

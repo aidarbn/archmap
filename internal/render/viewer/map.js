@@ -179,8 +179,9 @@ function applyFocus(toModules) {
   if (leaving) PRE = null;
   state.level = lvl;
   SC().forEach((e, i) => e.classList.toggle('hidden', i !== lvl));
+  // a scenario opened by a step down zooms in from where it was opened (nav.js); else a short fade
   const sc = SC()[lvl];
-  if (sc && sc.animate && !RM) sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' });
+  if (sc && sc.animate && !RM && !state.navZoom) sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' });
   if (state.sel && state.sel.t !== 'step' && state.sel.t !== 'run') { state.sel = null; renderPanel(); }
   afterLevel();
   return true;
@@ -773,7 +774,9 @@ function buildCode(fid, target, frames) {
 
 /* ===================== drill in / out ===================== */
 async function drill(lvl, ctx = {}, inner = false) {
-  if (state.busy && !inner) return; const wasBusy = state.busy; state.busy = true;
+  if (state.busy && !inner) return;
+  if (lvl > state.level && !inner) navPush(); // Esc comes back here (nav.js)
+  const wasBusy = state.busy; state.busy = true;
   try {
     const from = state.level, rect = ctx.from ? relRect(ctx.from) : midRect();
     if (lvl === 1) { $('#sc1').classList.remove('hidden'); fitMap(ctx.focus); }
@@ -841,7 +844,9 @@ function defaultFrames(fn) {
   return fr;
 }
 // from any level to the functions of module m via the map
-async function goModule(m) {
+async function goModule(m) { return navBatch(() => goModule_(m)); }
+async function goModule_(m) {
+  navPush();
   if (state.level > 1) await up(1);
   else if (state.level === 0) await drill(1, { from: sys.nodes.svc.el });
   revealMod(m);
@@ -851,8 +856,10 @@ async function goModule(m) {
   await drill(2, { from: map.nodes[u].el, mod: u });
 }
 // jumpToFn(fid, level 2|3): open the function on the map
-async function jumpToFn(id, lvl = 2) {
+async function jumpToFn(id, lvl = 2) { return navBatch(() => jumpToFn_(id, lvl)); }
+async function jumpToFn_(id, lvl) {
   const f = D.fns[id]; if (!f) return;
+  navPush();
   if (state.view !== 'map') setView('map');
   const m = f.module;
   if (state.level === 0) await drill(1, { from: sys.nodes.svc.el, focus: m });

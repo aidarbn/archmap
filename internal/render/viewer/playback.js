@@ -774,7 +774,9 @@ function renderPlayer() {
   $('#pStep').textContent = ov && list.length ? t('ovStart') + ' →' : '→';
   $('#pStep').classList.toggle('primary', ov && !!list.length);
   $('#pStep').disabled = !list.length || (state.step >= list.length - 1 && !br && !(fe && fe.jump));
-  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').textContent = '‹ ' + t('backToMap'); $('#pClose').title = t('closeRun') + ' (Esc)';
+  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; // "‹ <where Esc goes>": the page, the scenario step, the module the scenario was opened from; the map by default
+  const bk = typeof navBackLabel === 'function' ? navBackLabel() : '';
+  $('#pClose').textContent = '‹ ' + cut(bk || t('backToMap'), 40); $('#pClose').title = bk ? t('navBack', bk) : t('closeRun') + ' (Esc)';
   showChoice(br);
   if (!br) showPlate();
   if (!br && state.exitText && state.step === list.length - 1) {
@@ -810,11 +812,17 @@ function loadRun(key) {
   bus.emit('flow', state.run); bus.emit('step', null);
 }
 // openRun(key): open a scenario on its overview (what it does, the whole path on the map); the steps by hand
+// Opening is a step down (nav.js): Esc comes back to where it was opened from; the diagram zooms in from that place.
 async function openRun(key) {
+  const down = !BACK.restoring && (!state.run || state.run.key !== key);
+  if (down) navPush();
+  const from = down ? navFrom() : null;
   if (state.view !== 'map') setView('map');
   for (let i = 0; i < 40 && state.busy; i++) await sleep(100);
-  loadRun(key);
+  state.navZoom = down;
+  try { loadRun(key); } finally { state.navZoom = false; }
   if (state.run) showOverview();
+  if (down && state.run) navZoom(SC()[state.level], from, 'in');
 }
 function closeRun() {
   if (!state.run) return;
