@@ -540,7 +540,8 @@ journey guest-kaspi "The guest pays with Kaspi": create-order > kaspi-pay > conf
   (warning), a journey or `alt` naming a flow that exists nowhere (error), planned
   steps (info, counted). Use `--strict` to fail on warnings.
 - Under `archmap serve` the model is edited through `GET /spec`, `POST /spec/ops`
-  and `PUT /spec/file`; every write is followed by the usual rebuild and live update.
+  and `PUT /spec/file`, pages through `POST /spec/page`; every write is followed by
+  the usual rebuild and live update.
 
 Full grammar, the JSON model and the operations: [docs/spec.md](docs/spec.md).
 
@@ -584,8 +585,28 @@ page "Оплата Kaspi"                         # or: page kaspi "Оплата
   entity, endpoint, module) is a `lint` error with `file:line`, a frame marked
   "not in the code", and a broken diagram in `archmap diff` — which also lists
   pages that appeared, disappeared or changed their frames.
-- `#page=<id>` in the address opens the page. Creating pages from the interface
-  is not there yet: pages are files.
+- `#page=<id>` in the address opens the page.
+- **Making pages in the interface** (`archmap serve`; a static `map` greys the
+  buttons out and says so): **+** next to **Pages** — type the name right in the
+  list, Enter creates `arch/pages/<id>.arch` (the id in Latin: `page
+  otmena-zakaza "Отмена заказа"`), Esc cancels; an empty or taken name says so in
+  place. The new page opens empty, and over its tree the switch **Page | System**
+  turns the System navigation into the source: drag a through path or an
+  `arch:flow` scenario, a status entity, tables (⌘/Shift-click picks several), an
+  endpoint or a whole service, a module onto the canvas (or onto the page tree —
+  hold over the **Page** tab — or onto the page in the list); a double click or
+  Enter adds the picked rows too. The ghost says what a drop does: add, already on
+  the page, or why not (a function, a user, a whole section, an automatic path).
+  Tables and endpoints join one frame; the frame appears at once. A double click
+  on a page in the list renames it, its bin deletes it (after a confirmation);
+  the **×** over a frame or Delete takes it off (a selected table / endpoint /
+  module — just that ref); frames are reordered by dragging in the page tree
+  (within their group: paths and statuses always stay on top); **+ Note** and a
+  double click on a note edit its text in place. **⌘Z / Ctrl+Z** undoes the last
+  edit, ⌘⇧Z redoes. Every edit changes only the lines of that page block — the
+  rest of the file, comments included, stays as it was; a reference to nothing
+  is refused, and a page changed on disk meanwhile is not overwritten (the new
+  version is shown instead).
 
 ### Edit mode
 

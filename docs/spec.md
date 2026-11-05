@@ -133,6 +133,13 @@ page menu-sync "Синхронизация меню"
 - `archmap diff` reports pages that appeared, are gone or changed (a frame line
   added or removed, the name), and a reference that points nowhere as a broken
   diagram (`page-ref`).
+- **Made in the viewer** (`archmap serve`, `POST /spec/page` below): a new page is
+  `arch/pages/<id>.arch` with the id spelled in Latin from the name (Cyrillic
+  transliterated, other scripts dropped, `page` when nothing is left; `-2`, `-3`
+  when taken), so the id is also a valid file name: `page otmena-zakaza "Отмена
+  заказа"`. Renaming keeps the id and the file. A dropped `tables` / `api` ref
+  joins the existing frame of the kind; `journey`, `flow`, `states`, `module` get a
+  line per ref; a ref already on the page is not added again.
 
 ## JSON model
 
@@ -230,9 +237,9 @@ identifiers; `ref` a function reference without spaces; `cond` words without `"`
 ## Endpoints (`archmap serve`)
 
 All answers are JSON (`application/json; charset=utf-8`). The server accepts
-loopback addresses only and checks the `Host` header. The two writing endpoints
+loopback addresses only and checks the `Host` header. The writing endpoints
 need `Content-Type: application/json` and refuse a foreign `Origin`; bodies are
-capped at 1 MiB; paths are `arch/<name>.arch`, nothing else is ever written.
+capped at 1 MiB; paths are `arch/<name>.arch` or `arch/pages/<name>.arch`, nothing else is ever written.
 
 - `GET /spec` → `{"seq", "files": [{"path", "text"}], "model", "errors": [{"file", "line", "col", "msg"}], "findings": [{"file", "line", "severity", "code", "msg"}]}`.
   `files` holds the text as it is on disk, `errors` the syntax errors, `findings`
@@ -249,6 +256,34 @@ capped at 1 MiB; paths are `arch/<name>.arch`, nothing else is ever written.
   `POST /spec/ops`. The text is stored as typed (not reformatted). A syntax error
   answers `422 {"error": "arch/orders.arch:2:3: …", "at": {"file","line","col","msg"}, "errors": […]}`
   and the file is not touched. `400` for a bad path.
+- `POST /spec/page` — one page edit from the viewer (`internal/spec.PageOp`):
+
+  | `op` | Fields | What it does |
+  |------|--------|--------------|
+  | `create` | `name` | new `arch/pages/<id>.arch` with `page <id> "Name"` |
+  | `rename` | `page, name` | the header line; id and file stay |
+  | `delete` | `page` | the block (with its `#` lines right above and one blank line); the file goes when nothing else is left in it |
+  | `add` | `page, kind, refs` | see "Made in the viewer" above |
+  | `add_note` / `set_note` | `page, [index,] text` | a `note` line |
+  | `remove_frame` | `page, index` | the frame line (the last one too: the page stays, empty) |
+  | `remove_ref` | `page, index, refs` | refs out of a frame; the frame goes with its last ref |
+  | `move_frame` | `page, index, to` | the line moves; `to` is the position among the other frames |
+  | `restore` | `files: [{path, text, expect}]` | undo / redo: writes `text` (`null` — removes the file) only while the file on disk is still `expect` (`null` — absent) |
+
+  Unlike `POST /spec/ops` the edit works **on the text**: only the lines of that
+  page block change (the frame values re-aligned in one column); other blocks,
+  comments, blank lines and end-of-line comments of the file stay byte for byte,
+  also when the page sits in a shared `arch/*.arch`. Every op on a page may carry
+  `expect: {name, frames: [{kind, refs, text}]}` — the page as the viewer shows
+  it; when the file says otherwise the answer is `409 {"error", "conflict": true,
+  "model"}` and nothing is written (`restore` checks `expect` the same way). The
+  new text must parse, and an edit that would add a reference to nothing
+  (`unknown-page-ref` that was not there before) is refused with `422`. Writes go
+  only to `arch/pages/<name>.arch` and to the existing `arch/<name>.arch` that
+  holds the page (a temp file + rename; a symlinked `arch/` or `arch/pages/` and
+  a non-regular target are refused). The answer is the `GET /spec` shape plus
+  `page`, `edits: [{path, before, after}]` (the texts the viewer keeps for undo)
+  and `notice: "already"` when there was nothing to add.
 
 After a write the usual rebuild runs: SSE `/events` publishes `building` then
 `ready` with a new `seq`, and `/data.json` carries the merged model. Files edited
