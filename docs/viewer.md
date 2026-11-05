@@ -8,24 +8,25 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 
 | File | What it holds |
 |------|---------------|
-| `shell.html` | Markup of the page: header, stage with the map scenes, right panel, player. Slots `<!--@CSS-->`, `<!--@JS-->`, placeholders `<!--TITLE-->` and `/*ARCH_DATA*/null`. |
+| `shell.html` | Markup of the page: the header (brand `#brand` with the live dot `#live`, crumbs `#crumbs`, the ⌘K field `#q` with its palette `#qpop`), the stage with the map scenes and the zoom buttons, the details panel `#panel`, the scenario bar `#player` (hidden while no scenario is open). Slots `<!--@CSS-->`, `<!--@JS-->`, placeholders `<!--TITLE-->` and `/*ARCH_DATA*/null`. |
 | `viewer.css` | Design tokens (light/dark), core styles, and the approved mockup styles for the views (sequence, lists, ER, matrix, status). |
 | `core.js` | DOM helpers, i18n (`I18N`, `t`, `L`, `addI18n`), data index `D`, `state`, event `bus`, `registerView`, `registerPanel`, code highlighting and loading, the global `AM`. |
 | `scene.js` | `Cam` (viewBox camera: pan, wheel zoom, `fit`, `animTo`), geometry (`clip`, `hop`, `bbox`), `runDot`, `pulse`, level transitions. |
 | `layout.js` | `layered()` — Sugiyama-lite band layout. |
-| `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, crumbs, minimap, legend. |
-| `playback.js` | Scenario runs: picker, steps through the levels, branches, effects/status badges, auto play. |
+| `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, the crumbs in the header (`renderCrumbs`: system › modules › module › function on the map, system › view title on another view). No level bar, minimap or legend. |
+| `playback.js` | Scenario runs: steps through the levels, branches, effects/status badges, the scenario bar. **No auto play**: a run is opened from ⌘K (`openRun(key)` loads it and shows step 1) and goes only by → / ← (`doStep`); Home — the first step, Esc — `closeRun()`. The camera of the module level moves only when the step is off screen (`cam.contains`); a step in another module on level 2 rebuilds the functions in place with a 260 ms fade instead of going up and back down. Nothing is loaded at start-up (`state.run` is null). |
 | `journeys.js` | Through paths and variants: the shared list rows (`AM.jv.journeyRows`, `variantRows`, `tog`), runs `journey:<id>` and `variant:<id>` (`fixed` runs: no branch stop), the plate between flows / at the end of a variant (`AM.jv.plate`, `end`, `jump`), progress and the label of the current path (`.jv-tag`). Event `jv` — a variants fold changed. |
-| `panel.js` | Right card for the selection (`setSel`). The panel hides (`#panelBtn` in the header, the button in its corner, `]` or Cmd/Ctrl+.) and resizes by its left edge (arrows nudge, double-click resets); both kept in `localStorage` (`archmap.panel.hidden`, `archmap.panel.w`, the CSS variable `--pw` on `main`); a change fires a window `resize`, so the map, the views and the dock fit the new width. A selection never reopens a hidden panel: `#panelBtn` gets a dot ("there are details"). `AM.panel.setHidden(h)`, `setWidth(w, save)`, `hidden`, `width`. |
-| `zoom.js` | Semantic zoom on the map (wheel/pinch dives into a card taking > 55% of the screen, leaves a level shrunk below 35%; 300 ms pause, one level per gesture; toggle `archmap.autozoom`), the scale zoom of content without a camera (`AM.zoom.scaleWheel`: code text, the sequence panel — past ×1.57 it dives, below ×0.65 it leaves, with the same gate), and the `?debug=1` audit `AM.audit()` that warns about foreign visible panels after a view or level change. |
-| `nav.js` | Header search (functions, modules, files), the Lists drop-down (modules, functions, branch changes), the flash of what a live update changed. |
-| `views/*.js`, `views/*.css` | Tabs. `views/map.js` registers the map; add one file per view. `views/sequence.js` is the exception: no tab, it builds the **sequence panel** (a dock over `#v-map`, see below) and exports `AM.dock`; `views/sheet.js` draws the **scenario sheet** inside that dock (`AM.sheet`, see below). |
-| `main.js` | Start-up: header, tabs, theme, language, keys, `setData`, live mode. `fitHeader()` keeps the project name at least ~120px wide: when the header runs out of room the branch counters and "changed only" fold into the ⋯ menu, then the labels of the live badge and the Lists button go. |
+| `panel.js` | Right card for the selection (`setSel`). The panel floats over the right of the stage (`aside`, absolute) and is shown only while there is a card: no selection — `main.nopanel`. ✕ `#panelHide`, `]` or Cmd/Ctrl+. hide it until the next selection (`PNL.closed`, reset by `setSel`); ⌘K "Show / hide the details panel" calls `AM.panel.setHidden(h)`. The width is dragged by the left edge (arrows nudge, double-click resets), kept in `localStorage` `archmap.panel.w` (CSS variable `--pw` on `main`); the map does not re-fit when the panel shows or hides. `AM.panel.setHidden(h)`, `setWidth(w, save)`, `hidden`, `width`. |
+| `zoom.js` | Zoom helpers: the scale zoom of content without a camera (`AM.zoom.scaleWheel`: the code text), gesture helpers, and the `?debug=1` audit `AM.audit()`. The semantic auto-dive is off (`AZ.on = false`, no toggle): zoom never changes the level. |
+| `nav.js` | ⌘K: the field and the palette (`paletteItems(q)` → grouped items: commands, modules, functions, scenarios — `journey:<id>` and `flow:<i>` runs, API endpoints, tables, state machines, files; `runItem` opens them), the commands (view, language, theme, details panel, back, close the scenario, only changed), `goBack()` (Esc: closes the scenario, then returns to the map, then goes a level up), and the flash of what a live update changed. `AM.palette.{open, items, close}`. |
+| `views/*.js`, `views/*.css` | Views. `views/map.js` registers the map; add one file per view. A view has no tab: it opens from ⌘K ("View: …"). `views/editor.js`, `walk.js`, `sequence.js`, `sheet.js` (and their CSS) stay in the sources but are **not assembled** into the page (`offViews` in `render.go`); the sections about them below describe the code, not the current page. |
+| `main.js` | Start-up: the header (`renderHeader`: name, its tooltip with repo / branch / changes), views (`setView`), theme, language, keys (Esc → `goBack`, Enter dives, ←/→/Space/Home step only while a scenario is open), `setData`, live mode (the dot `#live`: green / yellow building / red error, details in its tooltip). `?view=api|data|status` opens a view. |
 
 Assembly order: `viewer.css`, then `views/*.css` by name; scripts `core.js`, `scene.js`,
 `layout.js`, `map.js`, `playback.js`, `journeys.js`, `panel.js`, `nav.js`, `zoom.js` (one shared scope), then every `views/*.js` by
 name, **each wrapped in its own `{ … }` block**, then `main.js`. The core list is in
 `render.go` (`coreJS`); views are picked up automatically — adding a view needs no Go change.
+Views named in `offViews` (`editor`, `walk`, `sequence`, `sheet`) are skipped, both `.js` and `.css`.
 Assembly fails (tests catch it) if a part contains `</script` / `</style`, or a placeholder.
 
 The data contract is unchanged: `const DATA = {"facts":…,"model":…,"serve"?:…};` with every `<`
@@ -40,10 +41,10 @@ in its own block; use only the global `AM`:
 AM.addI18n({ ru: { apiTitle: 'API' }, en: { apiTitle: 'API' } }); // prefix keys with the view id
 AM.registerView({
   id: 'api',                 // container: <div class="view" id="v-api"> inside #stage
-  order: 20,                 // tab position; map is 0
+  order: 20,                 // position among the "View: …" commands of ⌘K; map is 0
   title: () => AM.t('apiTitle'),
-  mount(el, ctx) { /* once, the first time the tab opens; build DOM in el */ },
-  show(ctx) {}, hide(ctx) {},            // every switch to / from the tab
+  mount(el, ctx) { /* once, the first time the view opens; build DOM in el */ },
+  show(ctx) {}, hide(ctx) {},            // every switch to / from the view
   onStep(step, ctx) {},      // playback moved (step object below, or null on reset)
   onSelect(sel, ctx) {},     // selection changed
   onLang(ctx) {},            // language switched: re-render texts
@@ -61,10 +62,11 @@ logged and do not break the page.
   `byMod`, `callers`, `allMods`, `changed`, `deleted`, `modChg`, `entries`, `externals`
   (`{id:'ext:Name', name, kind, modules, functions}`), `extByMod`, `extByFn`, `endpoints`,
   `epByFid`, `states`, `transByFid` (fid → `[{entity, from, to}]`), `tables`
-  (`facts.data.tables`), `flows` (model flows with known steps, `i` = index in `model.flows`),
+  (`facts.data.tables`: `{name: {fields: [{name, type, notNull?, desc?}], source, refs, desc?}}` — `desc` is
+  the description found in the code, `notNull` is known for SQL sources only), `flows` (model flows with known steps, `i` = index in `model.flows`),
   `flowById`, `actors` (`{id:'actor:…', eps, fids, mods}`), `live` (serve endpoints or null).
 - **State** `AM.state`: `view`, `level`, `mod`, `fn`, `sel`, `only` (changed-only filter),
-  `run`, `step`, `playing`, `speed`.
+  `run`, `step` (`speed` stays 1: no speed control; there is no `playing` — nothing plays by itself).
 - **Bus** `AM.bus.on(event, fn)` → unsubscribe; events: `data`, `lang`, `theme`, `view`,
   `level`, `select`, `step`, `flow`, `filter`, `resize`, `live` (after a serve update; `{flash: [fid]}` — functions that
   changed, to highlight in your own view; the core flashes its own scenes and lists). `onData`
@@ -73,7 +75,7 @@ logged and do not break the page.
   those strips free of content (the free area is the top-left part of the scene minus the top strip).
   `AM.map.setDock(bottom, right, dur)` sets the bottom/right insets of all map cameras and re-frames the
   current step (or the level) in what is left.
-- **Sequence panel** `AM.dock` (`views/sequence.js`): `toggle()`, `open(full)`, `esc()` (closes the
+- **Sequence panel** (not assembled into the current page, see `offViews`) `AM.dock` (`views/sequence.js`): `toggle()`, `open(full)`, `esc()` (closes the
   scenario list, then leaves the full screen; returns true when it took the key — `main.js` calls it
   first on Esc), `shown`. The panel is `section.seqdock` inside `#v-map`: bottom (40% of the height by
   default) or right (45% of the width), a separator (`.sd-grip`: drag, arrows, double-click for the default),
@@ -88,7 +90,7 @@ logged and do not break the page.
   The header switch "Sheet | Sequence" (`AM.dock.mode`, `AM.dock.setMode('sheet'|'seq')`, `localStorage`
   `archmap.seqmode`, the sheet by default) picks what the panel draws; in the sheet mode the level switch has no
   "Code" (functions stand for it) and the scope / frame chips are hidden.
-- **Scenario sheet** `AM.sheet` (`views/sheet.js`): `render(host, {level, setLevel})` (the dock's scroll box),
+- **Scenario sheet** (not assembled into the current page) `AM.sheet` (`views/sheet.js`): `render(host, {level, setLevel})` (the dock's scroll box),
   `sync(keep)` (lights the current step; `keep` = no running dot), `select(sel)`, `wheel(e, level, setLevel)`
   (pinch / Cmd+wheel: `AM.zoom.scaleWheel`, past the thresholds a level), `clear()`; `model`, `layout`, `scale`;
   `crossings()` (the real crossings of the routed arrows now; `window.shCrossings()` with `?debug=1`) and
@@ -151,9 +153,11 @@ logged and do not break the page.
   transition — for a view that keeps the map on its level while it is off screen; `AM.map.marks()` puts
   the play and selection marks back when the map is shown); the scenes are `AM.map.system`, `AM.map.modules` (`pos`, `nodes`,
   `edges`, `extent`), `AM.map.functions`.
-- **Playback** `AM.play.load(key)` (`'flow:<i>'`, `'fn:<fid>'`, `'changes'`, `'overview'`),
-  `step(±1)`, `go(i)`, `stepIn`, `stepOut`, `auto`, `pause`, `reset`, `playFrom(fid)`,
-  `current()`, `stepAt(i)`, `list()`, `frames(i)`, `branches()`, `choose(branch)`, `run`.
+- **Playback** `AM.play.load(key)` (`'flow:<i>'`, `'journey:<id>'`, `'variant:<id>'`, `'fn:<fid>'`, `'changes'`,
+  `'overview'`; `null` closes), `open(key)` (load and show step 1), `close()`, `step(±1)`, `go(i)`, `stepIn`,
+  `stepOut`, `reset` (back to step 1), `playFrom(fid)` (opens the flow starting at fid, else an automatic path; by
+  hand), `current()`, `stepAt(i)`, `list()`, `frames(i)`, `branches()`, `choose(branch)`, `run`. There is no
+  `auto` / `pause`.
   Badges: `AM.ui.statusPill`, `AM.ui.mutBadge`, `AM.ui.effBadges`.
 
 A **step** is `{i, fid, prev, next, seg, flow, kind: 'entry'|'call'|'async'|'next', label,
@@ -218,6 +222,8 @@ repo and open the file: `go run ./cmd/archmap map --root <repo> --out /tmp/x.htm
 `window.__errs` collects JS errors; `?slow=8` slows transitions, `?lang=en`, `?theme=dark`.
 
 ## Editor and Walk (`views/editor.js`, `views/walk.js`)
+
+Not assembled into the current page (`offViews`); kept for a later return. The text below describes the code.
 
 **Edit mode** is a header toggle (`#editBtn`), present only under `archmap serve` when `GET /spec` answers
 (`?edit=1` opens it on load); the static HTML never shows it. It has no tab: the right panel gets tabs

@@ -208,17 +208,33 @@ func TestLiveFlashVisibleAndPersistent(t *testing.T) {
 	}
 }
 
-// The scenario sheet is a part of the sequence dock: its view file follows sequence.js (the dock calls AM.sheet
-// at run time) and comes with its own styles.
-func TestScenarioSheetAssembled(t *testing.T) {
+// The minimal interface: walk, editor, the sequence dock and the scenario sheet stay in the sources but are not
+// put into the page; there is no auto play, no tabs, lists or language switch in the markup — one ⌘K field.
+func TestMinimalInterface(t *testing.T) {
 	v := Viewer()
-	seq, sheet := strings.Index(v, "/* --- views/sequence.js --- */"), strings.Index(v, "/* --- views/sheet.js --- */")
-	if seq < 0 || sheet < 0 || sheet < seq {
-		t.Fatalf("views/sheet.js must be assembled after views/sequence.js (%d, %d)", seq, sheet)
+	for _, name := range []string{"editor", "walk", "sequence", "sheet"} {
+		for _, ext := range []string{".js", ".css"} {
+			if strings.Contains(v, "/* --- views/"+name+ext+" --- */") {
+				t.Errorf("views/%s%s must not be in the page", name, ext)
+			}
+		}
 	}
-	for _, s := range []string{"/* --- views/sheet.css --- */", "AM.sheet = {", "flowSteps", "planMod"} {
+	for _, s := range []string{"/* --- views/api.js --- */", "/* --- views/data.js --- */", "/* --- views/status.js --- */", "flowSteps", "planMod"} {
 		if !strings.Contains(v, s) {
 			t.Errorf("%q missing from the page", s)
 		}
+	}
+	for _, id := range []string{`id="tabs"`, `id="listBtn"`, `id="flowsBtn"`, `id="walkBtn"`, `id="editBtn"`, `id="langSeg"`, `id="pAuto"`, `id="pSpeed"`, `id="btnAuto"`, `id="themeBtn"`, `id="panelBtn"`} {
+		if strings.Contains(v, id) {
+			t.Errorf("%s must be gone from the markup", id)
+		}
+	}
+	for _, s := range []string{"auto()", "state.playing = true", "playing = !state.playing"} {
+		if strings.Contains(v, s) {
+			t.Errorf("auto play left in the page: %q", s)
+		}
+	}
+	if strings.Count(v, `id="q"`) != 1 {
+		t.Error("the page must have exactly one ⌘K field")
 	}
 }

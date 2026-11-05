@@ -10,22 +10,12 @@ const AFTER_UP = 0.4; // after leaving, the card we left takes this share of the
 const PAUSE = 300;   // ms after a transition when no new one may start
 const GESTURE_GAP = 140; // ms of silence that separates one wheel gesture from the next (trackpad inertia is one gesture)
 const CODE_MAX = 2.5, CODE_LEAVE = 0.65;
-const AZ = { on: true, armed: true, until: 0, last: 0, cz: 1 };
-try { AZ.on = localStorage.getItem('archmap.autozoom') !== '0'; } catch (e) { /* file:// without storage */ }
+// The auto-dive is off in the minimal interface: zoom only scales, the level changes by a double click, Esc or the
+// crumbs. The code below stays for a later opt-in (AZ.on).
+const AZ = { on: false, armed: true, until: 0, last: 0, cz: 1 };
 
 const autoBusy = () => state.busy;
-function setAutoZoom(on) {
-  AZ.on = !!on;
-  try { localStorage.setItem('archmap.autozoom', AZ.on ? '1' : '0'); } catch (e) { /* ignore */ }
-  paintAutoZoom();
-}
-function paintAutoZoom() {
-  const b = $('#btnAuto'); if (!b) return;
-  b.textContent = t('autoZoom'); b.title = t('autoZoomTip'); b.setAttribute('aria-pressed', AZ.on);
-}
-function setupAutoZoom() {
-  const b = $('#btnAuto'); b.onclick = () => setAutoZoom(!AZ.on);
-  paintAutoZoom();
+function setupZoom() {
   const sc = $('#sc3');
   sc.addEventListener('wheel', codeWheel, { passive: false });
   onGesture(sc, codeWheel);
@@ -117,7 +107,7 @@ AM.zoom = { scaleWheel, onGesture, isZoomWheel, get on() { return AZ.on; }, DIVE
 function auditPanels(label) {
   const act = $('#stage > .view.on');
   const seen = (el) => (el.checkVisibility ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : getComputedStyle(el).visibility !== 'hidden');
-  const open = [act, $('header'), $('footer'), $('aside'), SR.open && $('#qpop'), LS.open && $('#lists'), $('svg[aria-hidden]')].filter(Boolean);
+  const open = [act, $('header'), $('footer'), $('aside'), SR.open && $('#qpop'), $('svg[aria-hidden]')].filter(Boolean);
   const bad = [], name = (el) => (el.id ? '#' + el.id : '') + (el.getAttribute('class') ? '.' + String(el.getAttribute('class')).split(/\s+/).join('.') : '') || el.tagName;
   const add = (el, why) => { const r = el.getBoundingClientRect(); if (r.width > 1 && r.height > 1 && seen(el)) bad.push(why + ': ' + el.tagName.toLowerCase() + name(el)); };
   $$('body *').forEach((el) => {
@@ -126,7 +116,6 @@ function auditPanels(label) {
     if (el.closest('.view')) add(el, 'inactive view'); else if (pos === 'absolute' || pos === 'fixed') add(el, pos);
   });
   if (!SR.open && !$('#qpop').hidden) bad.push('search popup open while closed');
-  if (!LS.open && !$('#lists').hidden) bad.push('lists open while closed');
   if (state.view === 'map' && !state.busy) $$('#v-map .scene').forEach((el, i) => { if (i !== state.level && !el.classList.contains('hidden')) bad.push('scene sc' + i + ' shown on level ' + state.level); });
   if (bad.length) { const u = Array.from(new Set(bad)); console.warn('[archmap debug] foreign elements after ' + label + ':\n' + u.slice(0, 12).join('\n')); (window.__auditWarns = window.__auditWarns || []).push({ label, bad: u }); return u; }
   return [];

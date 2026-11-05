@@ -1,26 +1,34 @@
-/* nav.js — global search (functions, modules, files), the lists drop-down (modules, functions,
- * branch changes) and the flash of what a live update changed (archmap serve). */
+/* nav.js — ⌘K, the one control of the page: a field in the header and a palette under it that finds modules,
+ * functions, files, scenarios (flows and through paths), API endpoints, tables and state machines, and runs the
+ * commands (view, language, theme, details panel, back, close the scenario). Also: the flash of what a live
+ * update changed (archmap serve). */
 
 addI18n({
   ru: {
-    search: 'Поиск: функция, модуль или файл…', searchNone: 'Ничего не найдено', searchFns: 'Функции', searchMods: 'Модули', searchFiles: 'Файлы',
-    searchHint: '↑↓ выбрать · ↵ на карту · ⇧↵ в код · Esc закрыть', lists: 'Списки', listsTip: 'Модули, функции и изменения ветки',
-    tabMods: 'Модули', tabFns: 'Функции', tabChg: 'Изменения', fnFilter: 'Фильтр функций…', moreRows: (n) => '+ ещё ' + n + ' — уточните фильтр', deletedFns: 'Удалённые',
-    tabFlows: 'Сценарии', flowsBtn: (n) => 'Сценарии (' + n + ')', flowsTip: 'Все сценарии: поиск, группы по актору', flowsFilter: 'Поиск сценария или актора…',
-    grpAuto: 'Авто — без разметки', noActor: 'Без актора', flowsAll: (n) => 'Показать все (' + n + ')', flowsFewer: 'Свернуть', flowsBrowse: 'Открыть браузер сценариев', flowSteps: (n) => n + ' шаг.',
-    ms: 'мс', changedN: 'изм.', noConnTip: 'Сервер archmap не отвечает; страница переподключится сама', closeLists: 'Закрыть',
+    search: 'Найти или выполнить…', searchNone: 'Ничего не найдено', searchFns: 'Функции', searchMods: 'Модули', searchFiles: 'Файлы',
+    searchHint: '↑↓ выбрать · ↵ открыть · ⇧↵ функция в код · Esc закрыть',
+    pkCmds: 'Команды', pkFlows: 'Сценарии', pkEps: 'API', pkTables: 'Таблицы', pkStates: 'Статусы',
+    pkView: (v) => 'Вид: ' + v, pkLang: 'Язык: English', pkTheme: (d) => (d ? 'Тема: светлая' : 'Тема: тёмная'), pkPanel: (h) => (h ? 'Показать панель деталей' : 'Скрыть панель деталей'),
+    pkBack: 'Назад', pkClose: 'Закрыть сценарий', pkOnly: (on) => (on ? 'Показать все, не только изменённые' : 'Только изменённые в ветке'),
+    pkPath: 'сквозной путь', pkStepsN: (n, p) => n + ' ' + p(['шаг', 'шага', 'шагов']), pkStatesN: (n, p) => n + ' ' + p(['статус', 'статуса', 'статусов']),
+    pkColsN: (n, p) => n + ' ' + p(['колонка', 'колонки', 'колонок']),
+    grpAuto: 'Авто — без разметки', noActor: 'Без актора',
+    ms: 'мс', changedN: 'изм.', noConnTip: 'Сервер archmap не отвечает; страница переподключится сама',
   },
   en: {
-    search: 'Search: function, module or file…', searchNone: 'Nothing found', searchFns: 'Functions', searchMods: 'Modules', searchFiles: 'Files',
-    searchHint: '↑↓ select · ↵ on the map · ⇧↵ to code · Esc close', lists: 'Lists', listsTip: 'Modules, functions and branch changes',
-    tabMods: 'Modules', tabFns: 'Functions', tabChg: 'Changes', fnFilter: 'Filter functions…', moreRows: (n) => '+ ' + n + ' more — refine the filter', deletedFns: 'Deleted',
-    tabFlows: 'Scenarios', flowsBtn: (n) => 'Scenarios (' + n + ')', flowsTip: 'All scenarios: search, grouped by actor', flowsFilter: 'Search a scenario or actor…',
-    grpAuto: 'Auto — not annotated', noActor: 'No actor', flowsAll: (n) => 'Show all (' + n + ')', flowsFewer: 'Collapse', flowsBrowse: 'Open the scenario browser', flowSteps: (n) => n + ' steps',
-    ms: 'ms', changedN: 'changed', noConnTip: 'The archmap server does not answer; the page reconnects by itself', closeLists: 'Close',
+    search: 'Find or run…', searchNone: 'Nothing found', searchFns: 'Functions', searchMods: 'Modules', searchFiles: 'Files',
+    searchHint: '↑↓ select · ↵ open · ⇧↵ a function to code · Esc close',
+    pkCmds: 'Commands', pkFlows: 'Scenarios', pkEps: 'API', pkTables: 'Tables', pkStates: 'Statuses',
+    pkView: (v) => 'View: ' + v, pkLang: 'Язык: русский', pkTheme: (d) => (d ? 'Theme: light' : 'Theme: dark'), pkPanel: (h) => (h ? 'Show the details panel' : 'Hide the details panel'),
+    pkBack: 'Back', pkClose: 'Close the scenario', pkOnly: (on) => (on ? 'Show all, not only changed' : 'Only changed on the branch'),
+    pkPath: 'through path', pkStepsN: (n) => n + (n === 1 ? ' step' : ' steps'), pkStatesN: (n) => n + (n === 1 ? ' status' : ' statuses'),
+    pkColsN: (n) => n + (n === 1 ? ' column' : ' columns'),
+    grpAuto: 'Auto — not annotated', noActor: 'No actor',
+    ms: 'ms', changedN: 'changed', noConnTip: 'The archmap server does not answer; the page reconnects by itself',
   },
 });
 
-/* ---------- search ---------- */
+/* ---------- matching ---------- */
 const SR = { open: false, act: 0, items: [] };
 const lc = (s) => String(s || '').toLowerCase();
 // score of a name against a query token: higher is better, 0 — no match
@@ -31,9 +39,18 @@ function tokScore(name, tok) {
   if (i < 0) return 0;
   return /[^a-z0-9]/.test(name[i - 1] || ' ') || /[A-Z]/.test(name[i] || '') ? 60 : 40;
 }
-function searchAll(q) {
-  const toks = lc(q).split(/\s+/).filter(Boolean);
-  if (!toks.length) return [];
+// every token must hit one of the texts (the first ones count more); 0 — no match
+function hits(texts, toks) {
+  let sc = 0;
+  for (const tk of toks) {
+    let best = 0;
+    texts.forEach((x, i) => { if (x) best = Math.max(best, tokScore(lc(x), tk) / (i ? 2 : 1)); });
+    if (!best) return 0;
+    sc += best;
+  }
+  return sc;
+}
+function searchCode(toks) {
   const fns = [], mods = [], files = new Map();
   D.fids.forEach((id) => {
     const f = D.fns[id], nm = lc(fname(f)), path = lc(f.file);
@@ -46,102 +63,12 @@ function searchAll(q) {
     if (ok) fns.push({ k: 'fn', id, sc: sc + (f.status ? 6 : 0) + (f.entry ? 3 : 0) });
     if (f.file && !files.has(f.file)) files.set(f.file, { k: 'file', id: f.file, mod: f.module, fid: id, sc: 0 });
   });
-  D.allMods.forEach((m) => {
-    const nm = lc(modLabel(m));
-    let sc = 0, ok = true;
-    for (const tk of toks) { const a = tokScore(nm, tk) || tokScore(lc(m.split('/').pop()), tk); if (!a) { ok = false; break; } sc += a; }
-    if (ok) mods.push({ k: 'mod', id: m, sc: sc + 5 });
-  });
+  D.allMods.forEach((m) => { const sc = hits([modLabel(m), m.split('/').pop(), modDesc(m)], toks); if (sc) mods.push({ k: 'mod', id: m, sc: sc + 5 }); });
   const fl = [];
-  files.forEach((o) => {
-    const path = lc(o.id); let sc = 0, ok = true;
-    for (const tk of toks) { const a = tokScore(path.split('/').pop(), tk) || tokScore(path, tk) / 2; if (!a) { ok = false; break; } sc += a; }
-    if (ok) { o.sc = sc; fl.push(o); }
-  });
-  const by = (a, b) => b.sc - a.sc || (a.id < b.id ? -1 : 1);
-  return fns.sort(by).slice(0, 9).concat(mods.sort(by).slice(0, 4), fl.sort(by).slice(0, 4));
+  files.forEach((o) => { const sc = hits([o.id.split('/').pop(), o.id], toks); if (sc) { o.sc = sc; fl.push(o); } });
+  return { fns, mods, files: fl };
 }
-function srRow(o, i) {
-  let ico, nm, sub, st = '';
-  if (o.k === 'fn') {
-    const f = fnInfo(o.id); ico = 'ƒ'; nm = f.name; sub = `${short(f.mod)} · ${(f.file || '').split('/').pop()}:${f.s}`;
-    if (f.status) st = `<span class="st-${f.status === 'added' ? 'a' : 'm'}">${f.status === 'added' ? '+' : '~'}</span>`;
-  } else if (o.k === 'mod') { ico = '▢'; nm = short(o.id); sub = (D.byMod[o.id] || []).length + ' ' + t('fnShort'); }
-  else { ico = '▤'; nm = o.id.split('/').pop(); sub = cutL(o.id, 46); }
-  return `<div class="qi${i === SR.act ? ' act' : ''}" role="option" data-i="${i}" title="${esc(o.k === 'fn' ? o.id : o.k === 'file' ? o.id : modLabel(o.id))}"><b class="ico">${ico}</b><span class="nm">${esc(nm)}</span>${st}<span class="sb">${esc(sub)}</span></div>`;
-}
-function drawSearch() {
-  const q = $('#q').value.trim(), pop = $('#qpop');
-  if (!q) { closeSearch(); return; }
-  SR.items = searchAll(q);
-  SR.act = Math.max(0, Math.min(SR.act, SR.items.length - 1));
-  let h = '', last = '';
-  const hd = { fn: 'searchFns', mod: 'searchMods', file: 'searchFiles' };
-  SR.items.forEach((o, i) => { if (o.k !== last) { last = o.k; h += `<div class="gh">${esc(t(hd[o.k]))}</div>`; } h += srRow(o, i); });
-  if (!SR.items.length) h = `<div class="none">${esc(t('searchNone'))}</div>`;
-  else h += `<div class="hint">${esc(t('searchHint'))}</div>`;
-  pop.innerHTML = h; pop.hidden = false; SR.open = true;
-}
-function closeSearch() { SR.open = false; $('#qpop').hidden = true; }
-function markSearch(scroll) {
-  const pop = $('#qpop'), p = pop.querySelector('.qi.act'); if (p) p.classList.remove('act');
-  const n = pop.querySelector(`.qi[data-i="${SR.act}"]`);
-  if (n) { n.classList.add('act'); if (scroll) n.scrollIntoView({ block: 'nearest' }); }
-}
-// open(o, code): function — its level on the map (2) or its code (3); module — its functions; file — its first function
-async function navTo(o, code) {
-  if (!o) return;
-  if (state.view !== 'map') setView('map');
-  if (state.busy) await waitIdle();
-  if (o.k === 'fn') return jumpToFn(o.id, code ? 3 : 2);
-  if (o.k === 'mod') return goModule(o.id);
-  if (o.k === 'file') return o.fid && D.fns[o.fid] ? jumpToFn(o.fid, code ? 3 : 2) : goModule(o.mod);
-}
-async function waitIdle() { for (let i = 0; i < 40 && state.busy; i++) await sleep(100); }
-function pickSearch(i, code) {
-  const o = SR.items[i]; if (!o) return;
-  closeSearch(); $('#q').blur();
-  navTo(o, code);
-}
-function setupSearch() {
-  const q = $('#q'); let tm = null;
-  q.placeholder = t('search');
-  q.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { SR.act = 0; drawSearch(); }, 70); });
-  q.addEventListener('focus', () => { if (q.value.trim()) drawSearch(); });
-  q.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'ArrowDown') { e.preventDefault(); if (!SR.open) drawSearch(); SR.act = Math.min(SR.items.length - 1, SR.act + 1); markSearch(true); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); SR.act = Math.max(0, SR.act - 1); markSearch(true); }
-    else if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tm); if (!SR.open) drawSearch(); pickSearch(SR.act, e.shiftKey || e.metaKey || e.ctrlKey); }
-    else if (e.key === 'Escape') { e.preventDefault(); if (SR.open) closeSearch(); else { q.value = ''; q.blur(); } }
-  });
-  $('#qpop').addEventListener('mousedown', (e) => { const r = e.target.closest('.qi'); if (r) { e.preventDefault(); pickSearch(+r.dataset.i, e.shiftKey); } });
-  // close on a click anywhere outside (capture: scenes stop the bubbling of their own events), on blur
-  // (late enough for a click on a row) and when the window loses focus
-  document.addEventListener('pointerdown', (e) => { if (SR.open && !e.target.closest('#search')) closeSearch(); }, true);
-  document.addEventListener('mousedown', (e) => { if (SR.open && !e.target.closest('#search')) closeSearch(); }, true);
-  q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) closeSearch(); }, 160));
-  window.addEventListener('blur', () => closeSearch());
-  window.addEventListener('keydown', (e) => {
-    const tg = e.target.tagName, typing = tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable;
-    if ((e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {
-      e.preventDefault(); q.focus(); q.select();
-    }
-  });
-}
-
-/* ---------- lists drop-down ---------- */
-const LS = { open: false, tab: 'mods', q: '' };
-const LIST_MAX = 200;
-function rowFn(id) {
-  const f = fnInfo(id), st = f.status ? `<span class="st-${f.status === 'added' ? 'a' : 'm'}">${f.status === 'added' ? '+' : '~'}</span>` : '';
-  return `<div class="lrow${state.fn === id ? ' cur' : ''}" data-k="fn" data-id="${esc(id)}" title="${esc(id)}">${st}<span class="nm mono">${esc(f.name)}</span><span class="sb">${esc((f.file || '').split('/').pop())}:${f.s}</span></div>`;
-}
-function rowMod(m) {
-  const c = D.modChg[m], l = layerOf(m);
-  return `<div class="lrow${state.mod === m ? ' cur' : ''}" data-k="mod" data-id="${esc(m)}" title="${esc(modLabel(m))}"><i class="dot" style="background:${LCOLOR[l]}"></i><span class="nm">${esc(short(m))}</span>${hasChg(c) ? `<span class="chgt">${esc(chgText(c))}</span>` : ''}<span class="sb">${(D.byMod[m] || []).length}</span></div>`;
-}
-/* scenarios: the actor of a flow, groups by actor (declared) then the auto ones, play on click */
+/* scenarios: the actor of a flow; groups by actor (declared) then the auto ones */
 const flowActor = (fl) => { if (fl.actor) return fl.actor; const a = fl.steps && fl.steps.length ? actorOfFn(fl.steps[0]) : null; return a ? actorName(a) : ''; };
 function flowGroups(q, subset) {
   q = lc(q).trim();
@@ -152,111 +79,150 @@ function flowGroups(q, subset) {
   });
   const topFirst = (a) => a.map((x, i) => [x, i]).sort((p, q2) => (q2[0].top ? 1 : 0) - (p[0].top ? 1 : 0) || p[1] - q2[1]).map((p) => p[0]);
   const gs = Array.from(by, ([name, items]) => ({ name, items: topFirst(items) })).sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name));
-  if (auto.length) gs.push({ name: by.size ? t('grpAuto') : t('grpFlows'), items: topFirst(auto), auto: true });
+  if (auto.length) gs.push({ name: by.size ? t('grpAuto') : t('pkFlows'), items: topFirst(auto), auto: true });
   return gs;
 }
-// rows of the journeys and variants share the builders in journeys.js; cfg tells them the classes of this list
-const jvCfg = (cls) => ({ row: cls, head: (title, n) => (cls === 'sc' ? `<div class="scen-grp">${esc(title)}<small>${n}</small></div>` : `<div class="gh">${esc(title)} · ${n}</div>`), attr: (k, id) => `data-k="${k}" data-id="${esc(id)}"` });
-const flowRow = (fl, cls = 'lrow', q = '') => `<div class="${cls}${state.run && state.run.key === 'flow:' + fl.i ? ' cur' : ''}" data-k="flow" data-id="${fl.i}" title="${esc(fl.name)}"><span class="nm">${esc(fl.name)}</span><span class="sb">${esc(t('flowSteps', fl.steps.length))}</span>${AM.jv.tog(fl)}</div>` + AM.jv.variantRows(fl, q, jvCfg(cls));
-function playRunKey(key) {
-  if (state.view !== 'map') setView('map');
-  loadRun(key); auto();
-}
-// click on a row of a journey / variant / the fold button of a flow; true when it was one of them
-function jvClick(e) {
-  const vt = e.target.closest('[data-vt]'); if (vt) { e.stopPropagation(); AM.jv.toggle(vt.dataset.vt); return 'vt'; }
-  const r = e.target.closest('[data-k="journey"],[data-k="variant"]'); if (!r) return false;
-  playRunKey(r.dataset.k + ':' + r.dataset.id); return r.dataset.k;
-}
-function playFlowIdx(i) {
-  if (state.view !== 'map') setView('map');
-  loadRun('flow:' + i); auto();
-}
-function openFlows() {
-  LS.tab = 'flows'; LS.q = ''; toggleLists(true);
-  const i = $('#lists .lq'); if (i) i.focus();
-}
-function paintFlowsBtn() {
-  const b = $('#flowsBtn'); if (!b) return;
-  b.hidden = !D.flows.length; b.textContent = t('flowsBtn', D.flows.length); b.title = t('flowsTip');
-}
-function listBody() {
-  const q = lc(LS.q).trim(); let h = '';
-  if (LS.tab === 'flows') {
-    const gs = flowGroups(LS.q);
-    h = AM.jv.journeyRows(LS.q, jvCfg('lrow')) + gs.map((g) => `<div class="gh">${esc(g.name)} · ${g.items.length}</div>` + g.items.map((fl) => flowRow(fl, 'lrow', LS.q)).join('')).join('');
-    if (!h) h = `<div class="none">${esc(t('flowNone'))}</div>`;
-  } else if (LS.tab === 'mods') {
-    LAYERS.forEach((l) => {
-      const ms = D.allMods.filter((m) => layerOf(m) === l && (!state.only || hasChg(D.modChg[m])));
-      if (!ms.length) return;
-      h += `<div class="gh"><i class="dot" style="background:${LCOLOR[l]}"></i>${esc(t('layers')[l])} · ${ms.length}</div>` + ms.map(rowMod).join('');
-    });
-  } else if (LS.tab === 'fns') {
-    const toks = q.split(/\s+/).filter(Boolean);
-    const all = D.fids.filter((id) => { const f = D.fns[id]; if (state.only && !f.status) return false; const hay = lc(fname(f) + ' ' + f.file); return toks.every((tk) => hay.includes(tk)); });
-    all.sort((a, b) => (D.fns[b].status ? 1 : 0) - (D.fns[a].status ? 1 : 0) || (D.fns[a].file < D.fns[b].file ? -1 : D.fns[a].file > D.fns[b].file ? 1 : D.fns[a].start - D.fns[b].start));
-    h = all.slice(0, LIST_MAX).map(rowFn).join('') + (all.length > LIST_MAX ? `<div class="more">${esc(t('moreRows', all.length - LIST_MAX))}</div>` : '') + (all.length ? '' : `<div class="none">${esc(t('searchNone'))}</div>`);
-  } else {
-    const by = {};
-    D.changed.forEach((id) => { (by[D.fns[id].module] = by[D.fns[id].module] || []).push(id); });
-    Object.keys(by).sort().forEach((m) => { h += `<div class="gh lnk" data-k="mod" data-id="${esc(m)}">${esc(short(m))} · ${by[m].length}</div>` + by[m].map(rowFn).join(''); });
-    if (D.deleted.length) h += `<div class="gh">${esc(t('deletedFns'))} · ${D.deleted.length}</div>` + D.deleted.slice(0, 100).map((d) => `<div class="lrow del"><span class="st-d">−</span><span class="nm mono">${esc(d.name || d.fid || '')}</span><span class="sb">${esc(d.file ? d.file.split('/').pop() : short(d.module || ''))}</span></div>`).join('');
-    if (!h) h = `<div class="none">${esc(t('searchNone'))}</div>`;
-  }
-  return h;
-}
-function drawLists() {
-  const box = $('#lists'); if (!box) return;
-  const hasChgs = D.changed.length || D.deleted.length;
-  if (LS.tab === 'chg' && !hasChgs) LS.tab = 'mods';
-  if (LS.tab === 'flows' && !D.flows.length) LS.tab = 'mods';
-  const tabs = [['mods', 'tabMods', D.allMods.length], ['fns', 'tabFns', D.fids.length]].concat(D.flows.length ? [['flows', 'tabFlows', D.flows.length]] : []).concat(hasChgs ? [['chg', 'tabChg', D.changed.length + D.deleted.length]] : []);
-  const top = box.querySelector('.lbody') ? box.querySelector('.lbody').scrollTop : 0;
-  box.innerHTML = `<div class="lhead"><div class="ltabs" role="tablist">${tabs.map(([k, lab, n]) => `<button role="tab" data-tab="${k}" aria-selected="${LS.tab === k}">${esc(t(lab))}<small>${n}</small></button>`).join('')}</div><button class="x" data-close title="${esc(t('closeLists'))}">×</button></div>` +
-    (LS.tab === 'fns' || LS.tab === 'flows' ? `<input type="search" class="lq" placeholder="${esc(t(LS.tab === 'flows' ? 'flowsFilter' : 'fnFilter'))}" value="${esc(LS.q)}" autocomplete="off">` : '') +
-    `<div class="lbody">${listBody()}</div>`;
-  box.querySelector('.lbody').scrollTop = top;
-  const inp = box.querySelector('.lq');
-  if (inp) {
-    let tm = null;
-    inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { LS.q = inp.value; const b = box.querySelector('.lbody'); b.innerHTML = listBody(); b.scrollTop = 0; }, 80); });
-    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); toggleLists(false); } });
-  }
-}
-function toggleLists(on) {
-  LS.open = on == null ? !LS.open : on;
-  $('#lists').hidden = !LS.open; $('#listBtn').setAttribute('aria-expanded', LS.open);
-  if (LS.open) { drawLists(); const i = $('#lists .lq'); if (i && (LS.tab === 'fns' || LS.tab === 'flows')) i.focus(); }
-}
-function setupLists() {
-  const box = $('#lists'), btn = $('#listBtn');
-  btn.title = t('listsTip'); btn.querySelector('span').textContent = t('lists');
-  btn.onclick = () => toggleLists();
-  const fb = $('#flowsBtn'); if (fb) fb.onclick = () => (LS.open && LS.tab === 'flows' ? toggleLists(false) : openFlows());
-  paintFlowsBtn();
-  box.addEventListener('click', (e) => {
-    if (e.target.closest('[data-close]')) return toggleLists(false);
-    const tb = e.target.closest('[data-tab]'); if (tb) { if (LS.tab !== tb.dataset.tab) LS.q = ''; LS.tab = tb.dataset.tab; drawLists(); return; }
-    const jk = jvClick(e); if (jk === 'vt') return; if (jk) { toggleLists(false); return; }
-    const r = e.target.closest('[data-k]'); if (!r) return;
-    const k = r.dataset.k, id = r.dataset.id;
-    if (k === 'flow') { toggleLists(false); playFlowIdx(+id); return; }
-    navTo(k === 'fn' ? { k, id } : { k: 'mod', id }, e.shiftKey);
+function searchFlows(toks) {
+  const out = [];
+  jvJourneys().forEach((j) => { const sc = toks.length ? hits([j.name, j.actor, j.desc], toks) : 50; if (sc) out.push({ k: 'run', id: 'journey:' + j.id, nm: j.name, sb: t('pkPath'), sc: sc + 4 }); });
+  D.flows.forEach((fl) => {
+    const sc = toks.length ? hits([fl.name, flowActor(fl), fl.desc], toks) : (fl.top ? 40 : fl.kind === 'declared' ? 30 : 0);
+    if (sc) out.push({ k: 'run', id: 'flow:' + fl.i, nm: fl.name, sb: [flowActor(fl), t('pkStepsN', fl.steps.length)].filter(Boolean).join(' · '), sc: sc + (fl.kind === 'declared' ? 3 : 0) + (fl.top ? 2 : 0) });
   });
+  return out;
+}
+function searchData(toks) {
+  const eps = [], tbls = [], sts = [];
+  (D.endpoints || []).forEach((e, i) => { const sc = hits([e.path, e.name, e.service, e.method], toks); if (sc) eps.push({ k: 'ep', id: i, sc }); });
+  Object.keys(D.tables).forEach((n) => { const tb = D.tables[n], sc = hits([n, tb.desc], toks); if (sc) tbls.push({ k: 'table', id: n, sc }); });
+  Object.keys(D.states).forEach((n) => { const sc = hits([n], toks); if (sc) sts.push({ k: 'status', id: n, sc }); });
+  return { eps, tbls, sts };
+}
+/* commands */
+function commands() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const out = VIEWS.map((v) => ({ k: 'cmd', id: 'view:' + v.id, nm: t('pkView', viewTitle(v)), alt: [v.id, viewTitleIn(v, 'ru'), viewTitleIn(v, 'en'), 'view вид'], cur: state.view === v.id, run: () => setView(v.id) }));
+  out.push({ k: 'cmd', id: 'lang', nm: t('pkLang'), alt: ['lang language язык ru en русский english'], run: () => setLang(LANG === 'ru' ? 'en' : 'ru') });
+  out.push({ k: 'cmd', id: 'theme', nm: t('pkTheme', dark), alt: ['theme тема dark light тёмная светлая'], run: () => setTheme(dark ? 'light' : 'dark') });
+  if (state.sel) { const h = AM.panel.hidden; out.push({ k: 'cmd', id: 'panel', nm: t('pkPanel', h), alt: ['panel панель details детали'], kbd: ']', run: () => AM.panel.setHidden(!h) }); }
+  if (state.run) out.push({ k: 'cmd', id: 'close', nm: t('pkClose'), alt: ['close закрыть scenario сценарий'], kbd: 'Esc', run: () => closeRun() });
+  if (state.view !== 'map' || state.level > 0) out.push({ k: 'cmd', id: 'back', nm: t('pkBack'), alt: ['back назад up вверх'], kbd: 'Esc', run: () => goBack() });
+  if (D.changed.length || D.deleted.length) out.push({ k: 'cmd', id: 'only', nm: t('pkOnly', state.only), alt: ['changed изменённые only только diff'], run: () => setOnly(!state.only) });
+  return out;
+}
+const viewTitleIn = (v, l) => { const keep = LANG; LANG = l; try { return viewTitle(v); } finally { LANG = keep; } };
+
+const GROUPS = [['cmd', 'pkCmds', 6], ['mod', 'searchMods', 5], ['fn', 'searchFns', 8], ['run', 'pkFlows', 8], ['ep', 'pkEps', 6], ['table', 'pkTables', 6], ['status', 'pkStates', 4], ['file', 'searchFiles', 4]];
+function paletteItems(q) {
+  const toks = lc(q).split(/\s+/).filter(Boolean);
+  const by = (a, b) => b.sc - a.sc || (String(a.id) < String(b.id) ? -1 : 1);
+  const cmds = commands().map((c) => Object.assign(c, { sc: toks.length ? hits([c.nm].concat(c.alt || []), toks) : 1 })).filter((c) => c.sc);
+  const g = { cmd: cmds, run: searchFlows(toks) };
+  if (toks.length) {
+    const code = searchCode(toks), data = searchData(toks);
+    Object.assign(g, { mod: code.mods, fn: code.fns, file: code.files, ep: data.eps, table: data.tbls, status: data.sts });
+  }
+  const out = [];
+  GROUPS.forEach(([k, , max]) => { if (g[k]) (k === 'cmd' ? g[k] : g[k].sort(by)).slice(0, max).forEach((o) => out.push(o)); });
+  return out;
+}
+
+/* ---------- rows ---------- */
+function srRow(o, i) {
+  let ico, nm, sub, st = '', code = false;
+  if (o.k === 'fn') {
+    const f = fnInfo(o.id); ico = 'ƒ'; nm = f.name; sub = `${short(f.mod)} · ${(f.file || '').split('/').pop()}:${f.s}`; code = true;
+    if (f.status) st = `<span class="st-${f.status === 'added' ? 'a' : 'm'}">${f.status === 'added' ? '+' : '~'}</span>`;
+  } else if (o.k === 'mod') { ico = '▢'; nm = short(o.id); sub = (D.byMod[o.id] || []).length + ' ' + t('fnShort'); code = true; }
+  else if (o.k === 'file') { ico = '▤'; nm = o.id.split('/').pop(); sub = cutL(o.id, 46); code = true; }
+  else if (o.k === 'run') { ico = '▶'; nm = o.nm; sub = o.sb; }
+  else if (o.k === 'ep') { const e = D.endpoints[o.id]; ico = '⇄'; nm = (e.method ? e.method + ' ' : '') + (e.path || e.name || ''); sub = e.service || e.kind || ''; code = true; }
+  else if (o.k === 'table') { const tb = D.tables[o.id]; ico = '▦'; nm = o.id; sub = cut(tb.desc || '', 60) || t('pkColsN', (tb.fields || []).length); code = true; }
+  else if (o.k === 'status') { const m = D.states[o.id] || {}; ico = '◎'; nm = o.id; sub = t('pkStatesN', (m.states || []).length); code = true; }
+  else { ico = '›'; nm = o.nm; sub = o.kbd ? `<kbd>${esc(o.kbd)}</kbd>` : o.cur ? '✓' : ''; }
+  const subHTML = o.k === 'cmd' ? sub : esc(sub);
+  return `<div class="qi${code ? ' code' : ''}${i === SR.act ? ' act' : ''}" role="option" data-i="${i}" title="${esc(o.k === 'fn' || o.k === 'file' ? o.id : nm)}"><b class="ico">${ico}</b><span class="nm">${esc(nm)}</span>${st}<span class="sb">${subHTML}</span></div>`;
+}
+function drawSearch() {
+  const q = $('#q').value, pop = $('#qpop');
+  SR.items = paletteItems(q);
+  SR.act = Math.max(0, Math.min(SR.act, SR.items.length - 1));
+  let h = '', last = '';
+  const hd = Object.fromEntries(GROUPS.map(([k, label]) => [k, label]));
+  SR.items.forEach((o, i) => { if (o.k !== last) { last = o.k; h += `<div class="gh">${esc(t(hd[o.k]))}</div>`; } h += srRow(o, i); });
+  if (!SR.items.length) h = `<div class="none">${esc(t('searchNone'))}</div>`;
+  h += `<div class="hint">${esc(t('searchHint'))}</div>`;
+  pop.innerHTML = h; pop.hidden = false; SR.open = true; $('#q').setAttribute('aria-expanded', 'true');
+}
+function closeSearch() { SR.open = false; $('#qpop').hidden = true; $('#q').setAttribute('aria-expanded', 'false'); }
+function markSearch(scroll) {
+  const pop = $('#qpop'), p = pop.querySelector('.qi.act'); if (p) p.classList.remove('act');
+  const n = pop.querySelector(`.qi[data-i="${SR.act}"]`);
+  if (n) { n.classList.add('act'); if (scroll) n.scrollIntoView({ block: 'nearest' }); }
+}
+
+/* ---------- actions ---------- */
+// open(o, code): function — its level on the map (2) or its code (3); module — its functions; file — its first function
+async function navTo(o, code) {
+  if (!o) return;
+  if (state.view !== 'map') setView('map');
+  if (state.busy) await waitIdle();
+  if (o.k === 'fn') return jumpToFn(o.id, code ? 3 : 2);
+  if (o.k === 'mod') return goModule(o.id);
+  if (o.k === 'file') return o.fid && D.fns[o.fid] ? jumpToFn(o.fid, code ? 3 : 2) : goModule(o.mod);
+}
+async function waitIdle() { for (let i = 0; i < 40 && state.busy; i++) await sleep(100); }
+function runItem(o, code) {
+  if (o.k === 'cmd') return o.run();
+  if (o.k === 'run') return openRun(o.id);
+  if (o.k === 'ep') { setView('api'); bus.emit('data:open-endpoint', { ep: D.endpoints[o.id] }); return; }
+  if (o.k === 'table') { setView('data'); bus.emit('data:focus', { table: o.id }); return; }
+  if (o.k === 'status') { setView('status'); bus.emit('status:focus', { machine: o.id }); return; }
+  return navTo(o, code);
+}
+function pickSearch(i, code) {
+  const o = SR.items[i]; if (!o) return;
+  closeSearch(); $('#q').value = ''; $('#q').blur();
+  runItem(o, code);
+}
+// back: the scenario closes first, then another view returns to the map, then the map goes a level up
+function goBack() {
+  if (state.run) return closeRun();
+  if (state.view !== 'map') return setView('map');
+  return up();
+}
+function setOnly(on) {
+  state.only = !!on;
+  paintMap(); if (fv && state.level === 2) buildFns(fv.mod);
+  bus.emit('filter', state.only);
+}
+function setupSearch() {
+  const q = $('#q'); let tm = null;
+  q.placeholder = t('search');
+  q.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { SR.act = 0; drawSearch(); }, 60); });
+  q.addEventListener('focus', () => { SR.act = 0; drawSearch(); });
+  q.addEventListener('click', () => { if (!SR.open) drawSearch(); });
+  q.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!SR.open) drawSearch(); SR.act = Math.min(SR.items.length - 1, SR.act + 1); markSearch(true); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); SR.act = Math.max(0, SR.act - 1); markSearch(true); }
+    else if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tm); drawSearch(); pickSearch(SR.act, e.shiftKey || e.metaKey || e.ctrlKey); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeSearch(); q.value = ''; q.blur(); }
+  });
+  $('#qpop').addEventListener('mousedown', (e) => { const r = e.target.closest('.qi'); if (r) { e.preventDefault(); pickSearch(+r.dataset.i, e.shiftKey); } });
+  // close on a click anywhere outside (capture: scenes stop the bubbling of their own events), on blur
+  // (late enough for a click on a row) and when the window loses focus
+  document.addEventListener('pointerdown', (e) => { if (SR.open && !e.target.closest('#search')) closeSearch(); }, true);
+  q.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== q) closeSearch(); }, 160));
+  window.addEventListener('blur', () => closeSearch());
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && LS.open && !e.target.closest('#search') && !PK.open) { e.stopImmediatePropagation(); toggleLists(false); }
+    const tg = e.target.tagName, typing = tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable;
+    if ((e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) {
+      e.preventDefault(); q.focus(); q.select(); if (!SR.open) drawSearch();
+    }
   });
-  bus.on('select', () => { if (LS.open) markCur(); });
-  bus.on('jv', () => { if (LS.open && LS.tab === 'flows') drawLists(); });
 }
-// highlight the current function / module in the open list without redrawing it
-function markCur() {
-  $$('#lists .lrow.cur').forEach((e) => e.classList.remove('cur'));
-  const s = state.sel, id = s && s.t === 'fn' ? s.id : null, m = s && s.t === 'mod' ? s.id : state.mod;
-  $$('#lists .lrow').forEach((e) => { if ((e.dataset.k === 'fn' && e.dataset.id === id) || (e.dataset.k === 'mod' && e.dataset.id === m)) e.classList.add('cur'); });
-}
-function relangNav() { paintFlowsBtn(); $('#q').placeholder = t('search'); const b = $('#listBtn'); b.title = t('listsTip'); b.querySelector('span').textContent = t('lists'); if (SR.open) drawSearch(); if (LS.open) drawLists(); }
+function relangNav() { $('#q').placeholder = t('search'); if (SR.open) drawSearch(); }
 
 /* ---------- flash of what a live update changed ---------- */
 // FL.fns / FL.mods: the flash in progress (cleared after it fades); SES.fns / SES.mods: everything changed
@@ -317,9 +283,7 @@ function applyFlash() {
     mark($('#pane'), fresh);
   }
   if (state.level === 3 && state.fn && f(state.fn)) mark($('#sc3 .src'), isF(state.fn));
-  $$('#lists .lrow').forEach((e) => { const fn = e.dataset.k === 'fn' && e.dataset.id, mo = e.dataset.k === 'mod' && e.dataset.id; if ((fn && f(fn)) || (mo && m(mo))) mark(e, (fn && isF(fn)) || (mo && isM(mo))); });
   // views
-  $$('.seqdock .msg:not(.reply)[data-fid]').forEach((g) => { const id = g.dataset.fid; if (id && f(id)) mark(g, isF(id)); });
   const eps = D.endpoints || [];
   $$('.api-row[data-i]').forEach((e) => { const ep = eps[+e.dataset.i]; if (ep && ep.fid && reachesSes(ep.fid)) mark(e, reachesFresh(ep.fid)); });
   $$('.matrix tr[data-i]').forEach((e) => { const ep = eps[+e.dataset.i]; if (ep && ep.fid && reachesSes(ep.fid)) mark(e, reachesFresh(ep.fid)); });
@@ -351,7 +315,6 @@ function watchMarks() {
     _mkq = requestAnimationFrame(() => { _mkq = 0; applyFlash(); });
   }).observe(root, { childList: true, subtree: true });
 }
-bus.on('filter', () => { if (LS.open) drawLists(); });
 bus.on('level', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
 bus.on('view', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
-Object.assign(AM, { flowGroups, flowActor });
+Object.assign(AM, { flowGroups, flowActor, palette: { open: () => { $('#q').focus(); }, items: paletteItems, close: closeSearch } });

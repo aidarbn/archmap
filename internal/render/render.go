@@ -40,7 +40,26 @@ var (
 	coreCSS = []string{"viewer.css"}
 	coreJS  = []string{"core.js", "scene.js", "layout.js", "map.js", "playback.js", "journeys.js", "panel.js", "nav.js", "zoom.js"}
 	lastJS  = "main.js"
+	// views kept in the sources but not put into the page: the minimal interface has no
+	// walk, no editor ("Правка") and no sequence dock / scenario sheet. A name here drops
+	// both views/<name>.js and views/<name>.css.
+	offViews = map[string]bool{"editor": true, "walk": true, "sequence": true, "sheet": true}
 )
+
+// viewOn: a views/*.js or views/*.css file that goes into the page.
+func viewOn(p string) bool {
+	return !offViews[strings.TrimSuffix(path.Base(p), path.Ext(p))]
+}
+
+func onlyOn(list []string) []string {
+	out := list[:0]
+	for _, p := range list {
+		if viewOn(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 const (
 	cssSlot  = "<!--@CSS-->"
@@ -88,6 +107,7 @@ func assemble(fsys fs.FS) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	viewCSS, viewJS = onlyOn(viewCSS), onlyOn(viewJS)
 	sort.Strings(viewCSS)
 	sort.Strings(viewJS)
 	rel := func(list []string) []string {

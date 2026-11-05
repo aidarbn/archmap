@@ -1,4 +1,5 @@
-/* main.js — start-up: header, tabs from the view registry, theme, language, keyboard, data swap. */
+/* main.js — start-up: the header (brand, crumbs, ⌘K), views from the registry, theme, language, keyboard,
+ * data swap. The header has no tabs or buttons: views, language and theme are commands of ⌘K (nav.js). */
 
 window.__errs = window.__errs || [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -20,64 +21,27 @@ function setView(id) {
   state.view = id;
   // one place decides what is shown: the active view only; everything else is inert and hidden
   $$('#stage > .view').forEach((x) => { const on = x.id === 'v-' + id; x.classList.toggle('on', on); x.toggleAttribute('inert', !on); x.setAttribute('aria-hidden', on ? 'false' : 'true'); });
-  if (changed) { closeSearch(); if (LS.open) toggleLists(false); }
-  renderTabs();
+  if (changed) closeSearch();
+  renderCrumbs();
   if (v.show) v.show(AM);
   bus.emit('view', id);
   if (DEBUG) setTimeout(() => auditPanels('view:' + id), DUR + 120);
-}
-function renderTabs() {
-  const tb = $('#tabs'); tb.innerHTML = '';
-  if (VIEWS.length < 2) { tb.style.display = 'none'; return; }
-  tb.style.display = '';
-  VIEWS.forEach((v) => { const b = H('button', { role: 'tab', 'aria-selected': state.view === v.id }, tb, esc(viewTitle(v))); b.onclick = () => setView(v.id); });
 }
 const forViews = (hook, ...a) => VIEWS.forEach((v) => { if (v._mounted && v[hook]) { try { v[hook](...a, AM); } catch (err) { console.error('archmap view', v.id, hook, err); } } });
 bus.on('step', (s) => forViews('onStep', s));
 bus.on('select', (s) => forViews('onSelect', s));
 
 /* ---------- header ---------- */
+// the brand: the project name; its tooltip carries the repo, the branch and the branch changes
 function renderHeader() {
   const F = D.F, PJ = F.project || {};
   const name = PJ.name || D.M.title || F.repo || 'archmap';
   $('#repoName').textContent = name;
-  $('#repoName').title = PJ.description || D.M.summary || '';
-  $('#repoMeta').textContent = [F.repo && F.repo !== name ? F.repo : '', F.branch ? t('branch') + ' ' + F.branch + (F.base ? ' vs ' + F.base : '') : '', F.head].filter(Boolean).join(' · ');
+  const chg = D.changed.length || D.deleted.length ? `+${D.nAdded} ~${D.nModified} −${D.deleted.length}` + (D.nLocal ? ` ●${D.nLocal} ${t('uncommitted')}` : '') : '';
+  $('#brand').title = [PJ.description || D.M.summary || '', [F.repo && F.repo !== name ? F.repo : '', F.branch ? t('branch') + ' ' + F.branch + (F.base ? ' vs ' + F.base : '') : '', F.head].filter(Boolean).join(' · '), chg].filter(Boolean).join('\n');
   document.title = name + (LANG === 'ru' ? ' — архитектура' : ' — architecture');
-  const c = $('#chg'); c.innerHTML = '';
-  if (D.changed.length || D.deleted.length) {
-    c.title = t('changesTip');
-    c.innerHTML = `<span class="c a">+${D.nAdded}</span><span class="c m">~${D.nModified}</span><span class="c d">−${D.deleted.length}</span>` +
-      (D.nLocal ? `<span class="c l" title="${esc(t('uncommitted'))}">●${D.nLocal}</span>` : '') +
-      `<button class="chgbtn" id="onlyBtn" aria-pressed="${state.only}">${esc(t('onlyChanged'))}</button>`;
-    $('#onlyBtn').onclick = () => { state.only = !state.only; $('#onlyBtn').setAttribute('aria-pressed', state.only); paintMap(); if (fv && state.level === 2) { buildFns(fv.mod); } bus.emit('filter', state.only); };
-  }
-  $('#themeBtn').title = t('theme'); paintAutoZoom(); paintFlowsBtn();
   $('#zIn').title = t('zIn'); $('#zOut').title = t('zOut'); $('#zFit').title = t('zFit');
-  $$('#langSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === LANG));
-  $('#moreBtn').title = t('moreTip');
   document.documentElement.lang = LANG;
-  fitHeader();
-}
-// fitHeader(): the project name keeps at least ~120px (then an ellipsis); when the header runs out of room the
-// branch counters and "changed only" fold into the ⋯ menu (compact), then the labels of the live badge and of the
-// Lists button go (compact2)
-function fitHeader() {
-  const h = $('header'), nm = $('#repoName'); if (!h || !nm) return;
-  h.classList.remove('compact', 'compact2');
-  // tight: the header overflows, or the name is cut although it would fit in 240px
-  const tight = () => h.scrollWidth > h.clientWidth + 1 || nm.clientWidth + 1 < Math.min(nm.scrollWidth, 240);
-  const hasChg = !!$('#chg').childElementCount;
-  if (tight() && hasChg) h.classList.add('compact');
-  if (tight()) h.classList.add('compact2');
-  $('#moreBtn').hidden = !h.classList.contains('compact');
-  if ($('#moreBtn').hidden) toggleMore(false);
-}
-function toggleMore(on) {
-  const h = $('header'); on = on == null ? !h.classList.contains('more-open') : on;
-  h.classList.toggle('more-open', on); $('#moreBtn').setAttribute('aria-expanded', on);
-  const c = $('#chg'); c.style.left = ''; // the menu opens under its button, inside the window
-  if (on) c.style.left = Math.max(8, Math.min($('#moreBtn').offsetLeft, h.clientWidth - c.offsetWidth - 8)) + 'px';
 }
 
 /* ---------- theme and language ---------- */
@@ -92,7 +56,7 @@ function setLang(l) {
   try { localStorage.setItem('archmap.lang', l); } catch (e) { /* ignore */ }
   if (state.run && !state.run.key.startsWith('flow:')) state.run.name = (buildRun(state.run.key) || state.run).name;
   D.actors = computeActors();
-  renderHeader(); renderTabs(); rebuildMap(); renderPlayer(); renderPanel(); relangNav(); relangLive();
+  renderHeader(); rebuildMap(); renderPlayer(); renderPanel(); relangNav(); relangLive(); renderCrumbs();
   bus.emit('lang', l); forViews('onLang');
 }
 
@@ -123,7 +87,7 @@ function setData(d, flashIds) {
       run.segs.push({ flow: nx, steps: flowSteps(nx), via: old.segs[i + 1].via });
     });
   }
-  state.run = run; state.playing = false;
+  state.run = run;
   if (run) {
     const list = runList();
     let i = oldStep >= 0 && list[oldStep] && list[oldStep].fid === oldFid ? oldStep : oldFid ? list.findIndex((x) => x.fid === oldFid) : -1;
@@ -132,21 +96,20 @@ function setData(d, flashIds) {
   }
   renderHeader();
   rebuildMap(true);
-  if (!run) loadRun(defaultRunKey());
   renderPlayer(); renderPanel(); pane.scrollTop = paneTop;
-  if (LS.open) drawLists();
   forViews('onData');
   startFlash(ids);
   bus.emit('live', { flash: ids });
 }
+// live (archmap serve): a dot next to the name; its colour is the state, its tooltip the details
 function setupLive() {
-  const box = $('#live'), label = box.querySelector('b'), info = $('#liveInfo');
+  const dot = $('#live');
   let cur = null, extra = '';
   const paint = () => {
     if (!cur) return;
     const [st, key, tip] = cur;
-    box.hidden = false; box.className = 'live' + (st === 'ready' ? '' : ' ' + st);
-    label.textContent = t(key); box.title = tip || ''; info.textContent = st === 'ready' ? extra : '';
+    dot.hidden = false; dot.className = 'live' + (st === 'ready' ? '' : ' ' + st);
+    dot.title = t(key) + (st === 'ready' ? extra : '') + (tip ? '\n' + tip : '');
   };
   const status = (st, key, tip) => { cur = [st, key, tip]; paint(); };
   relangLive = paint;
@@ -176,7 +139,7 @@ function setupLive() {
   es.onmessage = (ev) => {
     let u; try { u = JSON.parse(ev.data); } catch (e) { return; }
     if (u.state === 'building') { status('building', 'rebuilding'); return; }
-    if (u.state === 'error') { status('error', 'error', u.error || ''); info.textContent = ' · ' + (u.error || '').slice(0, 80); return; }
+    if (u.state === 'error') { status('error', 'error', (u.error || '').slice(0, 200)); return; }
     (u.flash || []).forEach((id) => pend.add(id));
     ms = u.ms || 0;
     if (u.seq !== seq) { want = u.seq; pull(); } else status('ready', 'live');
@@ -193,42 +156,31 @@ function init() {
   if (!DATA || !DATA.facts) { $('#pane').innerHTML = `<p class="lead">${esc(t('noData'))}</p>`; return; }
   indexData(DATA);
   renderHeader();
-  $('#themeBtn').onclick = () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-  $$('#langSeg button').forEach((b) => { b.onclick = () => setLang(b.dataset.l); });
-  $('#btnUp').onclick = () => up(); $('#btnIn').onclick = () => intoSelected();
+  $('#brand').onclick = () => { if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); };
   $('#zIn').onclick = () => curCam() && curCam().zoomAt(.5, .5, 0.8);
   $('#zOut').onclick = () => curCam() && curCam().zoomAt(.5, .5, 1.25);
   $('#zFit').onclick = fitCur;
   $('#pStep').onclick = () => doStep(1);
   $('#pPrev').onclick = () => doStep(-1);
-  $('#pIn').onclick = () => stepIn();
-  $('#pOut').onclick = () => stepOut();
-  $('#pAuto').onclick = () => auto();
-  $('#pReset').onclick = () => resetRun();
-  $('#pSpeed').onchange = (e) => { state.speed = +e.target.value; };
-  setupPicker(); setupSearch(); setupLists(); setupAutoZoom(); setupSidePanel();
-  requestAnimationFrame(fitHeader); // the header with every button in place (and the fonts measured)
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitHeader);
+  $('#pClose').onclick = () => closeRun();
+  setupSearch(); setupZoom(); setupSidePanel();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === 'Escape') { if (PK.open) return closePick(true); e.preventDefault(); if (AM.dock && AM.dock.esc()) return; if (state.view === 'map') up(); }
+    if (e.key === 'Escape') { e.preventDefault(); goBack(); }
     else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.step >= 0 ? stepIn() : intoSelected()); }
+    else if (!state.run) return; // the arrows step only through an open scenario
     else if (e.key === 'ArrowRight' || (e.key === ' ' && tg !== 'BUTTON')) { e.preventDefault(); doStep(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); doStep(-1); }
     else if (e.key === 'Home') { e.preventDefault(); resetRun(); }
   });
-  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { fitHeader(); rebuildMap(); bus.emit('resize'); }, 150); });
-  $('#moreBtn').onclick = (e) => { e.stopPropagation(); toggleMore(); };
-  document.addEventListener('mousedown', (e) => { if ($('header').classList.contains('more-open') && !e.target.closest('#chg, #moreBtn')) toggleMore(false); });
-  if (window.ResizeObserver) { let fr = 0; new ResizeObserver(() => { cancelAnimationFrame(fr); fr = requestAnimationFrame(fitHeader); }).observe($('#live')); }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
   rebuildMap();
-  loadRun(defaultRunKey());
-  setView('map');
+  renderPlayer(); // no scenario opens by itself: the bar stays hidden until one is picked in ⌘K
+  setView(VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
-  if (qs.get('view') === 'sequence' && AM.dock) AM.dock.open(true); // the old Scenario tab: the map with the diagram full screen
   if (D.live) { setupLive(); watchMarks(); }
 }
 
-Object.assign(AM, { setView, setData, setTheme, setLang, viewEl, views: VIEWS });
+Object.assign(AM, { setView, setData, setTheme, setLang, viewEl, views: VIEWS, back: goBack });
 init();

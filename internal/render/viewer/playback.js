@@ -1,5 +1,6 @@
-/* playback.js — scenarios: picker (combobox with search and groups), run of steps through the map
- * levels, branches (continue in another flow or exit), effects and status badges, auto play.
+/* playback.js — scenarios: a run of steps through the map levels, branches (continue in another flow or
+ * exit), effects and status badges, the scenario bar. A scenario is opened from ⌘K (nav.js) and goes only by
+ * hand: → / ← or the bar's arrows. There is no auto play and nothing opens by itself.
  *
  * A run is {key, name, desc, actor, exit, segs: [{flow|null, steps: [fid]}]}; segs grow when a branch
  * continues in another flow. A step object (AM.play.current()) is:
@@ -8,8 +9,8 @@
  */
 
 addI18n({
-  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль' },
-  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module' },
+  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + '/' + n, closeRun: 'Закрыть сценарий' },
+  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + '/' + n, closeRun: 'Close the scenario' },
 });
 
 /* ---------- runs ---------- */
@@ -165,7 +166,7 @@ async function mapHop(s) {
   if (!rb) return;
   const ext = s.exts.map((x) => x.id).filter((id) => map.pos[id])[0];
   const box = bbox([ra, rb, ext && map.pos[ext]]);
-  if (!map.cam.contains(box, 20) || map.cam.vb.w > 2600) await map.cam.animTo(box, 160, 1100, RM ? 0 : 380);
+  if (!map.cam.contains(box, 20)) await map.cam.animTo(box, 160, 1100, RM ? 0 : 480); // only when the step is off screen
   hotOn(map.nodes, b); if (a) { hotOn(map.nodes, a); hotEdge(map.edges, a, b); }
   if (!a || a === b) pulse(map.fx, rb);
   else await runDot(map.fx, hop(ra, rb), { async: s.kind === 'async' });
@@ -209,13 +210,15 @@ async function showStep() {
   if (state.level === 0) await sysHop(s);
   else if (state.level === 1) await mapHop(s);
   else if (state.level === 2) {
-    const m = s.mod;
-    if (!fv || fv.mod !== m || $('#sc2').classList.contains('hidden')) {
-      await up(1, true);
+    // the step is in another module: its functions replace the current ones in place with a short fade — no trip
+    // up to the modules and back down
+    const m = s.mod, u = unitFor(m) || m;
+    if (!fv || fv.mod !== u) {
       revealMod(m);
-      await mapHop(s);
-      const u = unitFor(m);
-      if (u) await drill(2, { from: map.nodes[u].el, mod: u }, true);
+      if (state.mod !== u) state.fnAll = false;
+      state.mod = u; buildFns(u); fitFns(); renderCrumbs();
+      const sc = $('#sc2');
+      if (sc.animate && !RM) await sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' }).finished.catch(() => {});
     }
     if (fv && !fv.nodes[s.fid]) { buildFns(fv.mod); fitFns(); }
     await fnHop(s);
@@ -254,18 +257,6 @@ async function stepIn() {
   return doStep(1);
 }
 async function stepOut() { if (state.level > 0) { await up(); if (state.step >= 0) replay(); } }
-async function auto() {
-  if (!state.run) return;
-  state.playing = !state.playing; renderPlayer();
-  if (state.playing && state.step >= runList().length - 1 && !atBranch()) { state.step = -1; state.run = buildRun(state.run.key); state.exitText = null; }
-  while (state.playing) {
-    const ok = await doStep(1);
-    if (!ok) { state.playing = false; state.resume = atBranch(); break; }
-    await sleep((RM ? 600 : 1100) / state.speed);
-  }
-  renderPlayer();
-}
-function pause() { state.playing = false; }
 function showChoice(on) {
   const c = $('#choice'); c.classList.toggle('on', on); c.innerHTML = '';
   if (!on) return;
@@ -281,18 +272,17 @@ function takeBranch(b) {
   const target = b.flow && D.flowById[b.flow];
   if (target) {
     state.run.segs.push({ flow: target, steps: flowSteps(target), via: b });
-    doStep(1).then(() => { if (state.resume) { state.resume = false; auto(); } });
+    doStep(1);
   } else {
-    state.exitText = b.text || b.cond; state.resume = false;
+    state.exitText = b.text || b.cond;
     renderPlayer(); bus.emit('step', curStep());
   }
 }
-function resetRun() {
-  state.playing = false; state.step = -1; state.played = false; state.exitText = null;
-  if (state.run) state.run = buildRun(state.run.key);
-  [sys, map, fv].forEach((x) => { if (x) { clearPlay(x.svg); x.fx.innerHTML = ''; } });
-  showChoice(false); renderPlayer(); renderCrumbs(); setSel(null);
-  bus.emit('step', null);
+// back to the first step of the scenario (Home)
+async function resetRun() {
+  if (!state.run || state.busy) return;
+  state.run = buildRun(state.run.key); state.step = -1; state.exitText = null;
+  await doStep(1);
 }
 
 /* ---------- badges ---------- */
@@ -317,162 +307,65 @@ function statusPill(st) {
   return `<span class="stat" title="${esc(st.entity + ': ' + (st.from || '?') + ' → ' + st.to)}"><span class="ic" style="background:${ic[1]}">${ic[0]}</span>${esc(st.to)}<small>${esc(st.entity.replace(/Status$/, ''))}</small></span>`;
 }
 
-/* ---------- player UI ---------- */
+/* ---------- scenario bar ---------- */
+// shown only while a scenario is open: "<name>  ← step k/N →  <the step>  ✕"
 function renderPlayer() {
-  const r = state.run, list = runList(), s = curStep();
-  const fl = r && r.segs[0].flow;
-  $('#scName').textContent = r ? r.name : t('noPlay');
-  $('#pcur').title = r ? r.name + (r.desc ? '\n' + r.desc : '') : '';
-  const act = (r && r.actor) || (fl && fl.actor) || (runActor() ? actorName(runActor()) : '');
-  const br = branchesHere();
-  const fe = r && r.fixed ? jvEnd() : null;
-  const ex = r && r.fixed ? (fe && fe.exit ? fe.text.replace(/^[^:]+:\s*/, '') : '') : state.exitText || (lastSeg() && lastSeg().flow && lastSeg().flow.exit) || (br ? br.map((b) => b.cond).join(' / ') : '');
-  $('#scActor').textContent = r ? [act && `${t('actor')}: ${act}`, ex && `${t('exit')}: ${ex}`].filter(Boolean).join(' · ') || t('stepsN', list.length) : '';
-  $('#pStep').innerHTML = `${esc(t('step'))} <kbd>→</kbd>`; $('#pIn').innerHTML = `${esc(t('stepIn'))} <kbd>↵</kbd>`; $('#pOut').innerHTML = `${esc(t('stepOut'))} <kbd>Esc</kbd>`;
-  $('#pAuto').textContent = state.playing ? t('pause') : t('auto');
-  $('#pPrev').title = t('back') + ' (←)'; $('#pReset').title = t('reset');
-  const tk = $('#ticks'); tk.innerHTML = '';
-  const pendingBr = br && !state.exitText ? br.map((b) => D.flowById[b.flow]).filter(Boolean)[0] : null;
-  const extra = pendingBr ? Math.min(20, pendingBr.steps.length) : 0;
-  tk.classList.toggle('dense', list.length + extra > 60);
-  const segStart = []; let acc = 0; (r ? r.segs : []).forEach((sg) => { segStart.push(acc); acc += sg.steps.length; });
-  list.forEach((it, i) => {
-    if (i && segStart.includes(i)) H('span', { class: 'gap' }, tk);
-    const el = H('span', { class: i === state.step ? 'cur' : i < state.step ? 'done' : '', title: `${i + 1}. ${stepLabel(i)}` }, tk);
-    el.onclick = () => { if (!state.busy) { state.step = i; trimSegs(); replay(); } };
-  });
-  if (extra) { H('span', { class: 'gap' }, tk); for (let i = 0; i < extra; i++) H('span', { class: 'br' }, tk); }
-  $('#capNo').textContent = s ? (r.fixed && r.segs.length > 1 ? jvProgress() : `${state.step + 1}/${list.length}${extra ? '+' : ''}`) : '';
-  $('#capTx').textContent = s ? s.label + (state.exitText && state.step === list.length - 1 ? ' → ' + t('exit') + ': ' + state.exitText : '') : r && list.length ? t('start') : t('noPlay');
-  $('#capTx').title = s ? fnInfo(s.fid).name : '';
-  $('#capMut').innerHTML = s ? effBadges(s).map(mutBadge).join('') : '';
-  $('#capSt').innerHTML = s ? s.states.map(statusPill).join('') : '';
+  const r = state.run, bar = $('#player');
+  bar.hidden = !r;
+  if (!r) { showChoice(false); jvPaintTags(); return; }
+  const list = runList(), s = curStep(), br = atBranch(), fe = r.fixed ? jvEnd() : null;
+  $('#scName').textContent = r.name; $('#scName').title = r.name + (r.desc ? '\n' + r.desc : '');
+  $('#capNo').textContent = r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', Math.max(0, state.step + 1), list.length);
+  $('#capTx').textContent = s ? s.label + (state.exitText && state.step === list.length - 1 ? ' → ' + t('exit') + ': ' + state.exitText : '') : list.length ? '' : t('noPlay');
+  $('#capTx').title = s && D.fns[s.fid] ? fnInfo(s.fid).name : '';
   $('#pPrev').disabled = state.step <= 0;
-  ['pStep', 'pIn', 'pAuto'].forEach((id) => { $('#' + id).disabled = !list.length; });
-  if (!atBranch()) showChoice(false);
-  showPlate(); jvPaintTags();
+  $('#pStep').disabled = !list.length || (state.step >= list.length - 1 && !br && !(fe && fe.jump));
+  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').title = t('closeRun') + ' (Esc)';
+  showChoice(br);
+  if (!br) showPlate();
+  jvPaintTags();
 }
-// the plate between flows of a path / the end of a variant, in the caption of the player
+// the plate between flows of a path / the end of a variant, next to the step
 function showPlate() {
-  const p = jvPlate(); if (!p || atBranch()) return;
+  const p = jvPlate(); if (!p) return;
   const c = $('#choice'); c.classList.add('on');
-  H('span', { class: 'jv-plate ' + p.tone, title: p.text }, c, (p.kind ? jvIcon(p.kind) : '') + esc(p.text));
-  if (p.jump) { const b = H('button', { class: 'pbtn', style: 'height:26px', title: t('jvGoTip') }, c, '↪ ' + esc(cut(t('jvGo'), 30))); b.onclick = () => jvJump(); }
+  H('span', { class: 'jv-plate ' + p.tone, title: p.text }, c, (p.kind ? jvIcon(p.kind) : '') + esc(cut(p.text, 60)));
+  if (p.jump) { const b = H('button', { class: 'pbtn', title: t('jvGoTip') }, c, '↪ ' + esc(cut(t('jvGo'), 30))); b.onclick = () => jvJump(); }
 }
 function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = state.run.segs[it.seg].flow; return (fl && fl.labels && fl.labels[it.fid]) || fnInfo(it.fid).name; }
 
-/* ---------- scenario picker ---------- */
-// options: [value, label, kind ('\0g' = general), top, name]
-function tourOptions() {
-  const opts = [];
-  jvJourneys().forEach((j) => opts.push(['journey:' + j.id, j.name, '\0j', false, j.name]));
-  D.flows.forEach((fl) => opts.push(['flow:' + fl.i, fl.name, fl.kind || '', !!fl.top, fl.name]));
-  if (D.changed.length) opts.push(['changes', t('optChanges'), '\0g', false]);
-  if (D.entries.length) opts.push(['overview', t('optOverview'), '\0g', false]);
-  return opts;
-}
-function pickGroups(opts, q) {
-  q = q.trim().toLowerCase();
-  const ok = (o) => !q || (o[4] || o[1]).toLowerCase().includes(q) || (o[2] && o[2][0] !== '\0' && o[2].toLowerCase().includes(q));
-  const flows = opts.filter((o) => o[2] !== '\0g' && o[2] !== '\0j'), gen = opts.filter((o) => o[2] === '\0g'), jr = opts.filter((o) => o[2] === '\0j');
-  const hasKinds = flows.some((o) => o[2] || o[3]);
-  const gs = [];
-  const add = (label, arr) => { arr = arr.filter(ok); if (arr.length) gs.push({ label, items: arr }); };
-  add(t('jvTitle'), jr);
-  if (hasKinds) {
-    add(t('grpTop'), flows.filter((o) => o[3]));
-    add(t('grpGeneral'), gen);
-    const by = {};
-    flows.forEach((o) => { (by[o[2] || 'other'] = by[o[2] || 'other'] || []).push(o); });
-    Object.keys(by).sort((a, b) => (a === 'declared' ? -1 : b === 'declared' ? 1 : by[b].length - by[a].length || a.localeCompare(b))).forEach((k) => {
-      const arr = by[k].filter(ok);
-      if (arr.length) gs.push({ label: k + ' (' + by[k].length + ')', items: arr });
-    });
-  } else {
-    add(t('grpGeneral'), gen);
-    add(t('grpFlows') + ' (' + flows.length + ')', flows);
-  }
-  return gs;
-}
-const PICK_MAX = 120;
-const PK = { open: false, act: 0, flat: [] };
-function drawPick() {
-  const gs = pickGroups(tourOptions(), $('#pq').value);
-  PK.flat = []; let h = '', shown = 0, total = 0;
-  gs.forEach((g) => { total += g.items.length; });
-  for (const g of gs) {
-    if (shown >= PICK_MAX) break;
-    h += `<div class="gh">${esc(g.label)}</div>`;
-    for (const o of g.items) {
-      if (shown >= PICK_MAX) break;
-      h += `<div class="opt${state.run && o[0] === state.run.key ? ' cur' : ''}" role="option" data-i="${PK.flat.length}" title="${esc(o[1])}">${esc(o[4] || o[1])}</div>`;
-      PK.flat.push(o[0]); shown++;
-    }
-  }
-  if (!PK.flat.length) h = `<div class="none">${esc(t('flowNone'))}</div>`;
-  else if (total > shown) h += `<div class="more">${esc(t('flowMore', total - shown))}</div>`;
-  $('#plist').innerHTML = h;
-  PK.act = Math.max(0, Math.min(PK.act, PK.flat.length - 1));
-  markAct(false);
-}
-function markAct(scroll) {
-  const l = $('#plist'), p = l.querySelector('.opt.act'); if (p) p.classList.remove('act');
-  const n = l.querySelector(`.opt[data-i="${PK.act}"]`);
-  if (n) { n.classList.add('act'); if (scroll) n.scrollIntoView({ block: 'nearest' }); }
-}
-function openPick() {
-  PK.open = true; $('#ppop').hidden = false; $('#pcur').setAttribute('aria-expanded', 'true');
-  $('#pq').value = ''; $('#pq').placeholder = t('flowSearch'); PK.act = 0; drawPick();
-  const c = $('#plist').querySelector('.opt.cur'); if (c) { PK.act = +c.dataset.i; markAct(true); }
-  $('#pq').focus();
-}
-function closePick(focus) {
-  PK.open = false; $('#ppop').hidden = true; $('#pcur').setAttribute('aria-expanded', 'false');
-  if (focus) $('#pcur').focus();
-}
-function choose(v) { closePick(true); if (v != null) loadRun(v); }
-function setupPicker() {
-  let pqT = null;
-  $('#pcur').onclick = () => (PK.open ? closePick() : openPick());
-  $('#pq').oninput = () => { clearTimeout(pqT); pqT = setTimeout(() => { PK.act = 0; drawPick(); }, 60); };
-  $('#pq').addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    if (e.key === 'ArrowDown') { e.preventDefault(); PK.act = Math.min(PK.flat.length - 1, PK.act + 1); markAct(true); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); PK.act = Math.max(0, PK.act - 1); markAct(true); }
-    else if (e.key === 'Enter') { e.preventDefault(); clearTimeout(pqT); drawPick(); choose(PK.flat[PK.act]); }
-    else if (e.key === 'Escape') { e.preventDefault(); closePick(true); }
-  });
-  $('#plist').addEventListener('mousedown', (e) => { const o = e.target.closest('.opt'); if (o) { e.preventDefault(); choose(PK.flat[+o.dataset.i]); } });
-  document.addEventListener('mousedown', (e) => { if (PK.open && !e.target.closest('#pcombo')) closePick(); });
-}
-function defaultRunKey() {
-  const byActor = (x) => actorOfFn(x.steps[0]);
-  const fl = D.flows.find((x) => x.kind === 'declared' && x.top && byActor(x)) || D.flows.find((x) => x.kind === 'declared' && x.top) ||
-    D.flows.find((x) => x.top && byActor(x)) || D.flows.find((x) => x.top) || D.flows[0];
-  if (fl) return 'flow:' + fl.i;
-  return D.changed.length ? 'changes' : D.entries.length ? 'overview' : null;
-}
-// loadRun(key): 'flow:<i>' (index in model.flows), 'fn:<fid>', 'changes', 'overview'
+// loadRun(key): 'flow:<i>' (index in model.flows), 'journey:<id>', 'variant:<id>', 'fn:<fid>', 'changes', 'overview';
+// null closes the scenario. Nothing plays by itself: the steps go by → / ← only.
 function loadRun(key) {
-  state.playing = false;
   state.run = buildRun(key); state.step = -1; state.played = false; state.exitText = null;
   [sys, map, fv].forEach((x) => { if (x) { clearPlay(x.svg); x.fx.innerHTML = ''; } });
   if (fv && state.level === 2) { buildFns(fv.mod); fitFns(); }
   showChoice(false); renderPlayer(); renderCrumbs();
   bus.emit('flow', state.run); bus.emit('step', null);
 }
+// openRun(key): open a scenario on its first step (the map shows where it starts; the next steps by hand)
+async function openRun(key) {
+  if (state.view !== 'map') setView('map');
+  for (let i = 0; i < 40 && state.busy; i++) await sleep(100);
+  loadRun(key);
+  if (state.run) await doStep(1);
+}
+function closeRun() {
+  if (!state.run) return;
+  loadRun(null);
+  setSel(null);
+}
 function playFrom(fid) {
   const fl = D.flows.find((x) => x.steps[0] === fid);
-  loadRun(fl ? 'flow:' + fl.i : 'fn:' + fid);
-  auto();
+  return openRun(fl ? 'flow:' + fl.i : 'fn:' + fid);
 }
 
 Object.assign(AM, {
   play: {
-    load: loadRun, step: doStep, stepIn, stepOut, auto, pause, reset: resetRun, playFrom,
+    load: loadRun, open: openRun, close: closeRun, step: doStep, stepIn, stepOut, reset: resetRun, playFrom,
     go: (i) => { if (state.busy || !state.run) return; state.step = Math.max(0, Math.min(runList().length - 1, i)); trimSegs(); return replay(); },
     choose: (b) => takeBranch(b), branches: () => (atBranch() ? branchesHere() : null),
-    current: curStep, stepAt, list: runList, frames: framesUpTo, options: tourOptions, defaultKey: defaultRunKey,
+    current: curStep, stepAt, list: runList, frames: framesUpTo,
     get run() { return state.run; },
   },
   ui: { statusPill, mutBadge, effBadges, stTone },

@@ -18,7 +18,6 @@
 {
   const D = AM.D, S = AM.state, esc = AM.esc, t = AM.t;
   const DEPTH = 6;
-  const KINDS = ['http', 'grpc', 'ws', 'task', 'cli'];
   const ROW_H = 36, GRP_H = 38;
 
   AM.addI18n({
@@ -170,33 +169,11 @@
   }
 
   /* ---------- toolbar ---------- */
-  function accessOptions() {
-    const kinds = new Set(), roles = new Set();
-    EPS().forEach((e) => { const k = accKind(e); kinds.add(k); if (k === 'role') roles.add(AM.epRole(e)); });
-    const o = [['', t('apiAllAccess')]];
-    if (kinds.has('public')) o.push(['public', t('apiPublic')]);
-    if (kinds.has('authed')) o.push(['authed', t('apiAuthed')]);
-    Array.from(roles).sort().forEach((r) => o.push(['role:' + r, t('apiRole', r)]));
-    return o;
-  }
+  // the minimal view: no filters of its own — an endpoint is found with ⌘K, "only changed" is a ⌘K command too
+  // (the global filter event below); the bar keeps the count only
   function toolbar() {
-    const present = KINDS.filter((k) => EPS().some((e) => e.kind === k));
     const bar = ui.bar; bar.innerHTML = '';
-    const q = AM.h('input', { type: 'search', class: 'api-q', placeholder: t('apiSearch'), 'aria-label': t('apiSearch'), value: V.q }, bar);
-    q.addEventListener('input', () => { clearTimeout(V.timer); V.timer = setTimeout(() => { V.q = q.value; refresh(); }, 120); });
-    const seg = AM.h('div', { class: 'seg', role: 'group' }, bar);
-    [['', t('apiAllKinds')]].concat(present.map((k) => [k, t('apiKind')[k]])).forEach(([k, label]) => {
-      const b = AM.h('button', { 'aria-pressed': V.kind === k }, seg, esc(label));
-      b.onclick = () => { V.kind = k; seg.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b)); refresh(); };
-    });
-    const sel = AM.h('select', { class: 'api-sel', 'aria-label': t('apiAccess') }, bar);
-    accessOptions().forEach(([v, l]) => { const o = AM.h('option', { value: v }, sel, esc(l)); if (v === V.access) o.selected = true; });
-    sel.onchange = () => { V.access = sel.value; refresh(); };
-    const ob = AM.h('button', { class: 'chgbtn', 'aria-pressed': V.only }, bar, esc(t('apiChanged')));
-    ob.onclick = () => { V.only = !V.only; ob.setAttribute('aria-pressed', V.only); refresh(); };
-    ui.onlyBtn = ob;
     ui.count = AM.h('span', { class: 'api-total' }, bar);
-    if (!D.changed.length) ob.style.display = 'none';
   }
 
   /* ---------- selection ---------- */

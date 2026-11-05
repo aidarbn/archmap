@@ -1,5 +1,5 @@
-/* panel.js — the right card for the current selection.
- * Selection kinds of the core: null (overview), {t:'svc'}, {t:'actor', id}, {t:'ext', id},
+/* panel.js — the right card for the current selection (no selection — no panel).
+ * Selection kinds of the core: null, {t:'svc'}, {t:'actor', id}, {t:'ext', id},
  * {t:'mod', id}, {t:'group', id}, {t:'fn', id, why?}, {t:'step'}. Views add kinds with
  * registerPanel(kind, render) and select them with AM.select({t: kind, …}). */
 
@@ -7,8 +7,8 @@ let QUIET = false; // reapplying marks after a live update: no panel redraw, no 
 function setSel(sel) {
   state.sel = sel || null;
   if (QUIET) return;
+  PNL.closed = false; // a new selection shows its details again
   renderPanel();
-  if (state.view === 'map') renderLevelBar();
   bus.emit('select', state.sel);
 }
 const chipMod = (m) => `<span class="chip" data-mod="${esc(m)}" style="cursor:pointer" title="${esc(modLabel(m))}"><i style="background:${LCOLOR[layerOf(m)]}"></i>${esc(cutL(short(m), 34))}</span>`;
@@ -34,36 +34,8 @@ function fnSection(id, target, opt = {}) {
   h += `<h3>${esc(t('code'))}</h3><div class="code"${opt.codeId ? ` id="${opt.codeId}"` : ''}>${c.html}</div>`;
   return { h, hlIdx: c.hlIdx, loading: c.loading };
 }
-// scenarios in the side panel: groups by actor with counts, the first PS_N of each, "show all" for the rest;
-// subset — only these flows (an actor's own), shown as one list
-const PS = { all: false }, PS_N = 6;
-function scenSection(subset) {
-  const flows = subset || D.flows; if (!flows.length) return '';
-  const gs = flowGroups('', subset);
-  let h = `<h3>${esc(t('grpFlows'))} · ${flows.length}</h3><div class="scen-list">`;
-  if (!subset) h += AM.jv.journeyRows('', jvCfg('sc'), PS.all ? 99 : PS_N);
-  gs.forEach((g) => {
-    if (!subset || gs.length > 1) h += `<div class="scen-grp">${esc(g.name)}<small>${g.items.length}</small></div>`;
-    (PS.all ? g.items : g.items.slice(0, PS_N)).forEach((fl) => { h += flowRow(fl, 'sc'); });
-    if (!PS.all && g.items.length > PS_N) h += `<div class="loc" style="padding:2px 8px">+ ${g.items.length - PS_N}</div>`;
-  });
-  h += '</div><div class="btnrow">';
-  if (flows.length > PS_N) h += `<button class="pbtn" data-act="flowsall">${esc(PS.all ? t('flowsFewer') : t('flowsAll', flows.length))}</button>`;
-  if (!subset) h += `<button class="pbtn" data-act="flowsbrowse">${esc(t('flowsBrowse'))}</button>`;
-  return h + '</div>';
-}
-function overviewHTML() {
-  const PJ = D.F.project || {};
-  let h = `<div class="kicker">${esc(t('lv')[state.level])}</div><h2>${esc(PJ.name || D.M.title || D.F.repo || '')}</h2>`;
-  h += `<p class="lead">${esc(PJ.description || D.M.summary || '')}</p><p class="lead" style="margin-top:-6px">${esc(t('overviewMap'))}</p>`;
-  h += `<dl class="kv"><dt>repo</dt><dd class="mono">${esc(D.F.repo || '')} @ ${esc(D.F.head || '')}</dd>` +
-    `<dt>${esc(t('branch'))}</dt><dd class="mono">${esc(D.F.branch || '')}${D.F.base ? ' vs ' + esc(D.F.base) : ''}</dd>` +
-    `<dt>${esc(t('modules'))}</dt><dd>${D.allMods.length}</dd><dt>${esc(t('fns'))}</dt><dd>${D.fids.length}</dd><dt>${esc(t('entries'))}</dt><dd>${D.entries.length}</dd></dl>`;
-  if (state.level === 1 && D.roots.size) h += `<p class="loc" style="margin-top:14px">${esc(t('rootsHidden', Array.from(D.roots).join(', ')))}</p>`;
-  h += D.flows.length ? scenSection() : state.run ? `<h3>${esc(t('grpFlows'))}</h3><p style="margin:0">${esc(state.run.name)}</p>` : '';
-  h += `<p class="loc">${esc(t('clickHint'))}</p>`;
-  return h;
-}
+// no selection: no panel (the overview is never shown on its own)
+function overviewHTML() { return ''; }
 function stepHTML() {
   const s = curStep(); if (!s) return { h: overviewHTML() };
   if (s.planned) {
@@ -100,7 +72,7 @@ function renderPanel() {
   else if (s.t === 'fn') {
     const sec = fnSection(s.id, null, { codeId: 'pcode' }); loading = sec.loading; fids = [s.id];
     h = (s.why ? `<div class="kicker">${esc(t('where'))}: ${esc(s.why)}</div>` : '') + sec.h;
-    h += `<div class="btnrow"><button class="pbtn" data-act="code">${esc(t('into'))} · ${esc(t('lv')[3])}</button>${D.fns[s.id] && fnInfo(s.id).out.length ? `<button class="pbtn" data-act="playfn">${esc(t('playFromFn'))}</button>` : ''}${AM.walk ? `<button class="pbtn primary" data-act="walk">${esc(t('wkFrom'))}</button>` : ''}</div>`;
+    h += `<div class="btnrow"><button class="pbtn" data-act="code">${esc(t('into'))} · ${esc(t('lv')[3])}</button>${D.fns[s.id] && fnInfo(s.id).out.length ? `<button class="pbtn" data-act="playfn">${esc(t('playFromFn'))}</button>` : ''}</div>`;
   } else if (s.t === 'mod') {
     const m = s.id, c = D.modChg[m], imps = ((D.mods[m] || {}).imports || []).filter((x) => D.mods[x]), by = D.importedBy[m] || [];
     const inRun = runList().map((x, i) => [x, i]).filter(([x]) => (D.fns[x.fid] || {}).module === m);
@@ -125,7 +97,7 @@ function renderPanel() {
     h = `<div class="kicker">${esc(t('lv')[0])}</div><h2>${esc(PJ.name || D.F.repo || '')}</h2><p class="lead">${esc(PJ.description || D.M.summary || '')}</p>`;
     h += `<dl class="kv"><dt>${esc(t('modules'))}</dt><dd>${D.allMods.length}</dd><dt>${esc(t('fns'))}</dt><dd>${D.fids.length}</dd><dt>${esc(t('entries'))}</dt><dd>${D.entries.length}</dd>${Object.keys(D.tables).length ? `<dt>${esc(t('tables'))}</dt><dd>${Object.keys(D.tables).length}</dd>` : ''}</dl>`;
     h += `<h3>${esc(t('layer'))}</h3><div class="tbl-pills">${LAYERS.filter((l) => D.allMods.some((m) => layerOf(m) === l)).map((l) => `<span class="chip"><i style="background:${LCOLOR[l]}"></i>${esc(t('layers')[l])} · ${D.allMods.filter((m) => layerOf(m) === l).length}</span>`).join('')}</div>`;
-    h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>` + scenSection();
+    h += `<div class="btnrow"><button class="pbtn primary" data-act="intosvc">${esc(t('into'))}</button></div>`;
   } else if (s.t === 'actor') {
     const a = D.actors.find((x) => x.id === s.id); if (!a) { state.sel = null; return renderPanel(); }
     h = `<div class="kicker">${esc(t('kinds').actor)}</div><h2>${esc(actorName(a))}</h2><p class="lead">${esc(actorSub(a))}</p>`;
@@ -135,8 +107,6 @@ function renderPanel() {
     else if (a.fids.length) h += `<h3>${esc(t('entries'))}</h3>` + relList(a.fids, t('entries'), 'out', '').replace(/^<h3>.*?<\/h3>/, '');
     h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${Array.from(a.mods).map(chipMod).join('') || '—'}</div>`;
     if (a.mods.size) h += `<div class="btnrow"><button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button></div>`;
-    const mine = D.flows.filter((fl) => fl.steps.length && (a.fids.includes(fl.steps[0]) || (fl.actor && fl.actor === actorName(a))));
-    if (mine.length) h += scenSection(mine);
   } else if (s.t === 'ext') {
     const x = D.externals.find((q) => q.id === s.id); if (!x) { state.sel = null; return renderPanel(); }
     h = `<div class="kicker">${esc(t('kinds')[x.kind] || x.kind)}</div><h2>${esc(x.name)}</h2>`;
@@ -145,9 +115,11 @@ function renderPanel() {
     h += relList((x.functions || []).filter((f) => D.fns[f]), t('callers'), 'in', '');
     const used = runList().map((it, i) => [it, i]).filter(([it]) => extsOfFn(it.fid).includes(x));
     if (used.length) h += `<h3>${esc(t('inScen'))}</h3><ul class="rel-list">${used.slice(0, 10).map(([, i]) => `<li data-step="${i}"><span class="fn">${i + 1}.</span><span>${esc(stepLabel(i))}</span></li>`).join('')}</ul>`;
-    if ((x.modules || []).length) h += `<div class="btnrow"><button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button></div>`;
+    const toData = x.kind === 'db' && Object.keys(D.tables).length && VIEWS.some((v) => v.id === 'data');
+    if ((x.modules || []).length || toData) h += `<div class="btnrow">${(x.modules || []).length ? `<button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button>` : ''}${toData ? `<button class="pbtn" data-act="todata">${esc(t('openData'))}</button>` : ''}</div>`;
   }
   p.innerHTML = h; p.classList.remove('fadein'); void p.offsetWidth; p.classList.add('fadein');
+  paintPanelShown();
   wirePanel(p, s);
   const pc = $('#pcode');
   if (pc && hlIdx >= 0) requestAnimationFrame(() => { const ln = pc.children[hlIdx]; if (ln) pc.scrollTop = ln.offsetTop - pc.clientHeight / 2 + 10; });
@@ -164,13 +136,8 @@ function wirePanel(p, s) {
   const act = (a, f) => { const b = p.querySelector(`[data-act="${a}"]`); if (b) b.onclick = f; };
   act('code', () => jumpToFn(s.id, 3));
   act('playfn', () => playFrom(s.id));
-  act('walk', () => AM.walk.start(s.id));
   act('intomod', () => goModule(s.id));
-  p.querySelectorAll('[data-vt]').forEach((e) => e.addEventListener('click', (ev) => { ev.stopPropagation(); AM.jv.toggle(e.dataset.vt); }));
-  p.querySelectorAll('[data-k="journey"],[data-k="variant"]').forEach((e) => e.addEventListener('click', () => playRunKey(e.dataset.k + ':' + e.dataset.id)));
-  p.querySelectorAll('[data-k="flow"]').forEach((e) => e.addEventListener('click', () => playFlowIdx(+e.dataset.id)));
-  act('flowsall', () => { PS.all = !PS.all; renderPanel(); });
-  act('flowsbrowse', () => openFlows());
+  act('todata', () => setView('data'));
   act('intosvc', () => { setView('map'); drill(1, { from: sys.nodes.svc.el }); });
   act('intosys', () => { setView('map'); if (state.level === 0) drillFromSys(s.id); else intoSelected(); });
   act('expand', () => expandGroup(G.TN[s.id]));
@@ -186,34 +153,28 @@ function openMod(m) {
   setSel({ t: 'mod', id: m });
 }
 
-/* ---------- hiding and resizing the side panel ----------
- * Hidden by the header button #panelBtn, the button in the panel's corner, `]` or Cmd/Ctrl+. ; the map, the views and
- * the sequence dock take the freed width and fit again (a window "resize"). A hidden panel stays hidden on a
- * selection: the header button gets a dot ("there are details") instead. The width is dragged by the left edge
- * (arrows nudge it, double-click resets it). Both are kept in localStorage (archmap.panel.hidden, archmap.panel.w). */
+/* ---------- showing, hiding and resizing the details panel ----------
+ * The panel floats over the right of the stage and is there only while something is selected: no selection — no
+ * panel. ✕ (or `]`, Cmd/Ctrl+.) hides it until the next selection; ⌘K "Show / hide details" toggles it. The width is
+ * dragged by the left edge (arrows nudge it, double-click resets it) and kept in localStorage (archmap.panel.w). */
 addI18n({
-  ru: { pnHide: 'Скрыть панель (] или ⌘.)', pnShow: 'Показать панель (] или ⌘.)', pnDetails: 'есть детали', pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },
-  en: { pnHide: 'Hide the panel (] or ⌘.)', pnShow: 'Show the panel (] or ⌘.)', pnDetails: 'there are details', pnGrip: 'Drag to resize; double-click for the default' },
+  ru: { pnHide: 'Закрыть (] или ⌘.)', pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },
+  en: { pnHide: 'Close (] or ⌘.)', pnGrip: 'Drag to resize; double-click for the default' },
 });
-const PNL = { hidden: false, w: 0 };
+const PNL = { closed: false, w: 0 };
 const pnStore = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
 const pnLoad = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const pnMaxW = () => Math.max(260, Math.min(720, Math.round(window.innerWidth * 0.6)));
+const pnHasContent = () => !!$('#pane').childElementCount;
+// the panel is shown when there are details and the user did not close it
+function paintPanelShown() { $('main').classList.toggle('nopanel', PNL.closed || !pnHasContent()); }
 function paintPanelBtn() {
-  const b = $('#panelBtn'); if (!b) return;
-  b.setAttribute('aria-pressed', String(!PNL.hidden));
-  b.title = t(PNL.hidden ? 'pnShow' : 'pnHide') + (b.classList.contains('dot') ? ' · ' + t('pnDetails') : '');
   $('#panelHide').title = t('pnHide'); $('#panelHide').setAttribute('aria-label', t('pnHide'));
   $('#panelGrip').title = t('pnGrip'); $('#panelGrip').setAttribute('aria-label', t('pnGrip'));
 }
-const pnRefit = () => window.dispatchEvent(new Event('resize'));
-function setPanelHidden(h, keep) {
-  PNL.hidden = !!h;
-  $('main').classList.toggle('nopanel', PNL.hidden);
-  if (!PNL.hidden) $('#panelBtn').classList.remove('dot');
-  if (!keep) pnStore('archmap.panel.hidden', PNL.hidden ? '1' : null);
-  paintPanelBtn();
-  pnRefit();
+function setPanelHidden(h) {
+  PNL.closed = !!h;
+  paintPanelShown();
 }
 function setPanelWidth(w, save) {
   PNL.w = w ? Math.max(260, Math.min(pnMaxW(), Math.round(w))) : 0;
@@ -223,17 +184,12 @@ function setPanelWidth(w, save) {
 function setupSidePanel() {
   const w = +pnLoad('archmap.panel.w');
   if (w) setPanelWidth(w);
-  PNL.hidden = pnLoad('archmap.panel.hidden') === '1';
-  $('main').classList.toggle('nopanel', PNL.hidden);
-  $('#panelBtn').onclick = () => setPanelHidden(!PNL.hidden);
   $('#panelHide').onclick = () => setPanelHidden(true);
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable) return;
-    if ((e.key === ']' && !e.metaKey && !e.ctrlKey && !e.altKey) || (e.key === '.' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); setPanelHidden(!PNL.hidden); }
+    if ((e.key === ']' && !e.metaKey && !e.ctrlKey && !e.altKey) || (e.key === '.' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); setPanelHidden(!PNL.closed); }
   });
-  // a selection while the panel is hidden: a dot on the header button, the panel stays hidden
-  bus.on('select', (sel) => { if (PNL.hidden && sel) { $('#panelBtn').classList.add('dot'); paintPanelBtn(); } });
   const grip = $('#panelGrip');
   grip.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -242,18 +198,17 @@ function setupSidePanel() {
     grip.classList.add('drag'); $('main').classList.add('presize');
     try { grip.setPointerCapture(e.pointerId); } catch (er) { /* synthetic */ }
     const mv = (ev) => setPanelWidth(w0 + (x0 - ev.clientX));
-    const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); grip.classList.remove('drag'); $('main').classList.remove('presize'); setPanelWidth(PNL.w, true); pnRefit(); };
+    const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); grip.classList.remove('drag'); $('main').classList.remove('presize'); setPanelWidth(PNL.w, true); };
     grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
   });
-  grip.addEventListener('dblclick', () => { setPanelWidth(0, true); pnRefit(); });
+  grip.addEventListener('dblclick', () => setPanelWidth(0, true));
   grip.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault(); e.stopPropagation();
-    setPanelWidth($('#panel').getBoundingClientRect().width + (e.key === 'ArrowLeft' ? 24 : -24), true); pnRefit();
+    setPanelWidth($('#panel').getBoundingClientRect().width + (e.key === 'ArrowLeft' ? 24 : -24), true);
   });
-  paintPanelBtn();
+  paintPanelBtn(); paintPanelShown();
   bus.on('lang', paintPanelBtn);
 }
 
-Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel, panel: { setHidden: setPanelHidden, setWidth: setPanelWidth, get hidden() { return PNL.hidden; }, get width() { return PNL.w; } } });
-bus.on('jv', () => renderPanel());
+Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel, panel: { setHidden: setPanelHidden, setWidth: setPanelWidth, get hidden() { return $('main').classList.contains('nopanel'); }, get width() { return PNL.w; } } });
