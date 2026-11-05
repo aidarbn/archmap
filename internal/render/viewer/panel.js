@@ -1,4 +1,5 @@
-/* panel.js — the right card for the current selection (no selection — no panel).
+/* panel.js — the inspector: the docked right column with the card of the current selection (no selection — the
+ * system overview). First what the element does, then its details and steps.
  * Selection kinds of the core: null, {t:'svc'}, {t:'actor', id}, {t:'ext', id},
  * {t:'mod', id}, {t:'group', id}, {t:'fn', id, why?}, {t:'step'}. Views add kinds with
  * registerPanel(kind, render) and select them with AM.select({t: kind, …}). */
@@ -122,7 +123,7 @@ function runOverviewHTML() {
 const flowsFrom = (fid) => visibleFlows().filter((fl) => fl.steps && fl.steps[0] === fid);
 const flowsThrough = (pred) => visibleFlows().filter((fl) => flowSteps(fl).some((s) => D.fns[s] && pred(s)));
 // the views reached from a card (there is no other way to them but ⋯): API, Data (a table), Statuses (a machine)
-const hasView = (id) => VIEWS.some((v) => v.id === id);
+const hasView = (id) => !SOLO && VIEWS.some((v) => v.id === id); // the scenario window has no views
 const viewBtn = (act, label, arg) => `<button class="pbtn" data-view="${act}"${arg != null ? ` data-arg="${esc(arg)}"` : ''}>${esc(label)}</button>`;
 function tableChips(fids) {
   if (!hasView('data')) return '';
@@ -188,7 +189,6 @@ let QUIET = false; // reapplying marks after a live update: no panel redraw, no 
 function setSel(sel) {
   state.sel = sel || null;
   if (QUIET) return;
-  PNL.closed = false; // a new selection shows its details again
   renderPanel();
   bus.emit('select', state.sel);
 }
@@ -220,33 +220,11 @@ function fnSection(id, target, opt = {}) {
   h += `<h3>${esc(t('code'))}</h3><div class="code"${opt.codeId ? ` id="${opt.codeId}"` : ''}>${c.html}</div>`;
   return { h, hlIdx: c.hlIdx, loading: c.loading };
 }
-// the system with nothing selected: a compact card in the top-left corner of the map under the crumbs — what the
-// system does, the counts, who uses it and what it talks to (a name opens its card). The map nodes carry the one
-// line of each; the system card (a click on the service or the brand… then the service) has them all with their
-// descriptions (overviewHTML). No selection — no panel: the map keeps its width.
-function aboutHTML() {
-  const PJ = D.F.project || {}, desc = plainDoc(PJ.description || D.M.summary || '');
-  const nm = (s) => esc(s), n = visibleFlows().length, jn = jvJourneys().length;
-  let h = desc ? `<p class="ab-d">${esc(desc)}</p>` : '';
-  h += `<p class="ab-m">${esc(t('scenN', n))}${jn ? ' · ' + esc(t('jvTitle')).toLowerCase() + ' ' + jn : ''} · ${esc(t('modules'))} ${D.allMods.length}${Object.keys(D.tables).length ? ' · ' + esc(t('tables')) + ' ' + Object.keys(D.tables).length : ''}</p>`;
-  if (D.actors.length) h += `<p class="ab-l"><b>${esc(t('ovActors'))}:</b> ${D.actors.map((a) => `<button type="button" data-actor="${esc(a.id)}" title="${esc(actorDesc(a).desc || actorSub(a))}">${nm(actorName(a))}</button>`).join(', ')}</p>`;
-  if (D.externals.length) h += `<p class="ab-l"><b>${esc(t('ovExts'))}:</b> ${D.externals.map((x) => `<button type="button" data-ext="${esc(x.id)}" title="${esc(extDesc(x))}">${nm(x.name)}</button>`).join(', ')}</p>`;
-  return h;
-}
-function renderAbout() {
-  const el = $('#about'); if (!el || !D.F) return;
-  const on = state.view === 'map' && state.level === 0 && !state.run && !state.sel;
-  if (on && !el.childElementCount) {
-    el.innerHTML = aboutHTML();
-    el.querySelectorAll('[data-actor]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'actor', id: e.getAttribute('data-actor') })));
-    el.querySelectorAll('[data-ext]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'ext', id: e.getAttribute('data-ext') })));
-  }
-  el.hidden = !on;
-}
-const resetAbout = () => { const el = $('#about'); if (el) el.innerHTML = ''; renderAbout(); };
-// the system card: what it does, who uses it, what it talks to (each one line), the button into the modules
-function overviewHTML(svc) {
-  if (!D.F || !svc) return '';
+// the system overview — the inspector with nothing selected and the card of the service node: what the system does,
+// the counts, who uses it and what it talks to (each with one line of description; a click opens its card), the
+// button into the modules
+function overviewHTML() {
+  if (!D.F) return '';
   const cap = (s) => esc(String(s).charAt(0).toUpperCase() + String(s).slice(1));
   const PJ = D.F.project || {}, desc = plainDoc(PJ.description || D.M.summary || '');
   let h = `<div class="kicker">${esc(t('ovSys'))}</div><h2>${esc(PJ.name || D.M.title || D.F.repo || '')}</h2>`;
@@ -269,7 +247,7 @@ function stepHTML() {
   }
   const f = fnInfo(s.fid), from = s.prev ? fnInfo(s.prev).name : s.actor ? actorName(s.actor) : '—';
   let h = `<div class="kicker">${esc(t('stepN'))} ${s.i + 1} · ${esc(cut(state.run.name, 40))}</div><h2>${esc(s.label)}</h2>
-    <p class="lead">${esc(from)} → ${esc(f.name)} · <span class="mono" style="font-size:11.5px">${esc(s.kind === 'async' ? t('viaQueue') : s.kind)}</span></p>`;
+    <p class="lead">${esc(from)} → ${esc(f.name)} · <span class="mono" style="font-size:11.5px">${esc(s.kind === 'async' ? t('viaQueue') : s.kind === 'client' ? t('jvClient') : s.kind)}</span></p>`;
   const bd = effBadges(s).map(mutBadge).join('') + s.states.map(statusPill).join('');
   if (bd) h += `<div class="btnrow" style="margin:0 0 6px">${bd}</div>`;
   if (s.exts.length) h += `<div class="btnrow" style="margin:6px 0">${s.exts.map((x) => `<span class="chip">↗ ${esc(x.name)}</span>`).join('')}</div>`;
@@ -317,7 +295,7 @@ function renderPanel() {
     h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${n.mods.slice(0, 40).map(chipMod).join('')}${n.mods.length > 40 ? ` +${n.mods.length - 40}` : ''}</div>`;
     h += `<div class="btnrow">${isOpen(n) ? '' : `<button class="pbtn primary" data-act="expand">${esc(t('expand'))}</button>`}${G.userOpen.has(n.id) ? `<button class="pbtn" data-act="collapse">${esc(t('collapse'))}</button>` : ''}</div>`;
   } else if (s.t === 'svc') {
-    h = overviewHTML(true);
+    h = overviewHTML();
     h += `<h3>${esc(t('layer'))}</h3><div class="tbl-pills">${LAYERS.filter((l) => D.allMods.some((m) => layerOf(m) === l)).map((l) => `<span class="chip"><i style="background:${LCOLOR[l]}"></i>${esc(t('layers')[l])} · ${D.allMods.filter((m) => layerOf(m) === l).length}</span>`).join('')}</div>`;
   } else if (s.t === 'actor') {
     const a = D.actors.find((x) => x.id === s.id); if (!a) { state.sel = null; return renderPanel(); }
@@ -331,7 +309,7 @@ function renderPanel() {
     h += relList((x.functions || []).filter((f) => D.fns[f]), t('callers'), 'in', '');
     const used = runList().map((it, i) => [it, i]).filter(([it]) => extsOfFn(it.fid).includes(x));
     if (used.length) h += `<h3>${esc(t('inScen'))}</h3><ul class="rel-list">${used.slice(0, 10).map(([, i]) => `<li data-step="${i}"><span class="fn">${i + 1}.</span><span>${esc(stepLabel(i))}</span></li>`).join('')}</ul>`;
-    const toData = x.kind === 'db' && Object.keys(D.tables).length && VIEWS.some((v) => v.id === 'data');
+    const toData = x.kind === 'db' && Object.keys(D.tables).length && hasView('data');
     if ((x.modules || []).length || toData) h += `<div class="btnrow">${(x.modules || []).length ? `<button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button>` : ''}${toData ? `<button class="pbtn" data-act="todata">${esc(t('dsToData'))}</button>` : ''}</div>`;
   }
   p.innerHTML = h; p.classList.remove('fadein'); void p.offsetWidth; p.classList.add('fadein');
@@ -350,7 +328,8 @@ function wirePanel(p, s) {
   p.querySelectorAll('[data-mod]').forEach((e) => e.addEventListener('click', () => openMod(e.getAttribute('data-mod'))));
   p.querySelectorAll('[data-step]').forEach((e) => e.addEventListener('click', () => AM.play.go(+e.getAttribute('data-step'))));
   p.querySelectorAll('[data-actor]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'actor', id: e.getAttribute('data-actor') })));
-  p.querySelectorAll('[data-ext]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'ext', id: e.getAttribute('data-ext') })));  p.querySelectorAll('[data-run]').forEach((e) => e.addEventListener('click', () => { if (state.view !== 'map') setView('map'); openRun(e.getAttribute('data-run')); }));
+  p.querySelectorAll('[data-ext]').forEach((e) => e.addEventListener('click', () => setSel({ t: 'ext', id: e.getAttribute('data-ext') })));
+  p.querySelectorAll('[data-run]').forEach((e) => e.addEventListener('click', () => openScenario(e.getAttribute('data-run'))));
   const act = (a, f) => { const b = p.querySelector(`[data-act="${a}"]`); if (b) b.onclick = f; };
   act('code', () => jumpToFn(s.id, 3));
   act('start', () => doStep(1));
@@ -379,38 +358,35 @@ function openMod(m) {
   setSel({ t: 'mod', id: m });
 }
 
-/* ---------- showing, hiding and resizing the details panel ----------
- * The panel floats over the right of the stage and is there only while something is selected: no selection — no
- * panel. ✕ (or `]`, Cmd/Ctrl+.) hides it until the next selection. The width is
- * dragged by the left edge (arrows nudge it, double-click resets it) and kept in localStorage (archmap.panel.w). */
+/* ---------- the inspector: hiding and resizing ----------
+ * A docked column at the right of the canvas (280 px), always there: with nothing selected it shows the system
+ * overview. `]` or Cmd/Ctrl+. hide and show it (the canvas takes the width). The width is dragged by the left edge
+ * (240–480 px; arrows nudge it, double-click resets it) and kept in localStorage (archmap.panel.w). */
 addI18n({
-  ru: { pnHide: 'Закрыть (] или ⌘.)', pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },
-  en: { pnHide: 'Close (] or ⌘.)', pnGrip: 'Drag to resize; double-click for the default' },
+  ru: { pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },
+  en: { pnGrip: 'Drag to resize; double-click for the default' },
 });
 const PNL = { closed: false, w: 0 };
+const PNL_W = { def: 280, min: 240, max: 480 };
 const pnStore = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
 const pnLoad = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const pnMaxW = () => Math.max(260, Math.min(720, Math.round(window.innerWidth * 0.6)));
-const pnHasContent = () => !!$('#pane').childElementCount;
-// the panel is shown when there are details and the user did not close it
-function paintPanelShown() { $('main').classList.toggle('nopanel', PNL.closed || !pnHasContent()); }
-function paintPanelBtn() {
-  $('#panelHide').title = t('pnHide'); $('#panelHide').setAttribute('aria-label', t('pnHide'));
-  $('#panelGrip').title = t('pnGrip'); $('#panelGrip').setAttribute('aria-label', t('pnGrip'));
-}
+function paintPanelShown() { $('main').classList.toggle('nopanel', PNL.closed); }
+function paintPanelBtn() { $('#panelGrip').title = t('pnGrip'); $('#panelGrip').setAttribute('aria-label', t('pnGrip')); }
 function setPanelHidden(h) {
+  if (PNL.closed === !!h) return;
   PNL.closed = !!h;
   paintPanelShown();
+  rebuildMap(); bus.emit('resize'); // the canvas changed its width
 }
 function setPanelWidth(w, save) {
-  PNL.w = w ? Math.max(260, Math.min(pnMaxW(), Math.round(w))) : 0;
-  if (PNL.w) $('main').style.setProperty('--pw', PNL.w + 'px'); else $('main').style.removeProperty('--pw');
-  if (save) pnStore('archmap.panel.w', PNL.w ? String(PNL.w) : null);
+  PNL.w = w ? Math.max(PNL_W.min, Math.min(PNL_W.max, Math.round(w))) : 0;
+  if (PNL.w && PNL.w !== PNL_W.def) $('main').style.setProperty('--pw', PNL.w + 'px'); else $('main').style.removeProperty('--pw');
+  if (save) pnStore('archmap.panel.w', PNL.w && PNL.w !== PNL_W.def ? String(PNL.w) : null);
 }
+const panelResized = () => { rebuildMap(); bus.emit('resize'); };
 function setupSidePanel() {
   const w = +pnLoad('archmap.panel.w');
   if (w) setPanelWidth(w);
-  $('#panelHide').onclick = () => setPanelHidden(true);
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable) return;
@@ -424,20 +400,17 @@ function setupSidePanel() {
     grip.classList.add('drag'); $('main').classList.add('presize');
     try { grip.setPointerCapture(e.pointerId); } catch (er) { /* synthetic */ }
     const mv = (ev) => setPanelWidth(w0 + (x0 - ev.clientX));
-    const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); grip.classList.remove('drag'); $('main').classList.remove('presize'); setPanelWidth(PNL.w, true); };
+    const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); grip.classList.remove('drag'); $('main').classList.remove('presize'); setPanelWidth(PNL.w, true); panelResized(); };
     grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
   });
-  grip.addEventListener('dblclick', () => setPanelWidth(0, true));
+  grip.addEventListener('dblclick', () => { setPanelWidth(0, true); panelResized(); });
   grip.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault(); e.stopPropagation();
-    setPanelWidth($('#panel').getBoundingClientRect().width + (e.key === 'ArrowLeft' ? 24 : -24), true);
+    setPanelWidth($('#panel').getBoundingClientRect().width + (e.key === 'ArrowLeft' ? 16 : -16), true); panelResized();
   });
   paintPanelBtn(); paintPanelShown();
   bus.on('lang', paintPanelBtn);
-  ['select', 'level', 'view', 'flow'].forEach((e) => bus.on(e, renderAbout));
-  ['lang', 'data'].forEach((e) => bus.on(e, resetAbout));
-  renderAbout();
 }
 
-Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel, panel: { setHidden: setPanelHidden, setWidth: setPanelWidth, get hidden() { return $('main').classList.contains('nopanel'); }, get width() { return PNL.w; } } });
+Object.assign(AM, { select: setSel, openFn, openMod, fnSection, renderPanel, panel: { setHidden: setPanelHidden, setWidth: setPanelWidth, get hidden() { return PNL.closed; }, get width() { return PNL.w || PNL_W.def; } } });

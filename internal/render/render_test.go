@@ -103,8 +103,9 @@ func TestViewerAssembledFromParts(t *testing.T) {
 			t.Errorf("slot %s left in the page", s)
 		}
 	}
-	if strings.Count(v, titleTag) != 2 || strings.Count(v, dataSlot) != 1 {
-		t.Error("placeholders must survive assembly: title twice, data once")
+	// the title: <title>, the name on top of the sidebar and in the centre of the toolbar
+	if strings.Count(v, titleTag) != 3 || strings.Count(v, dataSlot) != 1 {
+		t.Error("placeholders must survive assembly: title three times, data once")
 	}
 	order := append(append([]string{}, coreJS...), "views/map.js", lastJS)
 	last := -1
@@ -235,9 +236,22 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("auto play left in the page: %q", s)
 		}
 	}
-	for _, id := range []string{`id="side"`, `id="sideList"`, `id="sideTog"`, `id="about"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`} {
+	// the desktop shell: the toolbar with the run bar, the sidebar with the navigation tree, the canvas, the inspector
+	for _, id := range []string{`id="side"`, `id="sideList"`, `id="sideTog"`, `id="sideGrip"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`, `id="player"`, `id="pOv"`, `id="panel"`, `id="panelGrip"`, `id="choice"`} {
 		if strings.Count(v, id) != 1 {
 			t.Errorf("the page must have exactly one %s", id)
+		}
+	}
+	// nothing floats over the map any more: no about card, no bottom bar, no ✕ of a floating panel
+	for _, s := range []string{`id="about"`, "<footer", `id="panelHide"`, `id="capTx"`, ".sidetog"} {
+		if strings.Contains(v, s) {
+			t.Errorf("the old floating layout is left in the page: %q", s)
+		}
+	}
+	// scenarios open apart, in one reused window of their own
+	for _, s := range []string{"function openScenario", "'archmap-scenario'", "&solo=1"} {
+		if !strings.Contains(v, s) {
+			t.Errorf("the scenario window is missing: %q", s)
 		}
 	}
 	for _, s := range []string{`id="tabs"`, "renderTabs", "pickTab", ".tabs {"} {

@@ -15,7 +15,7 @@ addI18n({
     jvAnyOf: (s) => 'одна из: ' + s, jvMore: (n) => '…ещё ' + n, jvFlowsN: (n, p) => n + ' ' + p(['сценарий', 'сценария', 'сценариев']),
     jvPath: 'Путь', jvVariant: 'Вариант', jvFlowOf: (a, b) => 'сценарий ' + a + '/' + b, jvStepOf: (a, b) => 'шаг ' + a + '/' + b,
     jvViaOn: (c) => (c ? '→ по условию «' + c + '»' : '→ по событию'), jvViaQueue: '→ через очередь',
-    jvViaDecl: (n) => 'дальше клиент вызывает ' + n, jvFork: 'Развилка', jvGo: 'Перейти в сценарий', jvGoTip: 'Продолжить проигрывание в сценарии, в который ведёт вариант',
+    jvViaDecl: (n) => 'дальше клиент вызывает ' + n, jvClient: 'дальше вызывает клиент', jvFork: 'Развилка', jvGo: 'Перейти в сценарий', jvGoTip: 'Продолжить проигрывание в сценарии, в который ведёт вариант',
     jvIcOn: 'по условию (arch:on)', jvIcQueue: 'через очередь', jvIcDecl: 'порядок указан вручную', jvEnd: 'конец варианта',
   },
   en: {
@@ -23,7 +23,7 @@ addI18n({
     jvAnyOf: (s) => 'one of: ' + s, jvMore: (n) => '…' + n + ' more', jvFlowsN: (n, p) => n + ' ' + p(['scenario', 'scenarios']),
     jvPath: 'Path', jvVariant: 'Variant', jvFlowOf: (a, b) => 'flow ' + a + '/' + b, jvStepOf: (a, b) => 'step ' + a + '/' + b,
     jvViaOn: (c) => (c ? '→ on condition “' + c + '”' : '→ on an event'), jvViaQueue: '→ through the queue',
-    jvViaDecl: (n) => 'next the client calls ' + n, jvFork: 'Fork', jvGo: 'Go to the scenario', jvGoTip: 'Continue the run in the scenario the variant leads to',
+    jvViaDecl: (n) => 'next the client calls ' + n, jvClient: 'next the client calls', jvFork: 'Fork', jvGo: 'Go to the scenario', jvGoTip: 'Continue the run in the scenario the variant leads to',
     jvIcOn: 'on a condition (arch:on)', jvIcQueue: 'through the queue', jvIcDecl: 'order written by hand', jvEnd: 'end of the variant',
   },
 });

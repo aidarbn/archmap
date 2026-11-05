@@ -105,16 +105,21 @@ function stepAt(i) {
   while (j >= 0 && L_[j].seg === it.seg && isPlan(L_[j].fid)) j--;
   // the first step of a further flow of a path: a new entry (a queue hand-off keeps its caller)
   const first = j >= 0 && L_[j].seg !== it.seg, viaQ = first && sg.via && sg.via.via === 'queue';
-  const prev = j >= 0 && (!first || viaQ) && !isPlan(L_[j].fid) ? L_[j].fid : null, next = L_[i + 1] ? L_[i + 1].fid : null;
+  // links come from the code only: the next flow of a path keeps the previous step as its caller when the code calls
+  // it (or hands it over through the queue); otherwise the client makes the next call — a 'client' step, no arrow
+  // from the previous flow (the data may also say so: via 'client')
+  const coded = first && !viaQ && !isPlan(L_[j].fid) && !isPlan(it.fid) && (isCall(L_[j].fid, it.fid) || isAsync(L_[j].fid, it.fid)) && !(sg.via && sg.via.via === 'client');
+  const client = first && !viaQ && !coded;
+  const prev = j >= 0 && (!first || viaQ || coded) && !isPlan(L_[j].fid) ? L_[j].fid : null, next = L_[i + 1] ? L_[i + 1].fid : null;
   const plan = isPlan(it.fid), f = D.fns[it.fid] || {};
   const extName = plan && fl && fl.ext && fl.ext[it.fid], planExt = extName ? D.externals.filter((x) => x.name === extName) : [];
   return {
     i, fid: it.fid, prev, next, seg: it.seg, flow: fl, planned: plan,
-    kind: plan ? 'plan' : !prev ? 'entry' : viaQ || isAsync(prev, it.fid) ? 'async' : isCall(prev, it.fid) ? 'call' : 'next',
+    kind: plan ? 'plan' : client ? 'client' : !prev ? 'entry' : viaQ || isAsync(prev, it.fid) ? 'async' : isCall(prev, it.fid) ? 'call' : 'next',
     label: (fl && fl.labels && fl.labels[it.fid]) || (plan ? t('planStep') : fnInfo(it.fid).name),
     effects: (fl && fl.effects && fl.effects[it.fid]) || [],
     data: f.data || [], states: plan ? [] : statesOf(it.fid), exts: plan ? planExt : extsOfFn(it.fid),
-    actor: i === 0 ? runActor() : first && !prev ? actorOfFn(it.fid) : null,
+    actor: i === 0 ? runActor() : first && !prev ? actorOfFn(it.fid) || runActor() : null,
     mod: plan ? (fl && fl.planMod && fl.planMod[it.fid]) || null : f.module,
   };
 }
@@ -271,10 +276,10 @@ async function stepOut() { if (state.level > 0) { await up(); if (state.step >= 
 function showChoice(on) {
   const c = $('#choice'); c.classList.toggle('on', on); c.innerHTML = '';
   if (!on) return;
-  H('span', { style: 'color:var(--muted);font-size:12px' }, c, esc(t('chooseBranch')));
+  H('span', { style: 'color:var(--muted);width:100%' }, c, esc(t('chooseBranch')));
   (branchesHere() || []).forEach((b) => {
     const target = b.flow && D.flowById[b.flow];
-    const btn = H('button', { class: 'pbtn', style: 'height:26px', title: (b.text || '') + (target ? ' → ' + target.name : '') }, c, (target ? '↪ ' : '⏹ ') + esc(cut(b.cond || b.text || '?', 28)));
+    const btn = H('button', { class: 'pbtn', title: (b.text || '') + (target ? ' → ' + target.name : '') }, c, (target ? '↪ ' : '⏹ ') + esc(cut(b.cond || b.text || '?', 28)));
     btn.onclick = () => takeBranch(b);
   });
 }
@@ -327,11 +332,12 @@ function pathNode(level, i) {
 // legs of the run on a level: [{a, b, steps: [i], kind}] (a, b — node ids of the scene, ports as 'port:in|out:<m>')
 function pathLegs(level) {
   const L_ = runList(), legs = new Map();
-  const add = (a, b, i, kind) => { if (!a || !b || a === b) return; const k = a + '\0' + b; if (!legs.has(k)) legs.set(k, { a, b, steps: [], kind }); legs.get(k).steps.push(i); };
+  // a client call (the next flow of a path the code does not call) is a leg of its own: dashed, signed
+  const add = (a, b, i, kind) => { if (!a || !b || a === b) return; const k = a + '\0' + b + (kind === 'client' ? '\0c' : ''); if (!legs.has(k)) legs.set(k, { a, b, steps: [], kind }); legs.get(k).steps.push(i); };
   for (let i = 0; i < L_.length; i++) {
     const s = stepAt(i); if (!s || s.planned) continue;
     if (level === 0) {
-      if (s.actor && sys.nodes[s.actor.id]) add(s.actor.id, 'svc', i, 'entry');
+      if (s.actor && sys.nodes[s.actor.id]) add(s.actor.id, 'svc', i, s.kind === 'client' ? 'client' : 'entry');
       const q = D.externals.find((x) => x.kind === 'queue');
       if (s.kind === 'async' && q && sys.nodes[q.id]) add('svc', q.id, i, 'async');
       s.exts.slice(0, 2).forEach((x) => { if (sys.nodes[x.id] && !(s.kind === 'async' && x === q)) add('svc', x.id, i, 'ext'); });
@@ -377,18 +383,20 @@ function drawPath() {
   legs.sort((p, q) => order[stOf(p)] - order[stOf(q)]).forEach((l) => {
     const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
     const st = stOf(l), back = pairs.has(l.b + '\0' + l.a);
-    const d = hop(ra, rb, back ? 0.22 : 0.1);
-    const grp = S_('g', { class: 'pleg ' + st + (l.kind === 'async' ? ' async' : '') }, g);
+    const cl = l.kind === 'client';
+    const d = hop(ra, rb, back ? 0.22 : cl ? 0.32 : 0.1); // a client leg bends away from the entry leg it may share ends with
+    const grp = S_('g', { class: 'pleg ' + st + (l.kind === 'async' ? ' async' : '') + (cl ? ' client' : '') }, g);
     const shown = ov ? Math.min(...l.steps) : st === 'cur' ? cur : st === 'done' ? Math.max(...l.steps.filter((i) => i <= cur)) : Math.min(...l.steps);
     const tip = l.steps.map((i) => t('pathStep', i + 1, stepLabel(i))).join('\n');
     const v = S_('path', { d, class: 'v', 'marker-end': st === 'next' ? 'url(#arrM)' : 'url(#arrA)' }, grp);
     const hit = S_('path', { d, class: 'hit' }, grp);
     S_('title', {}, hit, tip);
     const len = v.getTotalLength ? v.getTotalLength() : 0, mid = len ? v.getPointAtLength(len / 2) : ctr(ra);
-    const nums = l.steps.map((i) => i + 1), txt = nums.length > 3 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
-    const big = st === 'cur', num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = Math.max(big ? 26 : 20, txt.length * (big ? 9 : 7) + 10);
+    const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 3 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
+    const big = st === 'cur', txt = (big ? String(cur + 1) : txt0) + (cl ? ' · ' + t('jvClient') : '');
+    const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = Math.max(big ? 26 : 20, txt.length * (cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + 10);
     S_('rect', { x: mid.x - w / 2, y: mid.y - (big ? 13 : 10), width: w, height: big ? 26 : 20, rx: big ? 13 : 10 }, num);
-    S_('text', { x: mid.x, y: mid.y + (big ? 5 : 4), 'text-anchor': 'middle' }, num, big ? String(cur + 1) : txt);
+    S_('text', { x: mid.x, y: mid.y + (big ? 5 : 4), 'text-anchor': 'middle' }, num, txt);
     S_('title', {}, num, tip);
     grp.addEventListener('click', (e) => { e.stopPropagation(); AM.play.go(st === 'cur' ? cur : shown); });
     markNode(l.a, st === 'next' ? 'next' : 'done'); markNode(l.b, st);
@@ -489,28 +497,34 @@ function statusPill(st) {
   return `<span class="stat" title="${esc(st.entity + ': ' + (st.from || '?') + ' → ' + st.to)}"><span class="ic" style="background:${ic[1]}">${ic[0]}</span>${esc(st.to)}<small>${esc(st.entity.replace(/Status$/, ''))}</small></span>`;
 }
 
-/* ---------- scenario bar ---------- */
-// shown only while a scenario is open: "<name>  ← step k/N →  <the step>  ✕"
+/* ---------- run bar ---------- */
+// in the centre of the toolbar, only while a scenario is open: "<name>  Overview · ← Step k/N →  ✕"; the step itself
+// is in the inspector; forks, the plate between flows and the outcome go to the strip on top of the inspector (#choice)
 function renderPlayer() {
   const r = state.run, bar = $('#player');
   bar.hidden = !r;
+  if (typeof paintHName === 'function') paintHName();
   if (!r) { showChoice(false); jvPaintTags(); return; }
   const list = runList(), s = curStep(), br = atBranch(), fe = r.fixed ? jvEnd() : null;
   $('#scName').textContent = r.name; $('#scName').title = r.name + (r.desc ? '\n' + r.desc : '');
-  const ov = state.step < 0; // the overview: "Overview · N steps  → Start"
-  $('#capNo').textContent = ov ? t('ovOverview') + ' · ' + t('pkStepsN', list.length) : r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', state.step + 1, list.length);
-  $('#capTx').textContent = s ? s.label + (state.exitText && state.step === list.length - 1 ? ' → ' + t('exit') + ': ' + state.exitText : '') : list.length ? '' : t('noPlay');
-  $('#capTx').title = s && D.fns[s.fid] ? fnInfo(s.fid).name : '';
+  const ov = state.step < 0; // the overview: "Overview · N steps  Start →"
+  $('#pOv').textContent = t('ovOverview'); $('#pOv').setAttribute('aria-pressed', String(ov)); $('#pOv').title = t('ovOverview') + ' (Home)';
+  $('#capNo').textContent = ov ? t('pkStepsN', list.length) : r.fixed && r.segs.length > 1 && s ? jvProgress() : t('stepOf', state.step + 1, list.length);
+  $('#capNo').title = s ? s.label + (D.fns[s.fid] ? '\n' + fnInfo(s.fid).name : '') : list.length ? '' : t('noPlay');
   $('#pPrev').disabled = ov;
-  $('#pStep').textContent = ov && list.length ? '→ ' + t('ovStart') : '→';
+  $('#pStep').textContent = ov && list.length ? t('ovStart') + ' →' : '→';
   $('#pStep').classList.toggle('primary', ov && !!list.length);
   $('#pStep').disabled = !list.length || (state.step >= list.length - 1 && !br && !(fe && fe.jump));
   $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').title = t('closeRun') + ' (Esc)';
   showChoice(br);
   if (!br) showPlate();
+  if (!br && state.exitText && state.step === list.length - 1) {
+    const c = $('#choice'); c.classList.add('on');
+    H('span', { class: 'jv-plate' }, c, esc('→ ' + t('exit') + ': ' + cut(state.exitText, 60)));
+  }
   jvPaintTags();
 }
-// the plate between flows of a path / the end of a variant, next to the step
+// the plate between flows of a path / the end of a variant, on top of the inspector
 function showPlate() {
   const p = jvPlate(); if (!p) return;
   const c = $('#choice'); c.classList.add('on');
@@ -545,7 +559,7 @@ function closeRun() {
 }
 function playFrom(fid) {
   const fl = D.flows.find((x) => x.steps[0] === fid);
-  return openRun(fl ? 'flow:' + fl.i : 'fn:' + fid);
+  return openScenario(fl ? 'flow:' + fl.i : 'fn:' + fid);
 }
 
 Object.assign(AM, {
