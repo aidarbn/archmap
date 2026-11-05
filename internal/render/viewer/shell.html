@@ -15,18 +15,22 @@
         <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="8" height="6" rx="1.5" fill="var(--in)"/><rect x="14" y="3" width="8" height="6" rx="1.5" fill="var(--dom)"/><rect x="8" y="15" width="8" height="6" rx="1.5" fill="var(--ad)"/><path d="M6 9v3h12V9M12 12v3" stroke="var(--text-2)" stroke-width="1.3" fill="none"/></svg>
       </button>
       <i class="live" id="live" hidden></i>
-      <button class="tb" id="sideTog" aria-controls="side"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M6 2.5v11"/></svg></button>
+      <span class="tbsep" aria-hidden="true"></span>
+      <button class="tb" id="sideTog" aria-controls="side"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="fill" d="M3 3h3v10H3z"/><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/></svg></button>
+      <button class="tb" id="panelTog" aria-controls="panel"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="fill" d="M10 3h3v10h-3z"/><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M10 2.5v11"/></svg></button>
+      <button class="tb" id="topTog"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="fill" d="M3 3h10v3H3z"/><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M1.5 6h13"/></svg></button>
+      <button class="tb" id="focusTog" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5L9.5 6.5M6.5 13.5h-4v-4M2.5 13.5l4-4"/></svg></button>
     </div>
     <div class="hc">
       <span class="hname" id="hName"><!--TITLE--></span>
       <div class="runbar" id="player" hidden>
+        <button class="pbtn pback" id="pClose"></button>
+        <span class="psep">·</span>
         <span class="pname" id="scName"></span>
         <button class="pbtn pov" id="pOv"></button>
-        <span class="psep">·</span>
         <button class="pbtn ic" id="pPrev">←</button>
         <span class="pstep" id="capNo"></span>
         <button class="pbtn ic" id="pStep">→</button>
-        <button class="pbtn ic pclose" id="pClose">✕</button>
       </div>
     </div>
     <div class="hr">
@@ -44,7 +48,9 @@
       <div class="sgrip" id="sideGrip" role="separator" aria-orientation="vertical" tabindex="0"></div>
     </nav>
     <section class="stage" id="stage">
+      <button class="fab" id="topFab"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M1.5 6h13M6 9l2 2 2-2"/></svg></button>
       <nav class="crumbs" id="crumbs" aria-label="breadcrumbs"></nav>
+      <div class="rundock" id="runDock"></div>
       <div class="view on" id="v-map">
         <div class="scene" id="sc0"></div><div class="scene hidden" id="sc1"></div><div class="scene hidden" id="sc2"></div><div class="scene hidden" id="sc3"></div>
         <div class="zoomctl"><button id="zOut">−</button><button id="zFit"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button><button id="zIn">+</button></div>

@@ -3,40 +3,41 @@
  * the tooltip), small grey counters only on sections and groups:
  *   System (the root) → Users (actors) → Modules by layer (Entry / Domain / Adapters / Infrastructure …; inside the
  *   modules, inside a module its functions, built only when unfolded) → Outside systems → Data (tables) → API
- *   (services → endpoints) → Statuses (entities) → Scenarios (through paths → their scenarios; then by actor).
+ *   (services → endpoints) → Statuses (entities) → Diagrams (through paths, unfolded → their scenarios; Scheduled —
+ *   the scenarios of background jobs, entry task / cron; All scenarios, folded — by actor).
  * A click on a node selects it on the map (going to its level) or opens its view in the centre (Data / API /
  * Statuses), and the inspector shows it. The tree follows the selection made on the map or in a view: it unfolds
- * down to the selected node and scrolls to it. The filter on top narrows the whole tree (by name).
- * Scenarios open apart, in a window of their own (openScenario: one reused window 'archmap-scenario', the same page
- * with #flow=<id> / #journey=<id> / #fn=<fid> and &solo=1; a blocked pop-up falls back to a new tab). The main window
- * never plays a scenario. The scenario window (SOLO) has no sidebar: the toolbar with the run bar, the map of the
- * participants only, the inspector.
- * The width is dragged by the right edge (200–420 px, localStorage archmap.side.w, double-click — 240); the toolbar
+ * down to the selected node and scrolls to it. The filter on top narrows the whole tree (by name), folded groups too.
+ * A scenario opens in this window (openScenario): the canvas turns into its diagram — the participants only, in
+ * layers, in the order of the steps (map.js applyFocus) — the navigation marks it, the inspector shows the step; the
+ * hash keeps it (#flow=<id> / #journey=<id> / #fn=<fid>). "‹ Map", Esc, another row of the tree or the same
+ * scenario again bring the full map back.
+ * The width is dragged by the right edge (200–420 px, localStorage archmap.side.w, double-click — 260); the toolbar
  * button or `[` hides the column (localStorage archmap.side). */
 
 addI18n({
   ru: {
     nvSys: 'Система', nvActors: 'Пользователи', nvMods: 'Модули', nvExt: 'Внешние системы', nvData: 'Данные', nvApi: 'API', nvStatus: 'Статусы',
-    nvScen: 'Сценарии', nvPaths: 'Сквозные пути', nvWin: 'Откроется в окне сценария',
-    sdFilter: 'Фильтр', sdNone: 'Ничего не найдено', sdHide: 'Скрыть боковую панель ([)', sdShow: 'Показать боковую панель ([)',
+    nvScen: 'Диаграммы', nvPaths: 'Сквозные пути', nvSched: 'По расписанию', nvAll: 'Все сценарии', nvWin: 'Откроется диаграммой на холсте; повторный клик — назад к карте',
+    sdFilter: 'Фильтр', sdNone: 'Ничего не найдено', sdHide: 'Скрыть навигацию', sdShow: 'Показать навигацию',
     sdLabel: 'Навигация', sdGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию', sdFold: 'Свернуть', sdUnfold: 'Развернуть',
-    soloClose: 'Закрыть окно сценария',
+    chPanelHide: 'Скрыть инспектор', chPanelShow: 'Показать инспектор', chTopHide: 'Свернуть верхнюю строку', chTopShow: 'Показать верхнюю строку',
+    chFocusOn: 'Только холст', chFocusOff: 'Вернуть панели',
   },
   en: {
     nvSys: 'System', nvActors: 'Users', nvMods: 'Modules', nvExt: 'Outside systems', nvData: 'Data', nvApi: 'API', nvStatus: 'Statuses',
-    nvScen: 'Scenarios', nvPaths: 'Through paths', nvWin: 'Opens in the scenario window',
-    sdFilter: 'Filter', sdNone: 'Nothing found', sdHide: 'Hide the sidebar ([)', sdShow: 'Show the sidebar ([)',
+    nvScen: 'Diagrams', nvPaths: 'Through paths', nvSched: 'Scheduled', nvAll: 'All scenarios', nvWin: 'Opens as a diagram on the canvas; click again to go back to the map',
+    sdFilter: 'Filter', sdNone: 'Nothing found', sdHide: 'Hide the navigation', sdShow: 'Show the navigation',
     sdLabel: 'Navigation', sdGrip: 'Drag to resize; double-click for the default', sdFold: 'Fold', sdUnfold: 'Unfold',
-    soloClose: 'Close the scenario window',
+    chPanelHide: 'Hide the inspector', chPanelShow: 'Show the inspector', chTopHide: 'Fold the toolbar', chTopShow: 'Show the toolbar',
+    chFocusOn: 'Canvas only', chFocusOff: 'Bring the panels back',
   },
 });
 
 // open: nodes unfolded by hand (the root and Scenarios by default); last: the node clicked last (a view without a
 // selection of its own — Statuses — keeps it marked)
-const SIDE = { hidden: false, q: '', open: new Set(['sys', 'sec:scen', 'scp']), w: 0, last: null, lastView: null };
-const SIDE_W = { def: 240, min: 200, max: 420 };
-// the scenario window: the page opened with a scenario in the hash (#flow= / #journey= / #fn= / #run=)
-const SOLO = /^#(journey|flow|fn|run)=/.test(location.hash || '');
+const SIDE = { hidden: false, q: '', open: new Set(['sys', 'sec:scen', 'scp', 'scs']), w: 0, last: null, lastView: null };
+const SIDE_W = { def: 260, min: 200, max: 420 };
 const IC = (d) => `<svg class="ico" viewBox="0 0 14 14" aria-hidden="true">${d}</svg>`;
 const SIDE_ICON = {
   chev: '<svg viewBox="0 0 8 8" aria-hidden="true"><path d="M2 .8L6.4 4 2 7.2z"/></svg>',
@@ -53,7 +54,11 @@ const SIDE_ICON = {
   status: IC('<circle cx="7" cy="7" r="4.5"/><circle cx="7" cy="7" r="1.6"/>'),
   path: IC('<circle cx="3" cy="3" r="1.5"/><circle cx="11" cy="11" r="1.5"/><path d="M4.5 3H9a2 2 0 010 4H5a2 2 0 000 4h4.5"/>'),
   flow: IC('<path d="M4.5 3.2v7.6L10.6 7z" stroke-linejoin="round"/>'),
+  clock: IC('<circle cx="7" cy="7" r="5"/><path d="M7 4.2V7l2 1.4"/>'),
+  all: IC('<path d="M2.5 3.5h9M2.5 7h9M2.5 10.5h9"/>'),
 };
+// a scenario started by the scheduler: its entry point is a task / cron (background jobs)
+const isScheduled = (fl) => { const f = fl.steps && D.fns[fl.steps[0]], k = f && f.entry ? f.entry.kind : ''; return k === 'task' || k === 'cron'; };
 
 /* ---------- texts ---------- */
 // a description written for people, not the one the model builds from the name ("Actor: Name -> exit",
@@ -93,7 +98,7 @@ function pathSegs(key) {
   return r.segs.map((sg, si) => { const s0 = at; at += sg.steps.length; return { si, at: s0, name: sg.flow ? sg.flow.name : r.name }; });
 }
 
-/* ---------- the scenario window and the hash ---------- */
+/* ---------- the open scenario and the hash ---------- */
 const flowKey = (fl) => 'flow:' + fl.i;
 const flowHashId = (fl) => fl.id || String(fl.i);
 function keyHash(key) {
@@ -115,37 +120,29 @@ function hashRun() {
   else key = buildRun(id) ? id : null;
   return key ? { key, step } : null;
 }
-// the scenario window keeps its run in the hash (a reload shows the same); the main window writes nothing
+// the open scenario is kept in the hash (a reload or a shared link shows the same); closing it clears the hash.
+// Old links of the former scenario window (with the solo flag) open the scenario here too and lose the flag.
+const BASE_TITLE = document.title;
 function writeHash() {
-  if (!SOLO || !state.run) return;
-  const want = keyHash(state.run.key) + '&solo=1';
+  const want = state.run ? keyHash(state.run.key) : '';
+  document.title = state.run ? state.run.name + ' — ' + BASE_TITLE : BASE_TITLE;
   if ((location.hash || '') === want) return;
-  try { history.replaceState(null, '', want); } catch (e) { /* file:// in some browsers */ }
+  try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
 }
-// openScenario(key, step): the scenario in its own window — one reused window; inside it, in place
+// openScenario(key, step): the scenario in this window — the canvas turns into its diagram (the participants only,
+// map.js applyFocus); the navigation and the inspector stay. The same scenario again (at the same place) closes it.
 function openScenario(key, step) {
   closeMenu();
-  if (SOLO) { openRunAt(key, step); return; }
-  const h = keyHash(key); if (!h) return;
-  const url = location.href.split('#')[0] + h + '&solo=1' + (step >= 0 ? '&step=' + step : '');
-  let w = null;
-  try { w = window.open(url, 'archmap-scenario'); } catch (e) { w = null; }
-  if (w) { try { w.focus(); } catch (e) { /* ignore */ } return; }
-  // the pop-up is blocked: a plain link to a new tab
-  const a = H('a', { href: url, target: '_blank', rel: 'opener' }, document.body); a.click(); a.remove();
+  if (state.run && state.run.key === key && (step == null || step < 0 || step === state.step)) { closeRun(); return; }
+  openRunAt(key, step);
 }
 async function openRunAt(key, step) {
   if (!state.run || state.run.key !== key) await openRun(key);
   if (step >= 0) { for (let i = 0; i < 40 && state.busy; i++) await sleep(100); AM.play.go(step); }
 }
-// the scenario window: no sidebar, the toolbar title is the run, ✕ closes the window
-function setupSolo() {
-  document.body.classList.add('solo');
-  SIDE.hidden = true; $('main').classList.add('noside');
-  $('#pClose').onclick = () => { window.close(); setTimeout(() => { if (!window.closed) location.href = location.href.split('#')[0]; }, 200); };
-  bus.on('flow', () => { if (state.run) document.title = state.run.name + ' — archmap'; writeHash(); });
-  bus.on('lang', () => { $('#pClose').title = t('soloClose'); });
-  window.addEventListener('hashchange', () => { const r = hashRun(); if (r) openRunAt(r.key, r.step); });
+function setupHash() {
+  bus.on('flow', writeHash);
+  window.addEventListener('hashchange', () => { const r = hashRun(); if (r) openRunAt(r.key, r.step); else if (state.run && !location.hash) closeRun(); });
 }
 
 /* ---------- the tree ---------- */
@@ -172,12 +169,17 @@ function navTree() {
   }
   const ents = Object.keys(D.states || {});
   if (ents.length && hasView('status')) kids.push(N('sec:status', t('nvStatus'), 'sec', { count: ents.length, act: () => setView('status'), kids: ents.map((en) => N('s:' + en, en, 'status', { act: () => { setView('status'); bus.emit('status:focus', { machine: en }); } })) }));
-  // scenarios: through paths (a scenario of a path opens the path at its first step), then by actor
-  const sk = [], js = jvJourneys();
-  if (js.length) sk.push(N('scp', t('nvPaths'), 'sec', { count: js.length, kids: js.map((j) => { const key = 'journey:' + j.id; return N('r:' + key, pathName(j), 'path', { title: j.name, win: true, act: () => openScenario(key),
+  // diagrams: through paths (unfolded; a scenario of a path opens the path at its first step), the scheduled
+  // scenarios (entry point task / cron), then every visible scenario by actor — folded, the filter still finds them
+  const sk = [], js = jvJourneys(), fls = visibleFlows();
+  const flowNode = (pre, fl) => N(pre + flowKey(fl), fl.name, 'flow', { rk: flowKey(fl), win: true, act: () => openScenario(flowKey(fl)) });
+  if (js.length) sk.push(N('scp', t('nvPaths'), 'sec', { count: js.length, kids: js.map((j) => { const key = 'journey:' + j.id; return N('r:' + key, pathName(j), 'path', { title: j.name, rk: key, win: true, act: () => openScenario(key),
     kids: () => pathSegs(key).map((sg) => N('r:' + key + '@' + sg.at, sg.name, null, { no: sg.si + 1, win: true, act: () => openScenario(key, sg.at) })) }); }) }));
-  sideGroups().forEach((g) => sk.push(N('scg:' + g.id, g.name, 'role', { count: g.fls.length, kids: g.fls.map((fl) => N('r:' + flowKey(fl), fl.name, 'flow', { win: true, act: () => openScenario(flowKey(fl)) })) })));
-  if (sk.length) kids.push(N('sec:scen', t('nvScen'), 'sec', { count: visibleFlows().length, kids: sk }));
+  const sched = fls.filter(isScheduled);
+  if (sched.length) sk.push(N('scs', t('nvSched'), 'clock', { count: sched.length, kids: sched.map((fl) => flowNode('rs:', fl)) }));
+  const groups = sideGroups();
+  if (groups.length) sk.push(N('sca', t('nvAll'), 'all', { count: fls.length, kids: groups.map((g) => N('scg:' + g.id, g.name, 'role', { count: g.fls.length, kids: g.fls.map((fl) => flowNode('r:', fl)) })) }));
+  if (sk.length) kids.push(N('sec:scen', t('nvScen'), 'sec', { count: fls.length + js.length, kids: sk }));
   return N('sys', PJ.name || D.M.title || D.F.repo || t('nvSys'), 'sys', { title: t('nvSys'), act: () => navSys(null), kids });
 }
 const kidsOf = (n) => (typeof n.kids === 'function' ? n.kids() : n.kids || []);
@@ -198,6 +200,7 @@ async function navMod(m) {
 /* ---------- the selection in the tree ---------- */
 // the node of the current selection (map or view) and the nodes above it
 function selKey() {
+  if (state.run) return null; // the open scenario is marked by its own row (renderSide, n.rk)
   const s = state.sel;
   if (s) {
     if (s.t === 'svc') return 'sys';
@@ -231,8 +234,19 @@ function ancestors(key) {
   else if (k === 'e:') { const e = (D.endpoints || [])[+id]; if (e) a.push('sec:api', 'svc:' + (e.service || (e.kind === 'grpc' ? 'gRPC' : 'HTTP'))); }
   return a;
 }
+// the folders above the row of an open scenario: a path, a scheduled one, else its actor in "All scenarios"
+function runAncestors(key) {
+  const a = ['sys', 'sec:scen'];
+  if (key.startsWith('journey:')) return a.concat('scp');
+  const fl = key.startsWith('flow:') ? D.flows.find((x) => x.i === +key.slice(5)) : null;
+  if (!fl) return a;
+  if (isScheduled(fl) && !fl.hidden) return a.concat('scs');
+  const g = sideGroups().find((x) => x.fls.includes(fl));
+  return g ? a.concat('sca', 'scg:' + g.id) : a;
+}
 // unfold the tree down to the selected node and scroll to it
 function revealSel() {
+  if (state.run) { runAncestors(state.run.key).forEach((x) => SIDE.open.add(x)); SIDE.reveal = true; return; }
   const k = selKey(); if (!k) return;
   ancestors(k).forEach((x) => SIDE.open.add(x));
   SIDE.reveal = true;
@@ -242,16 +256,17 @@ function revealSel() {
 function treeRow(n, d, open, hasKids, cur) {
   const chev = hasKids ? `<span class="chev${open ? ' on' : ''}" data-tog="${esc(n.key)}" title="${esc(t(open ? 'sdFold' : 'sdUnfold'))}">${SIDE_ICON.chev}</span>` : '<span class="chev"></span>';
   const tip = (n.title || n.name) + (n.win ? '\n' + t('nvWin') : '');
-  return `<button type="button" class="ti${n.cls ? ' ' + n.cls : ''}${n.key.startsWith('sec:') || n.key === 'scp' || n.key === 'sys' ? ' sec' : ''}${cur ? ' cur' : ''}" style="--d:${d}" data-k="${esc(n.key)}" title="${esc(tip)}"${hasKids ? ` aria-expanded="${open}"` : ''}${cur ? ' aria-current="true"' : ''}>` +
+  return `<button type="button" class="ti${n.cls ? ' ' + n.cls : ''}${n.key.startsWith('sec:') || n.key === 'scp' || n.key === 'scs' || n.key === 'sca' || n.key === 'sys' ? ' sec' : ''}${cur ? ' cur' : ''}" style="--d:${d}" data-k="${esc(n.key)}" title="${esc(tip)}"${hasKids ? ` aria-expanded="${open}"` : ''}${cur ? ' aria-current="true"' : ''}>` +
     chev + (n.icon ? SIDE_ICON[n.icon] : '') + (n.no != null ? `<span class="no">${n.no}</span>` : '') + `<span class="nm">${esc(n.name)}</span>` + (n.count != null ? `<span class="ct">${n.count}</span>` : '') + '</button>';
 }
 let NAV = new Map(); // key -> node, for the clicks
 function renderSide() {
-  const box = $('#sideList'); if (!box || !D.F || SOLO) return;
+  const box = $('#sideList'); if (!box || !D.F) return;
   const top = box.scrollTop, qq = lc(SIDE.q).trim(), cur = selKey(), out = [];
   NAV = new Map();
   // with a filter: a node shows when its name or a name under it matches; the matching branches are unfolded
   const hit = (n) => lc(n.name).includes(qq);
+  const rk = state.run ? state.run.key : null, isCur = (n) => n.key === cur || (!!rk && n.rk === rk);
   const walk = (n, d) => {
     NAV.set(n.key, n);
     const ks = kidsOf(n), hasKids = ks.length > 0;
@@ -260,11 +275,11 @@ function renderSide() {
       const mine = hit(n), rows = [];
       ks.forEach((c) => { const r = walk(c, d + 1); if (r) rows.push(r); });
       if (!mine && !rows.length) return '';
-      return treeRow(n, d, rows.length > 0, hasKids, n.key === cur) + rows.join('');
+      return treeRow(n, d, rows.length > 0, hasKids, isCur(n)) + rows.join('');
     }
     const open = hasKids && SIDE.open.has(n.key);
     if (open) sub = ks.map((c) => walk(c, d + 1));
-    return treeRow(n, d, open, hasKids, n.key === cur) + sub.join('');
+    return treeRow(n, d, open, hasKids, isCur(n)) + sub.join('');
   };
   const h = walk(navTree(), 0);
   box.innerHTML = h || `<div class="sn">${esc(t('sdNone'))}</div>`;
@@ -280,18 +295,99 @@ function paintSide() {
   const q = $('#sideQ'); q.placeholder = t('sdFilter'); q.setAttribute('aria-label', t('sdFilter'));
   $('#side').setAttribute('aria-label', t('sdLabel'));
   const g = $('#sideGrip'); g.title = t('sdGrip'); g.setAttribute('aria-label', t('sdGrip'));
-  paintHName();
+  paintHName(); paintChrome();
 }
 // the project name in the centre of the toolbar: only while the sidebar (which has it on top) is hidden and no run is open
-function paintHName() { const n = $('#hName'); if (n) n.hidden = SOLO || !SIDE.hidden || !!state.run; }
+function paintHName() { const n = $('#hName'); if (n) n.hidden = !SIDE.hidden || !!state.run; }
 // the canvas changed its width: the scenes take the new size
 const stageResized = () => { rebuildMap(); bus.emit('resize'); };
 function setSideHidden(h) {
-  if (SOLO) return;
+  if (SIDE.hidden === !!h) return;
   SIDE.hidden = !!h;
   try { localStorage.setItem('archmap.side', h ? '0' : '1'); } catch (e) { /* file:// without storage */ }
   paintSide();
-  stageResized();
+  chromeResized();
+}
+
+/* ---------- the panels: hiding ----------
+ * Every panel hides: the navigation (`[`), the inspector (`]`), the toolbar (`\`, its button or a double click on its
+ * empty space; a small floating button in the corner of the canvas brings it back and the step navigation of an open
+ * scenario moves to a floating plate at the bottom of the canvas). Cmd/Ctrl+. — the canvas only: everything at once,
+ * and back to what was shown before. A column slides shut (CSS); once it has, the scenes take the new size and the
+ * camera fits again, animated. All kept in localStorage: archmap.side, archmap.panel, archmap.top, archmap.focus. */
+const CHR = { top: false, focus: null, rt: 0 };
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+const chStore = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* file:// without storage */ } };
+const chLoad = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+function chromeResized() {
+  clearTimeout(CHR.rt);
+  const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--chrome-t')) || 0;
+  CHR.rt = setTimeout(() => {
+    rebuildMap(true);
+    if (state.view === 'map') fitCur();
+    bus.emit('resize');
+  }, ms + 30);
+}
+function paintChrome() {
+  const tip = (b, s, k) => { const el = $(b); if (!el) return; const v = s + (k ? '  ' + k : ''); el.title = v; el.setAttribute('aria-label', s); };
+  const fk = (MAC ? '⌘' : 'Ctrl+') + '.';
+  tip('#sideTog', t(SIDE.hidden ? 'sdShow' : 'sdHide'), '[');
+  tip('#panelTog', t(PNL.closed ? 'chPanelShow' : 'chPanelHide'), ']');
+  $('#panelTog').setAttribute('aria-expanded', String(!PNL.closed));
+  tip('#topTog', t('chTopHide'), '\\');
+  tip('#focusTog', t(CHR.focus ? 'chFocusOff' : 'chFocusOn'), fk);
+  $('#focusTog').setAttribute('aria-pressed', String(!!CHR.focus));
+  tip('#topFab', t(CHR.focus ? 'chFocusOff' : 'chTopShow'), CHR.focus ? fk : '\\');
+}
+function setTopHidden(h) {
+  if (CHR.top === !!h) return;
+  CHR.top = !!h;
+  chStore('archmap.top', CHR.top ? '0' : null);
+  paintTop();
+  chromeResized();
+}
+function paintTop() {
+  $('.app').classList.toggle('notop', CHR.top);
+  $('header').toggleAttribute('inert', CHR.top);
+  // the run bar: in the toolbar, or on the floating plate at the bottom of the canvas while the toolbar is folded
+  const p = $('#player'), home = CHR.top ? $('#runDock') : $('header .hc');
+  if (p.parentNode !== home) home.appendChild(p);
+  paintChrome();
+}
+// the canvas only: hide everything, remember what was shown; again — bring it back
+function setFocus(on) {
+  if (!!CHR.focus === !!on) return;
+  if (on) {
+    CHR.focus = { side: SIDE.hidden, panel: PNL.closed, top: CHR.top };
+    setSideHidden(true); setPanelHidden(true); setTopHidden(true);
+    chStore('archmap.focus', JSON.stringify(CHR.focus));
+  } else {
+    const f = CHR.focus; CHR.focus = null; chStore('archmap.focus', null);
+    setSideHidden(f.side); setPanelHidden(f.panel); setTopHidden(f.top);
+  }
+  paintChrome();
+}
+// a single panel toggled by hand ends the canvas-only mode without restoring the rest
+function dropFocus() { if (CHR.focus) { CHR.focus = null; chStore('archmap.focus', null); paintChrome(); } }
+function setupChrome() {
+  CHR.top = chLoad('archmap.top') === '0';
+  try { CHR.focus = JSON.parse(chLoad('archmap.focus') || 'null'); } catch (e) { CHR.focus = null; }
+  // the first paint takes the stored layout without the slide
+  document.documentElement.style.setProperty('--chrome-t', '0ms');
+  paintTop();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.style.removeProperty('--chrome-t')));
+  $('#topTog').onclick = () => { dropFocus(); setTopHidden(true); };
+  $('#focusTog').onclick = () => setFocus(!CHR.focus);
+  $('#topFab').onclick = () => { if (CHR.focus) setFocus(false); else setTopHidden(false); };
+  $('header').addEventListener('dblclick', (e) => { if (e.target.closest('button, input, .menu, .runbar, .hname')) return; dropFocus(); setTopHidden(true); });
+  window.addEventListener('keydown', (e) => {
+    const tg = e.target.tagName;
+    if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable) return;
+    if (e.key === '.' && (e.metaKey || e.ctrlKey) && !e.altKey) { e.preventDefault(); setFocus(!CHR.focus); }
+    else if (e.key === '\\' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); dropFocus(); setTopHidden(!CHR.top); }
+  });
+  bus.on('lang', paintChrome);
+  paintChrome();
 }
 function setSideWidth(w, save) {
   SIDE.w = w ? Math.max(SIDE_W.min, Math.min(SIDE_W.max, Math.round(w))) : 0;
@@ -318,7 +414,7 @@ function setupSideGrip() {
   });
 }
 function setupSide() {
-  if (SOLO) { setupSolo(); paintSide(); return; }
+  setupHash();
   let v = null, w = 0; try { v = localStorage.getItem('archmap.side'); w = +localStorage.getItem('archmap.side.w'); } catch (e) { /* ignore */ }
   SIDE.hidden = v === '0';
   if (w) setSideWidth(w);
@@ -330,6 +426,8 @@ function setupSide() {
     const n = NAV.get(r.getAttribute('data-k')); if (!n) return;
     closeMenu();
     if (n.act) {
+      // another row of the tree leaves the open scenario: back to the full map first
+      if (!n.win && state.run) closeRun();
       if (!n.win) { SIDE.last = n.key; SIDE.lastView = null; }
       Promise.resolve(n.act()).then(() => { if (!n.win) { SIDE.lastView = state.view; renderSide(); } });
       if (!n.win) renderSide();
@@ -337,19 +435,20 @@ function setupSide() {
   });
   $('#sideQ').addEventListener('input', (e) => { SIDE.q = e.target.value; renderSide(); });
   $('#sideQ').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); if (e.target.value) { e.target.value = ''; SIDE.q = ''; renderSide(); } else e.target.blur(); } });
-  $('#sideTog').onclick = () => setSideHidden(!SIDE.hidden);
+  $('#sideTog').onclick = () => { dropFocus(); setSideHidden(!SIDE.hidden); };
   setupSideGrip();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === '[') { e.preventDefault(); setSideHidden(!SIDE.hidden); }
+    if (e.key === '[') { e.preventDefault(); dropFocus(); setSideHidden(!SIDE.hidden); }
   });
-  // the tree follows the selection on the map and in the views
+  // the tree follows the selection on the map and in the views, and the open scenario
   const follow = () => { revealSel(); renderSide(); };
-  ['select', 'level', 'view'].forEach((ev) => bus.on(ev, follow));
+  ['select', 'level', 'view', 'flow'].forEach((ev) => bus.on(ev, follow));
   bus.on('lang', () => { paintSide(); renderSide(); });
   bus.on('data', () => { paintSide(); renderSide(); });
   paintSide(); renderSide();
 }
 
-Object.assign(AM, { side: { render: renderSide, setHidden: setSideHidden, setWidth: setSideWidth, get hidden() { return SIDE.hidden; }, get width() { return SIDE.w || SIDE_W.def; }, groups: sideGroups, realDesc, openScenario, solo: SOLO } });
+Object.assign(AM, { side: { render: renderSide, setHidden: setSideHidden, setWidth: setSideWidth, get hidden() { return SIDE.hidden; }, get width() { return SIDE.w || SIDE_W.def; }, groups: sideGroups, realDesc, openScenario, hashRun },
+  chrome: { setTop: setTopHidden, setFocus, get top() { return CHR.top; }, get focus() { return !!CHR.focus; } } });

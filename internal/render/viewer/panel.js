@@ -123,7 +123,7 @@ function runOverviewHTML() {
 const flowsFrom = (fid) => visibleFlows().filter((fl) => fl.steps && fl.steps[0] === fid);
 const flowsThrough = (pred) => visibleFlows().filter((fl) => flowSteps(fl).some((s) => D.fns[s] && pred(s)));
 // the views reached from a card (there is no other way to them but ⋯): API, Data (a table), Statuses (a machine)
-const hasView = (id) => !SOLO && VIEWS.some((v) => v.id === id); // the scenario window has no views
+const hasView = (id) => VIEWS.some((v) => v.id === id);
 const viewBtn = (act, label, arg) => `<button class="pbtn" data-view="${act}"${arg != null ? ` data-arg="${esc(arg)}"` : ''}>${esc(label)}</button>`;
 function tableChips(fids) {
   if (!hasView('data')) return '';
@@ -359,15 +359,16 @@ function openMod(m) {
 }
 
 /* ---------- the inspector: hiding and resizing ----------
- * A docked column at the right of the canvas (280 px), always there: with nothing selected it shows the system
- * overview. `]` or Cmd/Ctrl+. hide and show it (the canvas takes the width). The width is dragged by the left edge
+ * A docked column at the right of the canvas (300 px): with nothing selected it shows the system overview. `]` or
+ * the toolbar button hide and show it (it slides shut, the canvas takes the width; localStorage archmap.panel);
+ * Cmd/Ctrl+. hides every panel at once (side.js, the canvas only). The width is dragged by the left edge
  * (240–480 px; arrows nudge it, double-click resets it) and kept in localStorage (archmap.panel.w). */
 addI18n({
   ru: { pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },
   en: { pnGrip: 'Drag to resize; double-click for the default' },
 });
 const PNL = { closed: false, w: 0 };
-const PNL_W = { def: 280, min: 240, max: 480 };
+const PNL_W = { def: 300, min: 240, max: 480 };
 const pnStore = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
 const pnLoad = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 function paintPanelShown() { $('main').classList.toggle('nopanel', PNL.closed); }
@@ -375,8 +376,9 @@ function paintPanelBtn() { $('#panelGrip').title = t('pnGrip'); $('#panelGrip').
 function setPanelHidden(h) {
   if (PNL.closed === !!h) return;
   PNL.closed = !!h;
-  paintPanelShown();
-  rebuildMap(); bus.emit('resize'); // the canvas changed its width
+  pnStore('archmap.panel', PNL.closed ? '0' : null);
+  paintPanelShown(); paintChrome();
+  chromeResized(); // the canvas changed its width: refit once the column has slid
 }
 function setPanelWidth(w, save) {
   PNL.w = w ? Math.max(PNL_W.min, Math.min(PNL_W.max, Math.round(w))) : 0;
@@ -387,11 +389,13 @@ const panelResized = () => { rebuildMap(); bus.emit('resize'); };
 function setupSidePanel() {
   const w = +pnLoad('archmap.panel.w');
   if (w) setPanelWidth(w);
+  PNL.closed = pnLoad('archmap.panel') === '0';
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || e.target.isContentEditable) return;
-    if ((e.key === ']' && !e.metaKey && !e.ctrlKey && !e.altKey) || (e.key === '.' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); setPanelHidden(!PNL.closed); }
+    if (e.key === ']' && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); dropFocus(); setPanelHidden(!PNL.closed); }
   });
+  $('#panelTog').onclick = () => { dropFocus(); setPanelHidden(!PNL.closed); };
   const grip = $('#panelGrip');
   grip.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;

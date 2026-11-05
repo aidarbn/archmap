@@ -304,7 +304,7 @@ function buildSystem() {
   const sv = S_('g', { class: 'n', 'data-id': 'svc' }, gn);
   S_('rect', { x: SVC.x, y: SVC.y, width: SVC.w, height: SVC.h, rx: 18, class: 'card', style: 'stroke-width:1.5' }, sv);
   const title = PJ.name || D.M.title || D.F.repo || 'repo';
-  const tt = S_('text', { x: SVC.x + 24, y: SVC.y + 40, class: 't1', style: 'font-size:22px;letter-spacing:-.01em' }, sv, cut(title, 26));
+  const tt = S_('text', { x: SVC.x + 24, y: SVC.y + 40, class: 't1 ttl', style: 'font-size:24px;letter-spacing:-.01em' }, sv, cut(title, 26));
   const langs = Object.entries(D.F.langs || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map((x) => x[0]).join(', ');
   const meta = S_('text', { x: SVC.x + 24, y: SVC.y + 40, class: 't3 mono' }, sv, cut((D.F.repo && D.F.repo !== title ? D.F.repo + ' · ' : '') + langs, 34));
   requestAnimationFrame(() => { try { meta.setAttribute('x', SVC.x + 34 + tt.getComputedTextLength()); } catch (e) { /* hidden */ } });
@@ -660,7 +660,7 @@ function buildFns(mod) {
   S_('rect', { x: frame.x, y: frame.y, width: frame.w, height: frame.h, rx: 18, fill: 'var(--surface)', stroke: 'var(--line-2)', filter: 'url(#sh)' }, ge);
   S_('rect', { x: frame.x, y: frame.y, width: frame.w, height: frame.h, rx: 18, fill: LCOLOR[l], opacity: .045 }, ge);
   S_('rect', { x: frame.x + 18, y: frame.y + 18, width: 4, height: 30, rx: 2, fill: LCOLOR[l] }, ge);
-  S_('text', { x: frame.x + 32, y: frame.y + 32, style: 'font-size:20px;font-weight:650;fill:var(--text)' }, ge, cutL(short(mod), 60));
+  S_('text', { x: frame.x + 32, y: frame.y + 32, class: 'ttl', style: 'font-size:22px;fill:var(--text)' }, ge, cutL(short(mod), 60));
   S_('text', { x: frame.x + 32, y: frame.y + 56, style: 'font-size:14px;fill:var(--text-2)' }, ge, `${cut(modDesc(mod) || modRole(mod), 70)} · ${t('shown')} ${shown.length} ${t('of')} ${all.length}`);
   // ports: inbound (top) and outbound (bottom)
   const outP = {}, inP = {};

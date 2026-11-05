@@ -20,17 +20,30 @@ How the viewer is built and how to add a view: [docs/viewer.md](docs/viewer.md).
 The page is a desktop layout in the manner of Figma (≥ 1200 px wide; there is
 no mobile layout): a thin toolbar on top and three docked columns under it —
 the sidebar, the canvas, the inspector. Nothing floats over the map but the
-crumbs and the zoom block in its corners. A light neutral theme (a dotted grey
-canvas, white panels, 1 px borders, one accent colour, small radii, no panel
-shadows) and a dark one.
+crumbs and the zoom block in its corners. The look follows claude.ai: a warm
+cream canvas with a faint dotted grid, slightly darker warm panels without
+shadows, thin warm borders, serif headings (the project name, the inspector
+titles, the scenario and step names) over a sans interface, soft radii, the
+Claude terracotta as the one accent (the current step, the selection, the main
+button), dusty layer colours; and a dark theme in the same spirit.
 
 - **Toolbar** (40 px): at the left the logo (a click goes back to the whole
-  system), the live dot under `archmap serve` and the sidebar toggle; in the
-  centre the open scenario with its navigation (only in the scenario window,
-  below); at the right a small **⋯**: **API**, **Data**, **Statuses**,
+  system, or closes an open scenario), the live dot under `archmap serve` and
+  the panel toggles — navigation, inspector, toolbar, canvas only (their
+  tooltips name the keys); in the centre the open scenario with its navigation
+  (below); at the right a small **⋯**: **API**, **Data**, **Statuses**,
   **Language**, **Theme** and, on a branch with changes, **Only changed**.
   There is no search.
-- **Sidebar** — the base of the page, a docked column at the left (240 px; drag
+- **Every panel hides**, remembered by the browser:
+  - `[` — the navigation (sidebar), `]` — the inspector; the column slides shut
+    and the canvas re-fits;
+  - `\` (or the toolbar button, or a double click on the empty part of the
+    toolbar) — the toolbar folds; a small button in the top-left corner of the
+    canvas brings it back, and the step navigation of an open scenario moves to
+    a small floating plate at the bottom centre of the canvas;
+  - `⌘.` / `Ctrl+.` (or the toolbar button) — **canvas only**: everything at
+    once; again — back to what was shown before (the corner button too).
+- **Sidebar** — the base of the page, a docked column at the left (260 px; drag
   its right edge for 200–420 px, double-click for the default, remembered by
   the browser; the toolbar button or `[` hides it). On top the project name
   with the branch under it, then a compact **filter** that narrows the whole
@@ -39,25 +52,28 @@ shadows) and a dark one.
   small grey counter on sections and groups: **System** → **Users** (actors) →
   **Modules** by layer (Entry, Domain, Adapters, Infrastructure …; a module
   unfolds into its functions) → **Outside systems** → **Data** (tables) →
-  **API** (services → endpoints) → **Statuses** (entities) → **Scenarios**
-  (through paths → their scenarios, then the scenarios by who starts them;
-  technical scenarios are not listed). A click selects the node on the map
-  (going to its level) or opens its view in the centre (Data, API, Statuses),
-  and the inspector shows it. The tree follows a selection made on the map or
-  in a view: it unfolds down to the selected node and scrolls to it.
-- **Scenarios open apart**, in a window of their own: a click on a path or a
-  scenario (in the tree or in a card) opens one reused browser window
-  `archmap-scenario` — the same page with `#journey=<id>` / `#flow=<id>` and
-  `&solo=1` (works for a static file and under `serve`; when the pop-up is
-  blocked, a new tab). The main window never plays a scenario: its map stays the
-  map. The scenario window has no sidebar: the toolbar with the scenario name
-  and **Overview · ← Step k/N →** in the centre (✕ closes the window), the map
-  of its participants only, the inspector at the right. A reload shows the same
-  scenario.
+  **API** (services → endpoints) → **Statuses** (entities) → **Diagrams**:
+  **Through paths** (unfolded; a path unfolds into its scenarios), **Scheduled**
+  (the scenarios of background jobs — entry point task / cron) and, folded at
+  the bottom, **All scenarios** by who starts them (technical scenarios are not
+  listed; the counters count what is listed). The filter finds scenarios in
+  folded groups too, unfolding the way to them. A click selects the node on the
+  map (going to its level) or opens its view in the centre (Data, API,
+  Statuses), and the inspector shows it. The tree follows a selection made on
+  the map or in a view: it unfolds down to the selected node and scrolls to it.
+- **Everything in one window.** A click on a path or a scenario (in the tree, ▶
+  at an endpoint, "Scenarios through this node" in a card, a scenario inside a
+  path) turns the canvas into **its diagram** (below) with a fade; the
+  navigation stays and marks it, the inspector shows the overview and then the
+  step, the toolbar reads **‹ Map · name · Overview ← Step k/N →**. **‹ Map**,
+  Esc, another row of the tree or the same scenario again bring the whole map
+  back where it was. The hash keeps the open scenario (`#journey=<id>` /
+  `#flow=<id>`): a reload or a shared link opens it (old links with `&solo=1`
+  too).
 - **Breadcrumbs** "where I am" sit small in the top-left corner of the canvas
   (system › modules › module › function — a click goes back up; on a view:
   system › API).
-- **An open path or scenario** (the scenario window) is the same system,
+- **An open path or scenario** (its diagram) is the same system,
   simplified: it shows **only what takes part in it** — the actors
   that start its flows (in a column at the left), the modules of its steps, the outside systems they call,
   the database when a step reads or writes, the queue at a hand-off. Nothing
@@ -75,10 +91,10 @@ shadows) and a dark one.
   actor, an outside system, a module or a function shows one short line of its
   description when the code has one (an actor: `61 scenarios · Admin service…`;
   the count leaves out technical scenarios).
-- **Inspector** — a docked column at the right (280 px; drag its left edge for
-  240–480 px; `]` or Cmd/Ctrl+. hide and show it), like the Design panel of
-  Figma: sections with small titles, dense "label — value" rows. It is always
-  there: **with nothing selected it shows the system overview** — what the
+- **Inspector** — a docked column at the right (300 px; drag its left edge for
+  240–480 px; `]` or its toolbar button hide and show it): sections with serif
+  titles, calm "label — value" rows. **With nothing selected it shows the
+  system overview** — what the
   system does (the project description), the counts, who uses it and which
   outside systems it talks to, each with a line of description (a name opens
   its card). A selection (actor, outside system, module, function, step,
@@ -106,23 +122,27 @@ shadows) and a dark one.
   flow of it already played. The rules are in `internal/autosem/trim.go`.
 - **Scenarios** go only by hand: there is no auto play and nothing starts by
   itself. Pick a path or scenario in the sidebar, or in an actor, module or
-  function card: its window opens on the **overview** (step 0). The inspector says what it
+  function card: its diagram opens on the **overview** (step 0). The inspector says what it
   does (the description of `arch:flow` / the doc of the entry point / the rpc
   comment), who starts it, the entry (endpoint or task), how it ends, the
   number of steps and forks, and its participants — modules and outside systems
   with a line of description each, then the tables; a path lists its scenarios
   in order, each with its line (a click goes to its first step). The map shows
-  the whole path evenly, no step lit, and the toolbar reads `<name>  Overview ·
-  ← N steps  Start →  ✕`. → (or Start) goes to step 1, then it is `<name>
-  Overview · ← Step k/N →  ✕` and the inspector shows the step; ← from step 1
+  the whole path evenly, no step lit, and the toolbar reads `‹ Map · <name>
+  Overview ← N steps  Start →`. → (or Start) goes to step 1, then it is `‹ Map ·
+  <name>  Overview ← Step k/N →` and the inspector shows the step; ← from step 1
   (or Overview, Home) returns to the overview. The whole path is drawn on the level you are on. The current leg is
   bright with a bigger number and glows once, passed legs are a calm accent, the
-  coming ones pale and dashed with their numbers, the rest of the map is dimmed;
+  coming ones pale and dashed with their numbers (the nodes of the scenario,
+  outside systems included, stay plain on the steps where they are idle; the
+  number pills keep clear of each other and of the band titles; a call the
+  client makes is a dashed leg signed short "client", the full text in its
+  tooltip), the rest of the map is dimmed;
   on the modules the module of the step lights up, inside a module the function.
   → and ← (or the arrows of the toolbar) step, a click on a leg or its number goes
   to that step (the tooltip says `Step k: …`), a click on the node of the next
-  step steps forward. Home goes back to the overview, Esc goes a level up, then
-  to the overview. The camera
+  step steps forward. Home goes back to the overview, Esc closes the scenario
+  (back to the map). The camera
   moves smoothly and only when the step is off screen. At a fork the branches
   that go on in another flow are pale legs (and buttons in a strip on top of the
   inspector, with the plate between flows and the outcome): a click
@@ -399,9 +419,9 @@ through all the steps. The name is built from the condition (`paid → to the ca
 has at most 12 variants (outcomes with the same end are folded together first). A flow without
 `arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
 
-**In the viewer** the through paths head the Scenarios section of the sidebar tree, the other scenarios
-follow grouped by actor; they are also in the actor, module and function cards (paths there are marked
-"through path"). Each opens in the scenario window.
+**In the viewer** the through paths head the Diagrams section of the sidebar tree, then the scheduled
+scenarios and, folded, all scenarios grouped by actor; they are also in the actor, module and function
+cards (paths there are marked "through path"). Each opens as a diagram on the canvas of the same window.
 
 - Stepping through a path goes over its flows one after another; between two flows a plate on top of
   the inspector says how the next one starts ("→ through the queue", "→ on condition …", "next the
@@ -563,7 +583,7 @@ viewer as `map`, but it follows the repo:
   changed function is re-read.
 - Every view follows the update (the endpoint list, the ER diagram and the state
   machines are rebuilt from the new facts).
-- The sidebar, ⋯, the cards and the scenario window work as in a static file (see [Interface](#interface)).
+- The sidebar, ⋯, the cards and the scenario diagrams work as in a static file (see [Interface](#interface)).
 - Only loopback addresses are accepted for `--addr`; requests with a foreign
   `Host` header are rejected, and so are all methods but GET/HEAD, except
   `POST /spec/ops` and `PUT /spec/file` (JSON only, same origin, files only

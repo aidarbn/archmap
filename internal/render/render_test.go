@@ -248,10 +248,21 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("the old floating layout is left in the page: %q", s)
 		}
 	}
-	// scenarios open apart, in one reused window of their own
-	for _, s := range []string{"function openScenario", "'archmap-scenario'", "&solo=1"} {
+	// scenarios open in the same window: the canvas turns into the diagram, the hash keeps it; no window of its own
+	for _, s := range []string{"function openScenario", "function writeHash", `id="runDock"`} {
 		if !strings.Contains(v, s) {
-			t.Errorf("the scenario window is missing: %q", s)
+			t.Errorf("the in-window scenario is missing: %q", s)
+		}
+	}
+	for _, s := range []string{"'archmap-scenario'", "&solo=1", "window.open(", "SOLO"} {
+		if strings.Contains(v, s) {
+			t.Errorf("the separate scenario window is left in the page: %q", s)
+		}
+	}
+	// every panel hides: navigation, inspector, toolbar, all at once
+	for _, id := range []string{`id="panelTog"`, `id="topTog"`, `id="focusTog"`, `id="topFab"`} {
+		if strings.Count(v, id) != 1 {
+			t.Errorf("the page must have exactly one %s", id)
 		}
 	}
 	for _, s := range []string{`id="tabs"`, "renderTabs", "pickTab", ".tabs {"} {

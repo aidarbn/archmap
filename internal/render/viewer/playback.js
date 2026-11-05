@@ -9,8 +9,8 @@
  */
 
 addI18n({
-  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + '/' + n, closeRun: 'Закрыть сценарий' },
-  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + '/' + n, closeRun: 'Close the scenario' },
+  ru: { planStep: 'запланированный шаг', planTag: 'план', planNoCode: 'Шаг запланирован в описании (arch/*.arch): кода ещё нет.', planIn: 'модуль', stepOf: (k, n) => 'Шаг ' + k + '/' + n, closeRun: 'Закрыть сценарий, вернуться к карте', backToMap: 'Карта' },
+  en: { planStep: 'planned step', planTag: 'plan', planNoCode: 'The step is planned in the description (arch/*.arch): no code yet.', planIn: 'module', stepOf: (k, n) => 'Step ' + k + '/' + n, closeRun: 'Close the scenario, back to the map', backToMap: 'Map' },
 });
 
 /* ---------- runs ---------- */
@@ -104,7 +104,7 @@ function stepAt(i) {
   let j = i - 1;
   while (j >= 0 && L_[j].seg === it.seg && isPlan(L_[j].fid)) j--;
   // the first step of a further flow of a path: a new entry (a queue hand-off keeps its caller)
-  const first = j >= 0 && L_[j].seg !== it.seg, viaQ = first && sg.via && sg.via.via === 'queue';
+  const first = j >= 0 && L_[j].seg !== it.seg, viaQ = first && sg.via && (sg.via.via === 'queue' || sg.via.queue);
   // links come from the code only: the next flow of a path keeps the previous step as its caller when the code calls
   // it (or hands it over through the queue); otherwise the client makes the next call — a 'client' step, no arrow
   // from the previous flow (the data may also say so: via 'client')
@@ -366,6 +366,23 @@ function clearPath() {
   [sys, map, fv].forEach((sc) => { if (!sc) return; if (sc.pg) sc.pg.innerHTML = ''; sc.svg.classList.remove('pathmode'); sc.svg.querySelectorAll('.pn').forEach((e) => e.classList.remove('pn', 'pn-done', 'pn-cur', 'pn-next')); });
   PATH.legs = [];
 }
+// what a step pill must not cover on a level: the band and group titles (their boxes in scene coordinates)
+function pathObstacles(sc) {
+  const out = [];
+  sc.g.querySelectorAll('.band text, text.grp').forEach((e) => {
+    try { const b = e.getBBox(); if (b.width) out.push({ x: b.x - 8, y: b.y - 6, w: b.width + 16, h: b.height + 12 }); } catch (er) { /* not rendered */ }
+  });
+  return out;
+}
+// the area a rect r shares with the rects of a list
+function overArea(r, list) {
+  let s = 0;
+  list.forEach((q) => {
+    const w = Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x), h = Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y);
+    if (w > 0 && h > 0) s += w * h;
+  });
+  return s;
+}
 function drawPath() {
   clearPath();
   if (!state.run || state.view !== 'map' || state.level > 2) return;
@@ -380,7 +397,26 @@ function drawPath() {
   // future legs first, the current one last: on top
   const stOf = (l) => (ov ? 'done' : l.steps.includes(cur) ? 'cur' : l.steps.some((i) => i < cur) ? 'done' : 'next');
   const order = { next: 0, done: 1, cur: 2 };
-  legs.sort((p, q) => order[stOf(p)] - order[stOf(q)]).forEach((l) => {
+  // the number pills keep clear of each other, of the band and group titles and of the cards: each pill slides
+  // along its leg to the spot that overlaps least (the current leg is placed first, so it keeps the middle)
+  const taken = [], hard = pathObstacles(sc), soft = Object.keys(sc.nodes || {}).map((id) => pathRect(sc, id)).filter(Boolean);
+  const placePill = (v, w, h, fallback) => {
+    const len = v.getTotalLength ? v.getTotalLength() : 0;
+    if (!len) return fallback;
+    let best = null, bestS = Infinity;
+    [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88].forEach((f, k) => {
+      const p = v.getPointAtLength(len * f), r = { x: p.x - w / 2, y: p.y - h / 2, w, h };
+      const s = overArea(r, taken) * 10 + overArea(r, hard) * 8 + overArea(r, soft) + k * 2;
+      if (s < bestS) { bestS = s; best = p; }
+    });
+    taken.push({ x: best.x - w / 2, y: best.y - h / 2, w, h });
+    return best;
+  };
+  const drawn = [];
+  // the number of a step that stays inside its node sits on the node's corner: keep the pills off it too
+  const here0 = ov ? null : pathNode(lvl, cur);
+  if (here0 && !legs.some((l) => l.steps.includes(cur))) { const r = pathRect(sc, here0); if (r) taken.push({ x: r.x + r.w - 3 - 16 * zk, y: r.y - 16 * zk, w: 32 * zk, h: 32 * zk }); }
+  legs.sort((p, q) => order[stOf(q)] - order[stOf(p)]).forEach((l) => {
     const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
     const st = stOf(l), back = pairs.has(l.b + '\0' + l.a);
     const cl = l.kind === 'client';
@@ -391,20 +427,29 @@ function drawPath() {
     const v = S_('path', { d, class: 'v', 'marker-end': st === 'next' ? 'url(#arrM)' : 'url(#arrA)' }, grp);
     const hit = S_('path', { d, class: 'hit' }, grp);
     S_('title', {}, hit, tip);
-    const len = v.getTotalLength ? v.getTotalLength() : 0, mid = len ? v.getPointAtLength(len / 2) : ctr(ra);
     const nums = l.steps.map((i) => i + 1), txt0 = nums.length > 3 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
-    const big = st === 'cur', txt = (big ? String(cur + 1) : txt0) + (cl ? ' · ' + t('jvClient') : '');
-    const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = Math.max(big ? 26 : 20, txt.length * (cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + 10);
-    S_('rect', { x: mid.x - w / 2, y: mid.y - (big ? 13 : 10), width: w, height: big ? 26 : 20, rx: big ? 13 : 10 }, num);
+    // a client call is signed short ("client"); the full "next the client calls" is in the tooltip
+    const big = st === 'cur', txt = (big ? String(cur + 1) : txt0) + (cl ? ' · ' + t('jvClientShort') : '');
+    const w = Math.max(big ? 26 : 20, txt.length * (cl ? (big ? 8.2 : 6.4) : big ? 9 : 7) + 10), h = big ? 26 : 20;
+    const mid = placePill(v, w * zk, h * zk, ctr(ra));
+    const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp);
+    S_('rect', { x: mid.x - w / 2, y: mid.y - h / 2, width: w, height: h, rx: h / 2 }, num);
     S_('text', { x: mid.x, y: mid.y + (big ? 5 : 4), 'text-anchor': 'middle' }, num, txt);
-    S_('title', {}, num, tip);
+    S_('title', {}, num, cl ? t('jvClient') + '\n' + tip : tip);
     grp.addEventListener('click', (e) => { e.stopPropagation(); AM.play.go(st === 'cur' ? cur : shown); });
     markNode(l.a, st === 'next' ? 'next' : 'done'); markNode(l.b, st);
     PATH.legs.push({ a: l.a, b: l.b, steps: l.steps, st });
+    drawn.push({ grp, st });
   });
+  // the pills were placed current-first; the legs are stacked future-first so the current one is on top
+  drawn.sort((p, q) => order[p.st] - order[q.st]).forEach((x) => g.appendChild(x.grp));
   // the node of the current step even when no leg reaches it on this level (the first step, a step inside a module)
   // the overview keeps the outside systems of every step in view (a step shows only its own one — pathLegs)
-  if (ov && lvl === 1) for (let i = 0; i < runList().length; i++) { const s = stepAt(i); if (s && !s.planned) s.exts.forEach((x) => markNode(x.id, 'done')); }
+  // on a step the outside systems of the other steps stay plain (pn only): idle, not faded
+  if (lvl === 1) for (let i = 0; i < runList().length; i++) {
+    const s = stepAt(i); if (!s || s.planned) continue;
+    s.exts.forEach((x) => { if (ov) markNode(x.id, 'done'); else { const n = sc.nodes[x.id]; if (n && n.el) n.el.classList.add('pn'); } });
+  }
   const here = ov ? null : pathNode(lvl, cur); if (here) markNode(here, 'cur');
   // the step stays inside the node (a call within one module): its number sits on the node
   if (here && !legs.some((l) => l.steps.includes(cur))) {
@@ -515,7 +560,7 @@ function renderPlayer() {
   $('#pStep').textContent = ov && list.length ? t('ovStart') + ' →' : '→';
   $('#pStep').classList.toggle('primary', ov && !!list.length);
   $('#pStep').disabled = !list.length || (state.step >= list.length - 1 && !br && !(fe && fe.jump));
-  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').title = t('closeRun') + ' (Esc)';
+  $('#pPrev').title = t('back') + ' (←)'; $('#pStep').title = t('step') + ' (→)'; $('#pClose').textContent = '‹ ' + t('backToMap'); $('#pClose').title = t('closeRun') + ' (Esc)';
   showChoice(br);
   if (!br) showPlate();
   if (!br && state.exitText && state.step === list.length - 1) {
