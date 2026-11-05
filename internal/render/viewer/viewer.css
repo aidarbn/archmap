@@ -421,6 +421,56 @@ main.noside > .side { width: 0; border-right-width: 0; overflow: hidden; visibil
 .pgs .pg .ct { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .pgs .pg.bad .nm { text-decoration: underline wavy color-mix(in oklab, var(--critical) 60%, transparent); text-underline-offset: 3px; }
 .pgs .pgsep { height: 1px; background: var(--line); margin: 4px 10px 4px 24px; }
+/* editing the page list (archmap serve): "+", the name typed in place, the bin of a user page */
+.pgs .pghr { display: flex; align-items: center; gap: 2px; }
+.pgs .pghr .pgh { flex: 1 1 auto; min-width: 0; }
+.pgs .pgadd, .pgs .pgdel { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--text-2); cursor: pointer; padding: 0; }
+.pgs .pgadd .ico, .pgs .pgdel .ico { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.pgs .pgadd:hover { background: var(--hover); color: var(--text); }
+.pgs .pgadd.off { opacity: .4; cursor: not-allowed; }
+.pgs .pgadd:focus-visible, .pgs .pgdel:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pgs .pgr { position: relative; }
+.pgs .pgr .pg { padding-right: 34px; }
+.pgs .pgdel { position: absolute; right: 4px; top: 1px; opacity: 0; transition: opacity 100ms; }
+.pgs .pgr:hover .pgdel, .pgs .pgdel:focus-visible { opacity: 1; }
+.pgs .pgdel:hover { color: var(--crit-text); background: color-mix(in oklab, var(--critical) 12%, transparent); }
+.pgs .pgin { cursor: text; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pgs .pgin.err { box-shadow: inset 0 0 0 1.5px var(--critical); }
+.pgs .pgin input { flex: 1 1 auto; min-width: 0; height: 24px; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; padding: 0; }
+.pgs .pgerr { margin: 2px 10px 4px 24px; font-size: 12px; line-height: 1.35; color: var(--crit-text); }
+.pgs .pgerr[hidden] { display: none; }
+.pgs .pg.pe-drop-ok { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.pgs .pg.pe-drop-no { box-shadow: inset 0 0 0 1.5px var(--critical); }
+/* "Page | System" over the tree of a user page; the System navigation as the source of what goes on it */
+.side > .stabs { flex: none; display: flex; gap: 2px; margin: 0 12px 8px; padding: 2px; border-radius: var(--r-sm); background: var(--surface-2); min-width: calc(var(--sw) - 25px); }
+.side > .stabs[hidden] { display: none; }
+.stabs button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--text-2); font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.stabs button .ico { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.stabs button:hover { color: var(--text); }
+.stabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(16 24 40 / .08); }
+.stabs button.pe-drop-ok { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent-text); }
+.stabs button.pe-drop-no { box-shadow: inset 0 0 0 1.5px var(--critical); }
+.stabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.slist .shint { padding: 2px 10px 8px; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+.slist { position: relative; }
+.slist.pe-drop-ok { box-shadow: inset 0 0 0 2px var(--accent); }
+.slist.pe-drop-no { box-shadow: inset 0 0 0 2px var(--critical); }
+.slist .ti.dz { cursor: grab; }
+.slist .ti.pick { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.slist .dropline { position: absolute; left: 10px; right: 10px; height: 2px; border-radius: 1px; background: var(--accent); pointer-events: none; }
+.slist .dropline.no { background: var(--critical); }
+body.pe-dragging, body.pe-dragging * { cursor: grabbing !important; user-select: none !important; }
+.pe-ghost { position: fixed; left: 0; top: 0; z-index: 60; display: flex; align-items: center; gap: 6px; max-width: 340px; padding: 5px 10px; border-radius: 8px; pointer-events: none;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line-2); box-shadow: var(--shadow-2); font-size: 12.5px; }
+.pe-ghost .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--text-2); stroke-width: 1.5; }
+.pe-ghost .nm { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.pe-ghost .vd { flex: none; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11.5px; }
+.pe-ghost .vd:empty { display: none; }
+.pe-ghost.ok { border-color: var(--accent); }
+.pe-ghost.ok .vd { color: var(--accent-text); }
+.pe-ghost.no { border-color: var(--critical); }
+.pe-ghost.no .vd { color: var(--crit-text); white-space: normal; }
+.pe-ghost.dup .vd { color: var(--text-2); }
 .side .sq { position: relative; flex: none; margin: 4px 12px 10px; }
 .side .sq svg { position: absolute; left: 10px; top: 9px; width: 14px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 1.5; pointer-events: none; }
 .side .sq input { width: 100%; height: 32px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); padding: 0 10px 0 31px; font-size: 13px; outline: none; transition: border-color 120ms; }
