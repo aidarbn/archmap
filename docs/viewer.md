@@ -16,9 +16,9 @@ live in `internal/render/viewer/` and are assembled once by `internal/render/ren
 | `map.js` | The map: level 0 system, 1 modules (groups when > 60 modules), 2 functions of a module, 3 code; selection, drill in/out, the crumbs in the header (`renderCrumbs`: system › modules › module › function on the map, system › view title on another view). No level bar, minimap or legend. |
 | `playback.js` | Scenario runs: steps through the levels, branches, effects/status badges, the scenario bar. **No auto play**: a run is opened from ⌘K (`openRun(key)` loads it and shows step 1) and goes only by → / ← (`doStep`); Home — the first step, Esc — `closeRun()`. The camera of the module level moves only when the step is off screen (`cam.contains`); a step in another module on level 2 rebuilds the functions in place with a 260 ms fade instead of going up and back down. Nothing is loaded at start-up (`state.run` is null). |
 | `journeys.js` | Through paths and variants: the shared list rows (`AM.jv.journeyRows`, `variantRows`, `tog`), runs `journey:<id>` and `variant:<id>` (`fixed` runs: no branch stop), the plate between flows / at the end of a variant (`AM.jv.plate`, `end`, `jump`), progress and the label of the current path (`.jv-tag`). Event `jv` — a variants fold changed. |
-| `panel.js` | Right card for the selection (`setSel`). The panel floats over the right of the stage (`aside`, absolute) and is shown only while there is a card: no selection — `main.nopanel`. ✕ `#panelHide`, `]` or Cmd/Ctrl+. hide it until the next selection (`PNL.closed`, reset by `setSel`); ⌘K "Show / hide the details panel" calls `AM.panel.setHidden(h)`. The width is dragged by the left edge (arrows nudge, double-click resets), kept in `localStorage` `archmap.panel.w` (CSS variable `--pw` on `main`); the map does not re-fit when the panel shows or hides. `AM.panel.setHidden(h)`, `setWidth(w, save)`, `hidden`, `width`. |
-| `zoom.js` | Zoom helpers: the scale zoom of content without a camera (`AM.zoom.scaleWheel`: the code text), gesture helpers, and the `?debug=1` audit `AM.audit()`. The semantic auto-dive is off (`AZ.on = false`, no toggle): zoom never changes the level. |
-| `nav.js` | ⌘K: the field and the palette (`paletteItems(q)` → grouped items: commands, modules, functions, scenarios — `journey:<id>` and `flow:<i>` runs, API endpoints, tables, state machines, files; `runItem` opens them), the commands (view, language, theme, details panel, back, close the scenario, only changed), `goBack()` (Esc: closes the scenario, then returns to the map, then goes a level up), and the flash of what a live update changed. `AM.palette.{open, items, close}`. |
+| `panel.js` | Right card for the selection (`setSel`). The description is the first line under the name. The actor card (`actorHTML`): what it is (protocol, services, `file:line` of the definition and where the description comes from, the implementing type), its through paths and scenarios that do not start at one of its endpoints (`data-run`), then its endpoints grouped by service (the service description under the header, each endpoint with its description; ▶ — a click opens the scenario that starts at it, else the function). Module and function cards: "Scenarios through this node" (`flowList(flowsThrough(…))`). The panel floats over the right of the stage (`aside`, absolute) and is shown only while there is a card: no selection — `main.nopanel`. ✕ `#panelHide`, `]` or Cmd/Ctrl+. hide it until the next selection (`PNL.closed`, reset by `setSel`); ⌘K "Show / hide the details panel" calls `AM.panel.setHidden(h)`. The width is dragged by the left edge (arrows nudge, double-click resets), kept in `localStorage` `archmap.panel.w` (CSS variable `--pw` on `main`); the map does not re-fit when the panel shows or hides. `AM.panel.setHidden(h)`, `setWidth(w, save)`, `hidden`, `width`. |
+| `zoom.js` | Zoom helpers: the scale zoom of content without a camera (`AM.zoom.scaleWheel`: the code text), gesture helpers, and the `?debug=1` audit `AM.audit()`. The semantic dive is always on (`AZ.on = true`, no toggle on the page): pinch / Cmd+wheel into a card past `DIVE` opens its level (`intoSelected`), zooming a level out past `LEAVE` goes up (`up(level − 1)`); one change per gesture (`gate`/`settle`). A plain wheel / two-finger scroll only pans (`Cam` in `scene.js`). |
+| `nav.js` | ⌘K: the field and the palette (`paletteItems(q)` → grouped items: commands, modules, functions, scenarios — `journey:<id>` and `flow:<i>` runs, API endpoints, tables, state machines, files; `runItem` opens them; an endpoint / a module shows its description as the grey second text and is found by it). With an empty query: the commands and `scenarioTree()` — every scenario folded by actor (rows `{k:'grp'}`; Enter / a click toggles `SR.openG`, the palette stays open; through paths join the group of their actor), the commands (view, language, theme, details panel, back, close the scenario, only changed), `goBack()` (Esc: closes the scenario, then returns to the map, then goes a level up), and the flash of what a live update changed. `AM.palette.{open, items, close}`. |
 | `views/*.js`, `views/*.css` | Views. `views/map.js` registers the map; add one file per view. A view has no tab: it opens from ⌘K ("View: …"). `views/editor.js`, `walk.js`, `sequence.js`, `sheet.js` (and their CSS) stay in the sources but are **not assembled** into the page (`offViews` in `render.go`); the sections about them below describe the code, not the current page. |
 | `main.js` | Start-up: the header (`renderHeader`: name, its tooltip with repo / branch / changes), views (`setView`), theme, language, keys (Esc → `goBack`, Enter dives, ←/→/Space/Home step only while a scenario is open), `setData`, live mode (the dot `#live`: green / yellow building / red error, details in its tooltip). `?view=api|data|status` opens a view. |
 
@@ -137,13 +137,33 @@ logged and do not break the page.
 - **Facts helpers** `AM.fnInfo(fid)`, `AM.fname`, `AM.short(module)`, `AM.modLabel`,
   `AM.layerOf`, `AM.modRole`, `AM.modDesc`, `AM.LAYERS`, `AM.LCOLOR`, `AM.isCall`, `AM.isAsync`,
   `AM.extsOfFn`, `AM.actorName`, `AM.epRole`.
+- **Descriptions** (all from the code, never made up): `AM.modDesc(m)` (the module/package doc, a leading
+  `Package x —` dropped by `AM.plainDoc`), `AM.fnDesc(fid)` (the doc comment without `arch:` markup, else the
+  description of its endpoint), `AM.extDesc(x)` (the package doc of the client module, `facts.externals[].desc`),
+  `AM.actorDesc(a)` → `{desc, from: 'arch'|'proto'|'type'|'package'|'', file, line, svc, svcInfo, svcs}`: the
+  `arch:actor <Name> "…"` text (`facts.actors[]` `{name, desc, file, line}`), else the service most of the actor's
+  endpoints belong to (`facts.services[name]` `{kind, desc, descFrom, file, line, impl, implFile, implLine}`).
+  An endpoint carries `desc` (the comment above the rpc in `.proto`, else the handler's doc) and `line` (of the rpc).
+  On the map an actor / outside system / module / function shows at most one line of it under the name
+  (`sysSub` in `map.js`; the full text in the tooltip and the panel).
 - **Call graph** `AM.callPath(a, b, max = 8)` — the shortest chain of calls (callees and async hand-offs)
   `[a, …, b]` or null; `AM.callSite(fid, target)` → `{no, text, file, has, loadable?}` — the line of
   `fid` that calls `target` (or a callee leading to it); `has` is false while the body is unknown.
 - **Scenarios** `AM.flowGroups(query)` → `[{name, items: [flow], auto?}]` (by actor, then the automatic
   ones), `AM.flowActor(flow)`.
 - **Zoom** `AM.zoom.scaleWheel(e, {z, set(z), in?(), out?()})` — scale content by pinch / Cmd+wheel / Ctrl+wheel (a plain wheel is left to native scrolling) and change the
-  level past the thresholds (once per gesture); `AM.zoom.on` — auto-dive is on.
+  level past the thresholds (once per gesture); `AM.zoom.on` — the dive is on (always).
+- **Scenario path on the map** (`playback.js`): while a run is open `drawPath()` draws every leg of the run on the
+  current level into `<scene>.pg` (a `g.pathov` before `fx`): legs `{a, b, steps}` between nodes of the level
+  (`pathLegs(level)`: actor → service and service → externals on the system; units on the modules, the external
+  of the current step only; functions and the in/out ports on a module's functions), class `pleg done|cur|next`
+  (+ `async`), a number pill in the middle (the current one larger, scaled to stay readable when the level is
+  zoomed out), a wide transparent `.hit` stroke with the tooltip `Step k: …`. Nodes on the path get `pn` and
+  `pn-done|pn-cur|pn-next`, the svg `pathmode` dims the rest. A step that stays inside one node puts its number on
+  the node. At a fork (`atBranch()`) the branches are `pleg br` legs / pills; a click takes one. A click on a leg
+  goes to its step (`AM.play.go`), a click on the node of the next step steps forward (`pathClick`, called from
+  `wireSelect` before the selection). It is redrawn after each step, a level change (`afterLevel`) and a rebuild
+  (`restorePlay`); `loadRun` clears it. No timers: the glow of the current leg is a one-shot CSS animation.
 - **Code** `AM.hlLine(line, lang)`, `AM.codeHTML(fid, targetFid)` → `{html, hlIdx, has}`,
   `AM.srcOf(fid)`, `AM.loadSrc(fid)` (fetches `/src` only under `archmap serve`),
   `AM.fnSection(fid)` (the function card used by the panel).

@@ -45,6 +45,13 @@ journeys (each in its order), two-space indent, columns of `states` transitions
 `actor` bare unless it needs quotes, `exit` always quoted, one blank line between
 blocks, a newline at the end. `Parse(Format(x)) == x`.
 
+`actor` in a flow is the actor's name only. What the actor *is* comes from the code,
+not from the spec: `arch:actor <Name> "description"` in a comment (it may stand alone,
+without a flow), else the comment of the gRPC service most of its endpoints belong to.
+The spec and the code meet by the name (case-insensitive), so `actor Tablet` here and
+`// arch:actor Tablet "the tablet in the dining room"` in code are one actor with that
+description. See the README, "Annotating flows" and "How it explains code".
+
 `module` is a module path as archmap shows it (`services/kaspi`, `app.orders`): one
 word without quotes, `#` or `->`. The viewer draws the planned step in that module
 (on the map, in the sequence and on the scenario sheet); without `in` it sits next
