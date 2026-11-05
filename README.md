@@ -20,26 +20,34 @@ How the viewer is built and how to add a view: [docs/viewer.md](docs/viewer.md).
 The page is deliberately minimal: one line on top and the map under it. More
 controls come back only when they prove necessary.
 
-- **Top line**: the logo and the project name (a click goes back to the system;
-  the tooltip has the repo, the branch and its changes; under `archmap serve` a
-  small dot next to the name is the live state), then the **tabs**: **Map** and
-  one tab per through path (journey), in the order of their importance. A tab
-  title is short (cut with `…`, the whole name in its tooltip); tabs that do not
-  fit scroll sideways (the wheel scrolls them). A small **⋯** at the right opens
-  the menu: **API**, **Data**, **Statuses**, **Language**, **Theme** and, on a
-  branch with changes, **Only changed**. There is no search.
-- **Breadcrumbs** "where I am" sit small in the top-left corner of the map
-  (system › modules › module › function — a click goes back up; on a view:
-  system › API).
-- **A path tab** opens the path on the map at its first step (the URL gets
-  `#journey=<id>`, so the tab survives a reload) and the map shows **only what
-  takes part in it**: the actors that start its flows, the modules of its steps,
-  the outside systems they call, the database when a step reads or writes, the
-  queue at a hand-off. Nothing else is drawn. The participants keep the look of
-  the map and their layer bands and go left to right in the order the path
-  reaches them; zooming into a module shows only its functions on the path.
-  **Map** or ✕ brings the whole map back where it was. Any other scenario
-  (opened from a card) shows the same way.
+- **Top line**: the logo and the project name (a click goes back to the whole
+  system; the tooltip has the repo, the branch and its changes; under `archmap
+  serve` a small dot next to the name is the live state) and a small **⋯** at
+  the right: **API**, **Data**, **Statuses**, **Language**, **Theme** and, on a
+  branch with changes, **Only changed**. Nothing else. There is no search.
+- **Scenario list** — a narrow column at the left of the map. On top **Through
+  paths** (journeys): the name (up to two lines), its description or outcome in
+  grey and `N scenarios · M steps`. Under them the scenarios grouped by who
+  starts them (the actors of the map: restaurant cabinet, super admin, tablet,
+  guest, cron/queue, other roles); a group is folded until clicked, its header
+  has the count; a row is the name and one grey line (description or outcome).
+  Technical scenarios are not listed. A small filter above the list narrows
+  this list only (by name and description) when it is long. The chevron on the
+  column's edge or `[` hides and shows it (remembered by the browser). A click
+  opens the path or scenario on the map; a click on the selected row, ✕ in the
+  bar or Esc brings the whole map back. While a path is open its scenarios
+  unfold under it, the current one marked; a click goes to its first step. The
+  URL gets `#journey=<id>` or `#flow=<id>`, so the choice survives a reload.
+- **Breadcrumbs** "where I am" sit small in the top-left corner of the map,
+  right of the list (system › modules › module › function — a click goes back
+  up; on a view: system › API).
+- **An open path or scenario** shows **only what takes part in it**: the actors
+  that start its flows, the modules of its steps, the outside systems they call,
+  the database when a step reads or writes, the queue at a hand-off. Nothing
+  else is drawn. The participants keep the look of the map and their layer
+  bands and go left to right in the order the path reaches them; zooming into a
+  module shows only its functions on the path. Closing it brings the whole map
+  back where it was. A scenario opened from a card shows the same way.
 - **Map**: one scene with four levels — system (who uses it and what it talks
   to) → modules → functions of a module → code. A click selects an element and
   its links, a double click dives in, Esc or the breadcrumbs go up. A two-finger
@@ -50,9 +58,17 @@ controls come back only when they prove necessary.
   actor, an outside system, a module or a function shows one short line of its
   description when the code has one (an actor: `61 scenarios · Admin service…`;
   the count leaves out technical scenarios).
+- **First what it does, then the details.** On the system level with nothing
+  selected a compact card under the crumbs says what the system does (the
+  project description), the counts, who uses it and which outside systems it
+  talks to (a name opens its card); the system card (the service node) lists
+  them with a line of description each.
 - **Details panel**: appears only when something is selected (actor, outside
   system, module, function, step, endpoint, table, status) and floats over the
-  right side. The first line under the name is the description. ✕, `]` or
+  right side. It starts with what the element does, in a larger font. Where the
+  code has no description, a module or function card shows a **summary of the
+  structure** instead, marked as such (entry points, called from, calls, tables
+  written and read, outside systems) — facts only, no guessed meaning. ✕, `]` or
   Cmd/Ctrl+. hide it until the next selection; drag its left edge to resize. An
   **actor** card says what it is (protocol, service, where it is defined
   `file:line`, the implementing type), lists its through paths and scenarios and
@@ -72,15 +88,22 @@ controls come back only when they prove necessary.
   into the step before them. A through path does not replay a step an earlier
   flow of it already played. The rules are in `internal/autosem/trim.go`.
 - **Scenarios** go only by hand: there is no auto play and nothing starts by
-  itself. Pick a path tab, or a scenario in an actor, module or function card: the map shows
-  its first step and a bar appears at the bottom: `<name>  ← Step k/N →  <the
-  step>  ✕`. The whole path is drawn on the level you are on. The current leg is
+  itself. Pick a path or scenario in the list, or in an actor, module or
+  function card: it opens on its **overview** (step 0). The panel says what it
+  does (the description of `arch:flow` / the doc of the entry point / the rpc
+  comment), who starts it, the entry (endpoint or task), how it ends, the
+  number of steps and forks, and its participants — modules and outside systems
+  with a line of description each, then the tables; a path lists its scenarios
+  in order, each with its line (a click goes to its first step). The map shows
+  the whole path evenly, no step lit, and the bar reads `<name>  Overview · N
+  steps  → Start`. → (or Start) goes to step 1, then the bar is `<name>  ← Step
+  k/N →  <the step>  ✕`; ← from step 1 returns to the overview. The whole path is drawn on the level you are on. The current leg is
   bright with a bigger number and glows once, passed legs are a calm accent, the
   coming ones pale and dashed with their numbers, the rest of the map is dimmed;
   on the modules the module of the step lights up, inside a module the function.
   → and ← (or the arrows of the bar) step, a click on a leg or its number goes
   to that step (the tooltip says `Step k: …`), a click on the node of the next
-  step steps forward. Home goes back to the first step, Esc closes it. The camera
+  step steps forward. Home goes back to the overview, Esc closes it. The camera
   moves smoothly and only when the step is off screen. At a fork the branches
   that go on in another flow are pale legs (and buttons in the bar): a click
   takes one. Outcomes that end the story (an `arch:on` without a flow: an error,
@@ -350,8 +373,8 @@ through all the steps. The name is built from the condition (`paid → to the ca
 has at most 12 variants (outcomes with the same end are folded together first). A flow without
 `arch:on` has no variants. The data is in the model, see `docs/viewer.md`.
 
-**In the viewer** every through path is a tab in the top line; the other scenarios are in the
-actor, module and function cards (paths there are marked "through path").
+**In the viewer** the through paths head the scenario list at the left, the other scenarios
+follow grouped by actor; they are also in the actor, module and function cards (paths there are marked "through path").
 
 - Stepping through a path goes over its flows one after another; between two flows a plate in the
   scenario bar says how the next one starts ("→ through the queue", "→ on condition …", "next the
@@ -377,11 +400,13 @@ It also prints, as information that never fails the run, how much of the system 
 the code:
 
 ```
-info: descriptions: modules 54/56, entry points 127/149, endpoints 144/150, actors 6/8, externals 9/9
+info: descriptions: modules 54/56, entry points 127/149, endpoints 144/150, actors 6/8, externals 9/9, scenarios 143/146
 ```
 
 (modules with functions, functions that are entry points, endpoints and tasks, actors grouped as on
-the map, before the "other roles" fold, and outside systems). `--missing-docs` lists every place
+the map, before the "other roles" fold, outside systems, and declared scenarios — an `arch:flow` is
+described by the doc comment of its entry function or the description of its endpoint, e.g. the
+rpc comment). `--missing-docs` lists every place
 without a description as `file:line: no description (kind name)`, ready to fill in; the JSON format
 has the same under `docs`. `archmap map` prints the summary line to stderr.
 
@@ -508,7 +533,7 @@ viewer as `map`, but it follows the repo:
   changed function is re-read.
 - Every view follows the update (the endpoint list, the ER diagram and the state
   machines are rebuilt from the new facts).
-- The tabs, ⋯ and the cards work as in a static file (see [Interface](#interface)).
+- The scenario list, ⋯ and the cards work as in a static file (see [Interface](#interface)).
 - Only loopback addresses are accepted for `--addr`; requests with a foreign
   `Host` header are rejected, and so are all methods but GET/HEAD, except
   `POST /spec/ops` and `PUT /spec/file` (JSON only, same origin, files only

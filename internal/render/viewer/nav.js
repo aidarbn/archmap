@@ -1,17 +1,16 @@
-/* nav.js — the header controls: the tabs ("Map" and one tab per through path, in the order of model.journeys),
- * the ⋯ menu (views API / Data / Statuses, language, theme, only changed), the #journey=<id> hash, going back.
- * Also: the flash of what a live update changed (archmap serve). There is no search: other scenarios open from the
- * panels ("Scenarios through this node"), the views from the panels and from ⋯. */
+/* nav.js — the header controls: the ⋯ menu (views API / Data / Statuses, language, theme, only changed), going
+ * back. Also: the flash of what a live update changed (archmap serve). There is no search: the scenarios are in the
+ * list at the left (side.js), the views open from the panels and from ⋯. */
 
 addI18n({
   ru: {
-    tabMap: 'Карта', tabMapTip: 'Вся карта (выйти из пути)', moreTip: 'Ещё: виды, язык, тема',
+    moreTip: 'Ещё: виды, язык, тема',
     mnView: (v) => v, mnLang: 'Язык: English', mnTheme: (d) => (d ? 'Тема: светлая' : 'Тема: тёмная'), mnOnly: (on) => (on ? 'Показать все, не только изменённые' : 'Только изменённые в ветке'),
     pkPath: 'сквозной путь', pkStepsN: (n, p) => n + ' ' + p(['шаг', 'шага', 'шагов']),
     ms: 'мс', changedN: 'изм.', noConnTip: 'Сервер archmap не отвечает; страница переподключится сама',
   },
   en: {
-    tabMap: 'Map', tabMapTip: 'The whole map (leave the path)', moreTip: 'More: views, language, theme',
+    moreTip: 'More: views, language, theme',
     mnView: (v) => v, mnLang: 'Язык: русский', mnTheme: (d) => (d ? 'Theme: light' : 'Theme: dark'), mnOnly: (on) => (on ? 'Show all, not only changed' : 'Only changed on the branch'),
     pkPath: 'through path', pkStepsN: (n) => n + (n === 1 ? ' step' : ' steps'),
     ms: 'ms', changedN: 'changed', noConnTip: 'The archmap server does not answer; the page reconnects by itself',
@@ -20,52 +19,6 @@ addI18n({
 const lc = (s) => String(s || '').toLowerCase();
 // the actor of a flow: declared, else the actor of its first step
 const flowActor = (fl) => { if (fl.actor) return fl.actor; const a = fl.steps && fl.steps.length ? actorOfFn(fl.steps[0]) : null; return a ? actorName(a) : ''; };
-
-/* ---------- tabs ---------- */
-const TAB_LEN = 30; // characters of a tab title; the whole name is in its tooltip
-function renderTabs() {
-  const box = $('#tabs'); if (!box) return;
-  const cur = state.run && state.run.key && state.run.key.startsWith('journey:') ? state.run.key.slice(8) : null;
-  const onMap = !cur && state.view === 'map';
-  let h = `<button class="tab" role="tab" data-tab="" aria-selected="${onMap}" title="${esc(t('tabMapTip'))}">${esc(t('tabMap'))}</button>`;
-  jvJourneys().forEach((j) => {
-    const nm = j.name || j.id, sh = nm.replace(/\s*→\s*….*$/, ''); // an automatic path: "<first flow> → … (N flows)"
-    h += `<button class="tab" role="tab" data-tab="${esc(j.id)}" aria-selected="${cur === j.id}" title="${esc(nm + (j.desc && j.desc !== nm ? '\n' + j.desc : ''))}">${esc(cut(sh, TAB_LEN))}</button>`;
-  });
-  box.innerHTML = h;
-  const act = box.querySelector('[aria-selected="true"]');
-  if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-}
-function pickTab(id) {
-  closeMenu();
-  if (!id) { if (state.run) closeRun(); if (state.view !== 'map') setView('map'); renderTabs(); return; }
-  if (state.run && state.run.key === 'journey:' + id && state.view === 'map') return;
-  openRun('journey:' + id);
-}
-// the hash keeps the open path over a reload: #journey=<id>
-function writeHash() {
-  const k = state.run && state.run.key, want = k && k.startsWith('journey:') ? '#journey=' + encodeURIComponent(k.slice(8)) : '';
-  if ((location.hash || '') === want) return;
-  try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
-}
-function hashJourney() {
-  const m = /^#journey=(.+)$/.exec(location.hash || '');
-  if (!m) return null;
-  const id = decodeURIComponent(m[1]);
-  return jvJourney(id) ? id : null;
-}
-function setupTabs() {
-  const box = $('#tabs');
-  box.addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) pickTab(b.getAttribute('data-tab')); });
-  // a vertical wheel scrolls the tabs sideways
-  box.addEventListener('wheel', (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && box.scrollWidth > box.clientWidth) { box.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
-  bus.on('flow', () => { renderTabs(); writeHash(); });
-  bus.on('view', renderTabs);
-  bus.on('lang', renderTabs);
-  bus.on('data', renderTabs);
-  window.addEventListener('hashchange', () => { const id = hashJourney(); if (id) pickTab(id); else if (state.run && state.run.key.startsWith('journey:')) pickTab(''); });
-  renderTabs();
-}
 
 /* ---------- ⋯ menu ---------- */
 function menuItems() {
@@ -206,4 +159,4 @@ function watchMarks() {
 }
 bus.on('level', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
 bus.on('view', () => { if (SES.fns.size) requestAnimationFrame(applyFlash); });
-Object.assign(AM, { flowActor, tabs: { render: renderTabs, pick: pickTab }, menu: { open: openMenu, close: closeMenu, items: menuItems } });
+Object.assign(AM, { flowActor, menu: { open: openMenu, close: closeMenu, items: menuItems } });

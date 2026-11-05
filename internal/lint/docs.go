@@ -18,7 +18,7 @@ func (c Count) String() string { return fmt.Sprintf("%d/%d", c.Have, c.Total) }
 
 // Missing is one place without a description.
 type Missing struct {
-	Kind string `json:"kind"` // module | function | endpoint | actor | external
+	Kind string `json:"kind"` // module | function | endpoint | actor | external | flow
 	Name string `json:"name"`
 	File string `json:"file,omitempty"`
 	Line int    `json:"line,omitempty"`
@@ -43,17 +43,20 @@ type DocCoverage struct {
 	Endpoints Count     `json:"endpoints"` // API endpoints and tasks
 	Actors    Count     `json:"actors"`    // who uses the system (as on the map)
 	Externals Count     `json:"externals"` // outside systems
+	Flows     Count     `json:"flows"`     // declared scenarios (arch:flow)
 	Missing   []Missing `json:"missing,omitempty"`
 }
 
 // Line is the one-line summary.
 func (d DocCoverage) Line() string {
-	return fmt.Sprintf("descriptions: modules %s, entry points %s, endpoints %s, actors %s, externals %s",
-		d.Modules, d.Entries, d.Endpoints, d.Actors, d.Externals)
+	return fmt.Sprintf("descriptions: modules %s, entry points %s, endpoints %s, actors %s, externals %s, scenarios %s",
+		d.Modules, d.Entries, d.Endpoints, d.Actors, d.Externals, d.Flows)
 }
 
 // Docs counts the descriptions of f; Missing lists what has none, in the
-// order modules, actors, endpoints, entry points, externals.
+// order modules, actors, endpoints, entry points, scenarios, externals. A
+// declared scenario (arch:flow) is described by the doc comment of its entry
+// function or by the description of its endpoint (the rpc comment).
 func Docs(f *facts.Facts) DocCoverage {
 	var d DocCoverage
 	var miss []Missing
@@ -122,6 +125,37 @@ func Docs(f *facts.Facts) DocCoverage {
 			name = *fn.Cls + "." + name
 		}
 		miss = append(miss, Missing{Kind: "function", Name: name, File: fn.File, Line: fn.Start})
+	}
+
+	epDesc := map[string]bool{}
+	for _, e := range f.Endpoints {
+		if e.Fid != "" && strings.TrimSpace(e.Desc) != "" {
+			epDesc[e.Fid] = true
+		}
+	}
+	all := make([]string, 0, len(f.Functions))
+	for fid, fn := range f.Functions {
+		if fn.Arch != nil && len(fn.Arch.Flows) > 0 {
+			all = append(all, fid)
+		}
+	}
+	sort.Strings(all)
+	for _, fid := range all {
+		fn := f.Functions[fid]
+		doc := strings.TrimSpace(fn.Doc)
+		has := (doc != "" && !strings.HasPrefix(doc, "arch:")) || epDesc[fid]
+		for _, fl := range fn.Arch.Flows {
+			d.Flows.Total++
+			if has {
+				d.Flows.Have++
+				continue
+			}
+			name := fl.ID
+			if fl.Name != "" && fl.Name != fl.ID {
+				name += " «" + fl.Name + "»"
+			}
+			miss = append(miss, Missing{Kind: "flow", Name: name, File: fn.File, Line: fn.Start})
+		}
 	}
 
 	for _, x := range f.Externals {

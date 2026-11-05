@@ -119,7 +119,7 @@ function revealMod(m) {
 const unitFor = (m) => (map && map.nodes[m] ? m : unitOf[m] || null);
 
 /* ===================== scenario focus: the map of one scenario =====================
- * While a scenario (a tab's path or any other run) is open the map shows only what takes part in it: the actors that
+ * While a scenario (a path or a scenario of the list, or any other run) is open the map shows only what takes part in it: the actors that
  * start its flows, the modules and functions of its steps, the outside systems its steps call, the database when a
  * step reads or writes a table, the queue when a step is a hand-off. Everything else is not drawn at all. The same
  * levels, cards and arrows as the full map; on the modules level the participants keep their layer bands and go
@@ -181,7 +181,7 @@ function applyFocus(toModules) {
   SC().forEach((e, i) => e.classList.toggle('hidden', i !== lvl));
   const sc = SC()[lvl];
   if (sc && sc.animate && !RM) sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' });
-  if (state.sel && state.sel.t !== 'step') { state.sel = null; renderPanel(); }
+  if (state.sel && state.sel.t !== 'step' && state.sel.t !== 'run') { state.sel = null; renderPanel(); }
   afterLevel();
   return true;
 }
@@ -831,7 +831,12 @@ function fitMap(focus) {
   else map.cam.fitTop({ ...map.extent }, 40);
 }
 function fitFns() { fv.cam.fit(fv.extent, 10); }
-function fitSys() { sys.cam.fit(sys.extent, 30); }
+// the system is framed below the "about the system" card in the top-left corner when it is shown (panel.js)
+function fitSys() {
+  const ab = $('#about'), st = $('#stage');
+  sys.cam.insetTop = ab && !ab.hidden && st ? Math.max(INSET, ab.getBoundingClientRect().bottom - st.getBoundingClientRect().top + 8) : INSET;
+  sys.cam.fit(sys.extent, 30);
+}
 function defaultFrames(fn) {
   const fr = [fn]; let cur = fn;
   for (let i = 0; i < 3; i++) { const c = (D.callers[cur] || [])[0]; if (!c || fr.includes(c)) break; fr.unshift(c); cur = c; }
@@ -975,7 +980,8 @@ function reapplySel() {
 }
 // play marks of the current step on the visible level (no camera move, no dot)
 function restorePlay() {
-  const s = curStep(); if (!s || state.view !== 'map') return;
+  if (state.view !== 'map') return;
+  const s = curStep(); if (!s) { if (state.run) drawPath(); return; } // the overview: the whole path, no step lit
   const sc = [sys, map, fv][state.level]; if (!sc) return;
   clearSel(sc.svg); sc.svg.classList.add('play');
   if (state.level === 0) hotOn(sys.nodes, 'svc');

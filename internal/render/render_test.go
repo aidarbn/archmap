@@ -209,8 +209,8 @@ func TestLiveFlashVisibleAndPersistent(t *testing.T) {
 }
 
 // The minimal interface: walk, editor, the sequence dock and the scenario sheet stay in the sources but are not
-// put into the page; there is no auto play, no search, lists or language switch in the markup — the header is the
-// name, the tabs of the through paths and ⋯.
+// put into the page; there is no auto play, no search or language switch in the markup — the header is the name
+// and ⋯, the scenarios are the list at the left.
 func TestMinimalInterface(t *testing.T) {
 	v := Viewer()
 	for _, name := range []string{"editor", "walk", "sequence", "sheet"} {
@@ -235,9 +235,14 @@ func TestMinimalInterface(t *testing.T) {
 			t.Errorf("auto play left in the page: %q", s)
 		}
 	}
-	for _, id := range []string{`id="tabs"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`} {
+	for _, id := range []string{`id="side"`, `id="sideList"`, `id="sideTog"`, `id="about"`, `id="moreBtn"`, `id="menu"`, `id="crumbs"`} {
 		if strings.Count(v, id) != 1 {
 			t.Errorf("the page must have exactly one %s", id)
+		}
+	}
+	for _, s := range []string{`id="tabs"`, "renderTabs", "pickTab", ".tabs {"} {
+		if strings.Contains(v, s) {
+			t.Errorf("the path tabs are left in the page: %q", s)
 		}
 	}
 	for _, s := range []string{"paletteItems", "setupSearch", "'k'"} {

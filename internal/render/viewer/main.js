@@ -1,5 +1,5 @@
-/* main.js — start-up: the header (brand, tabs, ⋯ — nav.js), views from the registry, theme, language, keyboard,
- * data swap, the path from the #journey=<id> hash. */
+/* main.js — start-up: the header (brand, ⋯ — nav.js), the scenario list (side.js), views from the registry, theme,
+ * language, keyboard, data swap, the run from the #journey=<id> / #flow=<id> hash. */
 
 window.__errs = window.__errs || [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -156,19 +156,19 @@ function init() {
   if (!DATA || !DATA.facts) { $('#pane').innerHTML = `<p class="lead">${esc(t('noData'))}</p>`; return; }
   indexData(DATA);
   renderHeader();
-  $('#brand').onclick = () => { if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); };
+  $('#brand').onclick = () => { if (state.run) closeRun(); if (state.view !== 'map') setView('map'); else if (state.level > 0) up(0); };
   $('#zIn').onclick = () => curCam() && curCam().zoomAt(.5, .5, 0.8);
   $('#zOut').onclick = () => curCam() && curCam().zoomAt(.5, .5, 1.25);
   $('#zFit').onclick = fitCur;
   $('#pStep').onclick = () => doStep(1);
   $('#pPrev').onclick = () => doStep(-1);
   $('#pClose').onclick = () => closeRun();
-  setupTabs(); setupMenu(); setupZoom(); setupSidePanel();
+  setupSide(); setupMenu(); setupZoom(); setupSidePanel();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'Escape') { e.preventDefault(); goBack(); }
-    else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.step >= 0 ? stepIn() : intoSelected()); }
+    else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.run ? stepIn() : intoSelected()); }
     else if (!state.run) return; // the arrows step only through an open scenario
     else if (e.key === 'ArrowRight' || (e.key === ' ' && tg !== 'BUTTON')) { e.preventDefault(); doStep(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); doStep(-1); }
@@ -176,10 +176,10 @@ function init() {
   });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
   rebuildMap();
-  renderPlayer(); // no scenario opens by itself: the bar stays hidden until a tab or a panel opens one
+  renderPlayer(); // no scenario opens by itself: the bar stays hidden until the list or a panel opens one
   setView(VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
-  const hj = hashJourney(); if (hj && state.view === 'map') openRun('journey:' + hj); // the open tab survives a reload
+  const hk = hashRun(); if (hk && state.view === 'map') openRun(hk); // the selection in the list survives a reload
   if (D.live) { setupLive(); watchMarks(); }
 }
 

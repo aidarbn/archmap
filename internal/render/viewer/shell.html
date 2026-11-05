@@ -14,15 +14,18 @@
       <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="8" height="6" rx="2" fill="var(--in)"/><rect x="14" y="3" width="8" height="6" rx="2" fill="var(--dom)"/><rect x="8" y="15" width="8" height="6" rx="2" fill="var(--ad)"/><path d="M6 9v3h12V9M12 12v3" stroke="var(--text-2)" stroke-width="1.5" fill="none"/></svg>
       <b id="repoName"><!--TITLE--></b><i class="live" id="live" hidden></i>
     </button>
-    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <span class="spacer"></span>
     <div class="more" id="more">
       <button class="iconbtn morebtn" id="moreBtn" aria-haspopup="menu" aria-expanded="false">⋯</button>
       <div class="menu" id="menu" role="menu" hidden></div>
     </div>
   </header>
   <main>
+    <nav class="side" id="side"><div class="sq"><input id="sideQ" type="search" autocomplete="off" spellcheck="false"></div><div class="slist" id="sideList"></div></nav>
+    <button class="sidetog" id="sideTog" aria-controls="side"></button>
     <section class="stage" id="stage">
       <nav class="crumbs" id="crumbs" aria-label="breadcrumbs"></nav>
+      <div class="about" id="about" hidden></div>
       <div class="view on" id="v-map">
         <div class="scene" id="sc0"></div><div class="scene hidden" id="sc1"></div><div class="scene hidden" id="sc2"></div><div class="scene hidden" id="sc3"></div>
         <div class="zoomctl"><button class="iconbtn" id="zIn">+</button><button class="iconbtn" id="zOut">−</button><button class="iconbtn" id="zFit">⤢</button></div>
