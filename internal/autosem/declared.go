@@ -16,6 +16,9 @@ type Branch struct {
 	Cond string `json:"cond"`           // condition, as written
 	Flow string `json:"flow,omitempty"` // id of the flow the story continues in
 	Text string `json:"text,omitempty"` // outcome text
+	// Fold: the outcome ends the story (no Flow to go on in); the viewer folds
+	// such branches into one "+N" mark (see trim.go).
+	Fold bool `json:"fold,omitempty"`
 }
 
 // DeclOrder lists the functions that declare flows in source order (file, line),
