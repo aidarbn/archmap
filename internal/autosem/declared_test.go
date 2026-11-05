@@ -92,7 +92,7 @@ func TestDeclaredFlowsFirst(t *testing.T) {
 	if d.Labels[id("requestQR")] != "ask Kaspi" || d.Labels[id("Pay")] != "start" {
 		t.Fatalf("labels %v", d.Labels)
 	}
-	want := []Branch{{At: id("Poll"), Cond: "paid", Flow: "done"}, {At: id("Poll"), Cond: "expired", Text: "cancel"}}
+	want := []Branch{{At: id("Poll"), Cond: "paid", Flow: "done"}, {At: id("Poll"), Cond: "expired", Text: "cancel", Fold: true}}
 	if !reflect.DeepEqual(d.Branches, want) {
 		t.Fatalf("branches %+v", d.Branches)
 	}

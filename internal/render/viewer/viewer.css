@@ -40,9 +40,9 @@ button, select, input { font: inherit; color: inherit; }
 .app { display: grid; grid-template-rows: 48px 1fr auto; height: 100vh; }
 .mono { font-family: var(--mono); }
 
-/* header: the brand (back to the system), where I am (crumbs), the one control — ⌘K */
+/* header: the brand (back to the system), the tabs (map and through paths), ⋯ */
 header { position: relative; display: flex; align-items: center; gap: 14px; padding: 0 14px 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; border: 0; background: none; padding: 4px 6px; border-radius: 8px; cursor: pointer; color: var(--text); }
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: none; border: 0; background: none; padding: 4px 6px; border-radius: 8px; cursor: pointer; color: var(--text); }
 .brand:hover { background: var(--surface-2); }
 .brand b { font-size: 14px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .brand .logo { width: 20px; height: 20px; flex: none; }
@@ -89,9 +89,10 @@ main { position: relative; min-height: 0; }
 svg text { font-family: var(--font); }
 .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); padding: 40px; text-align: center; }
 
-/* crumbs: where I am, in the header after the brand */
-.crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
-.crumbs button { border: 0; background: none; padding: 4px 7px; border-radius: 6px; cursor: pointer; color: var(--text-2); white-space: nowrap; font-size: 13px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+/* crumbs: where I am, small, over the top-left corner of the stage */
+.crumbs { position: absolute; left: 10px; top: 8px; z-index: 6; display: flex; align-items: center; gap: 1px; max-width: calc(100% - 20px); overflow: hidden; padding: 1px 3px; border-radius: 8px; background: color-mix(in oklab, var(--bg) 82%, transparent); }
+.crumbs:empty { display: none; }
+.crumbs button { border: 0; background: none; padding: 2px 5px; border-radius: 5px; cursor: pointer; color: var(--muted); white-space: nowrap; font-size: 11.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
 .crumbs button:hover { background: var(--surface-2); color: var(--text); }
 .crumbs button.cur { color: var(--text); font-weight: 600; cursor: default; }
 .crumbs button.cur:hover { background: none; }
@@ -321,28 +322,30 @@ main.presize { user-select: none; cursor: col-resize; }
 @media (max-width: 1500px) { .split { grid-template-columns: 320px 1fr; } }
 @media (max-width: 1200px) { .brand .meta, .chg .lbl { display: none; } }
 
-/* ⌘K — the one control (nav.js): a field in the header, a palette under it */
-.search { position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 380px; min-width: 160px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); color: var(--muted); margin-left: auto; }
-.search:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent); }
-.search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); padding: 0; -webkit-appearance: none; appearance: none; }
-.search input::-webkit-search-cancel-button { display: none; }
-.search kbd { font: 10.5px var(--mono); color: var(--muted); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 5px; }
-.search:focus-within kbd { display: none; }
-.qpop { position: absolute; top: calc(100% + 6px); right: 0; width: min(600px, 92vw); max-height: 72vh; overflow: auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-2); z-index: 60; padding: 4px 0 0; color: var(--text); }
-.qpop[hidden] { display: none; }
-.qpop .gh { padding: 8px 12px 3px; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.qi { display: flex; align-items: baseline; gap: 8px; padding: 5px 12px; cursor: pointer; min-width: 0; }
-.qi.act, .qi:hover { background: var(--accent-soft); }
-.qi .ico { width: 16px; flex: none; text-align: center; color: var(--muted); font-weight: 500; }
-.qi .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; min-width: 0; }
-/* a "code" row of ⌘K is not a code block: only its name is monospace */
-.qi.code { font-family: inherit; font-size: inherit; line-height: inherit; background: none; border: 0; border-radius: 0; overflow: visible; max-height: none; position: static; }
-.qi.code.act, .qi.code:hover { background: var(--accent-soft); }
-.qi.code .nm { font-family: var(--mono); font-size: 12.5px; }
-.qi .sb { margin-left: auto; padding-left: 10px; color: var(--muted); font-size: 11px; white-space: nowrap; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
-.qi .sb kbd { font: 10.5px var(--mono); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 4px; }
-.qpop .none, .qpop .hint { padding: 8px 12px; color: var(--muted); font-size: 12px; }
-.qpop .hint { border-top: 1px solid var(--line); margin-top: 4px; font-size: 11px; position: sticky; bottom: 0; background: var(--surface); }
+/* tabs (nav.js): "Map" and one tab per through path; they scroll sideways without a bar when they do not fit */
+.tabs { display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-behavior: smooth;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%); padding: 0 12px 0 6px; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { position: relative; flex: none; max-width: 220px; border: 0; background: none; padding: 0 10px; cursor: pointer; color: var(--text-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); font-weight: 600; }
+.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 2px; background: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 6px; }
+/* ⋯: views, language, theme */
+.more { position: relative; flex: none; }
+.morebtn { border-color: transparent; background: none; font-size: 16px; letter-spacing: 1px; color: var(--muted); }
+.morebtn[aria-expanded="true"] { border-color: var(--line-2); color: var(--text); }
+.menu { position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-2); z-index: 60; padding: 4px 0; color: var(--text); }
+.menu[hidden] { display: none; }
+.menu button { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: none; padding: 6px 14px; cursor: pointer; color: var(--text); font-size: 13px; text-align: left; }
+.menu button:hover, .menu button:focus-visible { background: var(--accent-soft); outline: 0; }
+.menu button .ck { margin-left: auto; color: var(--muted); font-size: 12px; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+/* "+N branches" on the node of a step (playback.js) */
+.pleg.fold .pnum rect { fill: none; stroke: var(--line-2); stroke-dasharray: 2 2; }
+.pleg.fold .pnum text { fill: var(--muted); font-weight: 500; font-size: 10.5px; }
+.pleg.fold:hover .pnum rect { stroke: var(--accent); }
+.pleg.br.end .pnum text { fill: var(--muted); }
 
 /* what a live update changed: a flash that fades (3.2 s) and a dot that stays until the page is reloaded */
 :root { --hl: #f2b705; }
@@ -430,8 +433,4 @@ svg.pathmode .elabel { opacity: .2; }
 .pleg.cur.flash .v { animation: plglow .9s ease-out 1; }
 @keyframes plglow { 0% { stroke-width: 9; filter: drop-shadow(0 0 10px var(--accent)); } 100% { stroke-width: 4; filter: none; } }
 @media (prefers-reduced-motion: reduce) { .pleg.cur.flash .v { animation: none; } }
-/* ⌘K with an empty query: scenarios folded by actor */
-.qi.qgrp .nm { font-weight: 600; }
-.qi.qgrp .ico { color: var(--text-2); }
-.qi.ind { padding-left: 30px; }
 .pleg .v, .pleg .hit { vector-effect: non-scaling-stroke; }

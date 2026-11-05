@@ -42,7 +42,7 @@ const I18N = {
     viewMap: 'Карта',
     lv: ['Система', 'Модули', 'Функции', 'Код'], up: '↖ Назад', into: 'Внутрь ↘', expand: 'Раскрыть ↘',
     step: 'Шаг', stepIn: 'Войти', stepOut: 'Выйти', auto: '▶ Авто', pause: '❚❚ Пауза', back: 'Шаг назад', reset: 'Сначала',
-    start: 'Нажмите → — сценарий пойдёт шаг за шагом', openData: 'Таблицы ↘', chooseBranch: 'Ветвление:', continueMain: 'дальше по сценарию',
+    start: 'Нажмите → — сценарий пойдёт шаг за шагом', chooseBranch: 'Ветвление:', continueMain: 'дальше по сценарию',
     actor: 'актёр', exit: 'выход', modules: 'модулей', fns: 'функций', entries: 'точек входа', tables: 'таблиц',
     layers: { entry: 'Входы', ui: 'Интерфейс', domain: 'Домен', adapter: 'Адаптеры', infra: 'Инфраструктура', other: 'Прочее', test: 'Тесты' },
     layerSub: { entry: 'API, обработчики, воркеры, main', ui: 'экраны и компоненты', domain: 'бизнес-логика и сущности', adapter: 'БД, очереди, клиенты внешних систем', infra: 'конфиг и общие библиотеки', other: 'без слоя', test: 'тесты и фикстуры' },
@@ -75,7 +75,7 @@ const I18N = {
     viewMap: 'Map',
     lv: ['System', 'Modules', 'Functions', 'Code'], up: '↖ Back', into: 'Inside ↘', expand: 'Expand ↘',
     step: 'Step', stepIn: 'Step in', stepOut: 'Step out', auto: '▶ Auto', pause: '❚❚ Pause', back: 'Step back', reset: 'Restart',
-    start: 'Press → — the scenario goes step by step', openData: 'Tables ↘', chooseBranch: 'Branch:', continueMain: 'continue the scenario',
+    start: 'Press → — the scenario goes step by step', chooseBranch: 'Branch:', continueMain: 'continue the scenario',
     actor: 'actor', exit: 'exit', modules: 'modules', fns: 'functions', entries: 'entry points', tables: 'tables',
     layers: { entry: 'Entry', ui: 'Interface', domain: 'Domain', adapter: 'Adapters', infra: 'Infrastructure', other: 'Other', test: 'Tests' },
     layerSub: { entry: 'API, handlers, workers, main', ui: 'screens and components', domain: 'business logic and entities', adapter: 'DB, queues, external clients', infra: 'config and shared libs', other: 'no layer', test: 'tests and fixtures' },
@@ -210,8 +210,15 @@ function fnInfo(id) {
 }
 // planned steps of a spec flow (`step plan "…"`): ids "plan:<flow>:<n>", no function behind them
 const isPlan = (id) => !D.fns[id] && /^plan:/.test(String(id));
-// the playable steps of a flow: known functions and its planned steps, in order
-const flowSteps = (fl) => (fl && fl.steps ? fl.steps.filter((s) => D.fns[s] || (fl.planned && fl.planned[s])) : []);
+// the playable steps of a flow: known functions and its planned steps, in order; the steps the model folds
+// (flow.minor: helpers, plain calls inside a module — autosem/trim.go) are left out
+const flowSteps = (fl) => {
+  if (!fl || !fl.steps) return [];
+  const minor = fl.minor && fl.minor.length ? new Set(fl.minor) : null;
+  return fl.steps.filter((s) => (D.fns[s] || (fl.planned && fl.planned[s])) && !(minor && minor.has(s)));
+};
+// the scenarios lists and counters show: not technical (flow.hidden — autosem/trim.go)
+const visibleFlows = () => D.flows.filter((fl) => !fl.hidden);
 const isAsync = (from, to) => !!D.fns[from] && (D.fns[from].async_callees || []).includes(to) && !(D.fns[from].callees || []).includes(to);
 const isCall = (from, to) => !!D.fns[from] && (D.fns[from].callees || []).includes(to);
 const modLabel = (m) => (m === '.' || m === '' ? t('root') : m);
@@ -503,6 +510,6 @@ function registerPanel(kind, fn) { PANELS[kind] = fn; }
 const AM = window.AM = {
   version: 3, D, state, bus, t, L, addI18n, plural, registerView, registerPanel,
   h: H, svg: S_, esc, cut, cutL, fnInfo, fname, short, modLabel, layerOf, modRole, modDesc, LAYERS, LCOLOR,
-  isAsync, isCall, extsOfFn, actorName, actorDesc, fnDesc, extDesc, plainDoc, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath, isPlan, flowSteps,
+  isAsync, isCall, extsOfFn, actorName, actorDesc, fnDesc, extDesc, plainDoc, epRole, hlLine, codeHTML, loadSrc, srcOf, callSite, callPath, isPlan, flowSteps, visibleFlows,
   get lang() { return LANG; }, get RM() { return RM; }, get DUR() { return DUR; },
 };

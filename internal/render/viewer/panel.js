@@ -8,16 +8,33 @@ addI18n({
     dsWho: 'Кто это', dsWhere: 'Где определён', dsImpl: 'Реализация', dsNone: 'В коде нет описания — его можно дать разметкой',
     dsScen: 'Сценарии', dsThrough: 'Сценарии через этот узел', dsEps: 'Ручки', dsRunTip: 'Открыть сценарий', dsFnTip: 'Открыть функцию',
     dsEpOf: 'Ручка', dsSrc: { arch: 'из разметки arch:actor', proto: 'из комментария .proto', type: 'из комментария типа', package: 'из описания пакета' },
+    dsToApi: 'API ↘', dsToData: 'Данные ↘', dsToStatus: 'Статусы ↘', dsTables: 'Таблицы', scenN: (n, p) => n + ' ' + p(['сценарий', 'сценария', 'сценариев']),
   },
   en: {
     dsWho: 'What it is', dsWhere: 'Defined in', dsImpl: 'Implemented by', dsNone: 'No description in the code — the markup can give one',
     dsScen: 'Scenarios', dsThrough: 'Scenarios through this node', dsEps: 'Endpoints', dsRunTip: 'Open the scenario', dsFnTip: 'Open the function',
     dsEpOf: 'Endpoint', dsSrc: { arch: 'from arch:actor markup', proto: 'from the .proto comment', type: 'from the type comment', package: 'from the package doc' },
+    dsToApi: 'API ↘', dsToData: 'Data ↘', dsToStatus: 'Statuses ↘', dsTables: 'Tables', scenN: (n) => n + (n === 1 ? ' scenario' : ' scenarios'),
   },
 });
 // flows that start at a function / pass through it / through a module
-const flowsFrom = (fid) => D.flows.filter((fl) => fl.steps && fl.steps[0] === fid);
-const flowsThrough = (pred) => D.flows.filter((fl) => flowSteps(fl).some((s) => D.fns[s] && pred(s)));
+// (technical scenarios — flow.hidden — are not listed: see autosem/trim.go)
+const flowsFrom = (fid) => visibleFlows().filter((fl) => fl.steps && fl.steps[0] === fid);
+const flowsThrough = (pred) => visibleFlows().filter((fl) => flowSteps(fl).some((s) => D.fns[s] && pred(s)));
+// the views reached from a card (there is no other way to them but ⋯): API, Data (a table), Statuses (a machine)
+const hasView = (id) => VIEWS.some((v) => v.id === id);
+const viewBtn = (act, label, arg) => `<button class="pbtn" data-view="${act}"${arg != null ? ` data-arg="${esc(arg)}"` : ''}>${esc(label)}</button>`;
+function tableChips(fids) {
+  if (!hasView('data')) return '';
+  const tb = []; fids.forEach((id) => ((D.fns[id] || {}).data || []).forEach((a) => { if (D.tables[a.table] && !tb.includes(a.table)) tb.push(a.table); }));
+  return tb.length ? `<h3>${esc(t('dsTables'))}</h3><div class="tbl-pills">${tb.slice(0, 12).map((n) => `<span class="chip" data-view="table" data-arg="${esc(n)}" style="cursor:pointer" title="${esc(t('dsToData'))}">▦ ${esc(n)}</span>`).join('')}</div>` : '';
+}
+function statusBtns(fids) {
+  if (!hasView('status')) return '';
+  const ms = []; fids.forEach((id) => (D.transByFid[id] || []).forEach((tr) => { if (!ms.includes(tr.entity)) ms.push(tr.entity); }));
+  return ms.slice(0, 3).map((m) => viewBtn('status', t('dsToStatus') + (ms.length > 1 ? ' · ' + m : ''), m)).join('');
+}
+const visibleOfActor = (a) => { const me = actorName(a).trim().toLowerCase(); return visibleFlows().filter((fl) => (fl.actor && fl.actor.trim().toLowerCase() === me) || (fl.steps && a.fids.includes(fl.steps[0]))); };
 const flowLine = (fl) => fl.exit || fl.desc || t('pkStepsN', flowSteps(fl).length);
 // a list of scenarios: name and one line (exit / description / steps); a click opens the run
 function flowList(fls, title, max = 12) {
@@ -37,15 +54,16 @@ function actorHTML(a) {
   if (ad.file) h += `<dt>${esc(t('dsWhere'))}</dt><dd class="mono" style="font-size:11.5px">${esc(ad.file)}${ad.line ? ':' + ad.line : ''}${ad.from ? ` <span class="md" style="color:var(--muted)">· ${esc(t('dsSrc')[ad.from] || '')}</span>` : ''}</dd>`;
   if (si && si.impl) h += `<dt>${esc(t('dsImpl'))}</dt><dd class="mono" style="font-size:11.5px">${esc(si.impl)}${si.implFile ? ' · ' + esc(si.implFile.split('/').pop()) + ':' + si.implLine : ''}</dd>`;
   h += '</dl>';
-  // scenarios of the actor: through paths first, then flows that do not start at one of its endpoints (those are
-  // run from the endpoint rows below: ▶)
-  const me = actorName(a).trim().toLowerCase(), epF = new Set(a.eps.map((e) => e.fid).filter(Boolean));
-  const own = D.flows.filter((fl) => ((fl.actor && fl.actor.trim().toLowerCase() === me) || (fl.steps && a.fids.includes(fl.steps[0]))) && !(fl.steps && epF.has(fl.steps[0])));
+  // scenarios of the actor: its through paths (they are also tabs), then its visible scenarios (technical ones are
+  // left out — flow.hidden); the rest of them are the ▶ of the endpoint rows below
+  const me = actorName(a).trim().toLowerCase(), MAXF = 12;
+  const own = visibleOfActor(a).map((fl, i) => [fl, i]).sort((p, q) => (q[0].top ? 1 : 0) - (p[0].top ? 1 : 0) || p[1] - q[1]).map((p) => p[0]);
   const paths = jvJourneys().filter((j) => (j.actor || '').trim().toLowerCase() === me || (j.fls[0] && j.fls[0].steps && a.fids.includes(j.fls[0].steps[0])));
   if (paths.length || own.length) {
     h += `<h3>${esc(t('dsScen'))} (${paths.length + own.length})</h3><ul class="rel-list">`;
-    h += paths.slice(0, 12).map((j) => `<li class="dsc" data-run="journey:${esc(j.id)}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(j.name || j.id)}</span><span class="md">${esc(t('pkPath'))}</span><span class="ds">${esc(cut(j.exit || j.fls.map((f) => f.name).join(' → '), 90))}</span></li>`).join('');
-    h += own.slice(0, 12).map((fl) => `<li class="dsc" data-run="flow:${fl.i}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(fl.name || '')}</span><span class="ds">${esc(cut(flowLine(fl), 90))}</span></li>`).join('');
+    h += paths.map((j) => `<li class="dsc" data-run="journey:${esc(j.id)}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(j.name || j.id)}</span><span class="md">${esc(t('pkPath'))}</span><span class="ds">${esc(cut(j.exit || j.fls.map((f) => f.name).join(' → '), 90))}</span></li>`).join('');
+    h += own.slice(0, MAXF).map((fl) => `<li class="dsc" data-run="flow:${fl.i}" title="${esc(t('dsRunTip'))}"><span class="run">▶</span><span class="fn" style="font-family:inherit">${esc(fl.name || '')}</span><span class="ds">${esc(cut(flowLine(fl), 90))}</span></li>`).join('');
+    if (own.length > MAXF) h += `<li class="md">+${own.length - MAXF}</li>`;
     h += '</ul>';
   }
   if (a.eps.length) {
@@ -61,7 +79,8 @@ function actorHTML(a) {
     });
   } else if (a.fids.length) h += relList(a.fids, t('entries'), 'out', '');
   h += `<h3>${esc(t('modules'))}</h3><div class="tbl-pills">${Array.from(a.mods).map(chipMod).join('') || '—'}</div>`;
-  if (a.mods.size) h += `<div class="btnrow"><button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button></div>`;
+  const toApi = a.eps.length && hasView('api') ? viewBtn('api', t('dsToApi'), a.id) : '';
+  if (a.mods.size || toApi) h += `<div class="btnrow">${a.mods.size ? `<button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button>` : ''}${toApi}</div>`;
   return h;
 }
 
@@ -94,6 +113,7 @@ function fnSection(id, target, opt = {}) {
   if (eps.length) h += `<div class="btnrow">${eps.slice(0, 3).map((e) => `<span class="chip" title="${esc(e.desc || '')}"><span class="verb">${esc(e.method || e.kind)}</span>${esc(cut(e.path || e.name || '', 40))}</span>`).join('')}</div>`;
   if (eps.some((e) => e.desc && e.desc !== fd)) h += `<p class="loc" style="font-family:inherit">${eps.filter((e) => e.desc && e.desc !== fd).slice(0, 3).map((e) => esc(t('dsEpOf')) + ': ' + esc(e.desc)).join('<br>')}</p>`;
   if (!opt.noRel && D.fns[id]) h += flowList(flowsThrough((s) => s === id), t('dsThrough'), 8);
+  if (!opt.noRel && D.fns[id]) { h += tableChips([id]); const sb = statusBtns([id]); if (sb) h += `<div class="btnrow">${sb}</div>`; }
   if (!opt.noRel) h += relList(f.in, t('callers'), 'in', id) + relList(f.out, t('callees'), 'out', id);
   const c = codeHTML(id, target);
   h += `<h3>${esc(t('code'))}</h3><div class="code"${opt.codeId ? ` id="${opt.codeId}"` : ''}>${c.html}</div>`;
@@ -149,7 +169,8 @@ function renderPanel() {
     if (by.length) h += `<h3>${esc(t('importedBy'))}</h3><div class="tbl-pills">${by.slice(0, 30).map(chipMod).join('')}</div>`;
     if (inRun.length) h += `<h3>${esc(t('inScen'))}</h3><ul class="rel-list">${inRun.slice(0, 12).map(([x, i]) => `<li data-step="${i}"><span class="fn">${i + 1}.</span><span>${esc(stepLabel(i))}</span></li>`).join('')}</ul>`;
     h += flowList(flowsThrough((s) => D.fns[s].module === m), t('dsThrough'));
-    h += `<div class="btnrow"><button class="pbtn primary" data-act="intomod">${esc(t('into'))}</button></div>`;
+    h += tableChips(D.byMod[m] || []);
+    h += `<div class="btnrow"><button class="pbtn primary" data-act="intomod">${esc(t('into'))}</button>${statusBtns(D.byMod[m] || [])}</div>`;
   } else if (s.t === 'group') {
     const n = G.TN[s.id]; if (!n) { state.sel = null; return renderPanel(); }
     const c = chgOf(n.mods), info = modelFor(n.path);
@@ -177,7 +198,7 @@ function renderPanel() {
     const used = runList().map((it, i) => [it, i]).filter(([it]) => extsOfFn(it.fid).includes(x));
     if (used.length) h += `<h3>${esc(t('inScen'))}</h3><ul class="rel-list">${used.slice(0, 10).map(([, i]) => `<li data-step="${i}"><span class="fn">${i + 1}.</span><span>${esc(stepLabel(i))}</span></li>`).join('')}</ul>`;
     const toData = x.kind === 'db' && Object.keys(D.tables).length && VIEWS.some((v) => v.id === 'data');
-    if ((x.modules || []).length || toData) h += `<div class="btnrow">${(x.modules || []).length ? `<button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button>` : ''}${toData ? `<button class="pbtn" data-act="todata">${esc(t('openData'))}</button>` : ''}</div>`;
+    if ((x.modules || []).length || toData) h += `<div class="btnrow">${(x.modules || []).length ? `<button class="pbtn primary" data-act="intosys">${esc(t('into'))}</button>` : ''}${toData ? `<button class="pbtn" data-act="todata">${esc(t('dsToData'))}</button>` : ''}</div>`;
   }
   p.innerHTML = h; p.classList.remove('fadein'); void p.offsetWidth; p.classList.add('fadein');
   paintPanelShown();
@@ -200,6 +221,13 @@ function wirePanel(p, s) {
   act('playfn', () => playFrom(s.id));
   act('intomod', () => goModule(s.id));
   act('todata', () => setView('data'));
+  // a card leads to a view: API (an actor), Data (a table), Statuses (a machine)
+  p.querySelectorAll('[data-view]').forEach((e) => e.addEventListener('click', () => {
+    const v = e.getAttribute('data-view'), arg = e.getAttribute('data-arg');
+    if (v === 'api') setView('api');
+    else if (v === 'table') { setView('data'); bus.emit('data:focus', { table: arg }); }
+    else if (v === 'status') { setView('status'); bus.emit('status:focus', { machine: arg }); }
+  }));
   act('intosvc', () => { setView('map'); drill(1, { from: sys.nodes.svc.el }); });
   act('intosys', () => { setView('map'); if (state.level === 0) drillFromSys(s.id); else intoSelected(); });
   act('expand', () => expandGroup(G.TN[s.id]));
@@ -217,7 +245,7 @@ function openMod(m) {
 
 /* ---------- showing, hiding and resizing the details panel ----------
  * The panel floats over the right of the stage and is there only while something is selected: no selection — no
- * panel. ✕ (or `]`, Cmd/Ctrl+.) hides it until the next selection; ⌘K "Show / hide details" toggles it. The width is
+ * panel. ✕ (or `]`, Cmd/Ctrl+.) hides it until the next selection. The width is
  * dragged by the left edge (arrows nudge it, double-click resets it) and kept in localStorage (archmap.panel.w). */
 addI18n({
   ru: { pnHide: 'Закрыть (] или ⌘.)', pnGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию' },

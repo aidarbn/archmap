@@ -1,5 +1,5 @@
-/* main.js — start-up: the header (brand, crumbs, ⌘K), views from the registry, theme, language, keyboard,
- * data swap. The header has no tabs or buttons: views, language and theme are commands of ⌘K (nav.js). */
+/* main.js — start-up: the header (brand, tabs, ⋯ — nav.js), views from the registry, theme, language, keyboard,
+ * data swap, the path from the #journey=<id> hash. */
 
 window.__errs = window.__errs || [];
 addEventListener('error', (e) => window.__errs.push(String(e.message)));
@@ -21,7 +21,7 @@ function setView(id) {
   state.view = id;
   // one place decides what is shown: the active view only; everything else is inert and hidden
   $$('#stage > .view').forEach((x) => { const on = x.id === 'v-' + id; x.classList.toggle('on', on); x.toggleAttribute('inert', !on); x.setAttribute('aria-hidden', on ? 'false' : 'true'); });
-  if (changed) closeSearch();
+  if (changed) closeMenu();
   renderCrumbs();
   if (v.show) v.show(AM);
   bus.emit('view', id);
@@ -56,7 +56,7 @@ function setLang(l) {
   try { localStorage.setItem('archmap.lang', l); } catch (e) { /* ignore */ }
   if (state.run && !state.run.key.startsWith('flow:')) state.run.name = (buildRun(state.run.key) || state.run).name;
   D.actors = computeActors();
-  renderHeader(); rebuildMap(); renderPlayer(); renderPanel(); relangNav(); relangLive(); renderCrumbs();
+  renderHeader(); rebuildMap(); renderPlayer(); renderPanel(); relangLive(); renderCrumbs();
   bus.emit('lang', l); forViews('onLang');
 }
 
@@ -163,7 +163,7 @@ function init() {
   $('#pStep').onclick = () => doStep(1);
   $('#pPrev').onclick = () => doStep(-1);
   $('#pClose').onclick = () => closeRun();
-  setupSearch(); setupZoom(); setupSidePanel();
+  setupTabs(); setupMenu(); setupZoom(); setupSidePanel();
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -176,9 +176,10 @@ function init() {
   });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { rebuildMap(); bus.emit('resize'); }, 150); });
   rebuildMap();
-  renderPlayer(); // no scenario opens by itself: the bar stays hidden until one is picked in ⌘K
+  renderPlayer(); // no scenario opens by itself: the bar stays hidden until a tab or a panel opens one
   setView(VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
+  const hj = hashJourney(); if (hj && state.view === 'map') openRun('journey:' + hj); // the open tab survives a reload
   if (D.live) { setupLive(); watchMarks(); }
 }
 

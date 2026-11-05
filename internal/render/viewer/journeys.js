@@ -104,9 +104,12 @@ function jvToggle(id) { if (JV.open.has(id)) JV.open.delete(id); else JV.open.ad
 /* ---------- runs ---------- */
 function jvBuildJourney(key) {
   const j = jvJourney(key.slice(8)); if (!j) return null;
-  const segs = [];
+  // a step already played by an earlier flow of the path is not played again (a queue handler that the caller's
+  // flow already walks into, a shared service call): the path reads once, start to end
+  const segs = [], seen = new Set();
   jvOrder(j).forEach((o) => {
-    const steps = flowSteps(o.flow);
+    const steps = flowSteps(o.flow).filter((s) => isPlan(s) || !seen.has(s));
+    steps.forEach((s) => seen.add(s));
     if (steps.length) segs.push({ flow: o.flow, steps, via: o.via, from: o.via && D.flowById[o.via.from] });
   });
   if (!segs.length) return null;
@@ -115,7 +118,7 @@ function jvBuildJourney(key) {
 function jvBuildVariant(key) {
   const r = jvVariant(key.slice(8)); if (!r) return null;
   const { fl, v } = r;
-  const steps = (v.main ? fl.steps : v.steps).filter((s) => D.fns[s] || (fl.planned && fl.planned[s]));
+  const keep = new Set(flowSteps(fl)), steps = (v.main ? fl.steps : v.steps).filter((s) => keep.has(s));
   if (!steps.length) return null;
   return { key, name: fl.name + ' · ' + jvVLabel(v), desc: fl.desc || '', kind: 'variant', fixed: true, variant: v, baseFlow: fl, segs: [{ flow: fl, steps, variant: v }] };
 }
@@ -158,6 +161,7 @@ async function jvJump() {
   const sg = r.segs[r.segs.length - 1], last = runList().length - 1;
   r.segs.push({ flow: e.jump, steps: flowSteps(e.jump), via: { via: 'variant', cond: (sg.variant && sg.variant.choices && sg.variant.choices[0] && sg.variant.choices[0].cond) || '' }, extra: true });
   state.step = last;
+  applyFocus();
   await doStep(1);
 }
 

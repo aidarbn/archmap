@@ -77,7 +77,7 @@ var helperFiles = regexp.MustCompile(`(?i)^(errors?|mapper\w*|\w+_mapper|\w*conv
 var helperClasses = regexp.MustCompile(`(?i)(logger|logging|metrics?|tracer|span|counter|histogram|gauge|translator|i18n|localizer)`)
 
 // helperModules are module segments holding infrastructure helpers.
-var helperModules = regexp.MustCompile(`(?i)(^|/)(log|logger|logging|metrics|telemetry|tracing|i18n|strings|conv|convert|ptr|errors?)(/|$)`)
+var helperModules = regexp.MustCompile(`(?i)(^|/)(log|logger|logging|metrics|telemetry|tracing|i18n|strings|strutil|stringutil|conv|convert|ptr|errors?)(/|$)`)
 
 func isHelper(fn facts.Function) bool {
 	if helperFiles.MatchString(path.Base(fn.File)) {
@@ -125,6 +125,10 @@ type Flow struct {
 	PlanMod     map[string]string `json:"planMod,omitempty"`
 	Unspecified map[string]bool   `json:"unspecified,omitempty"`
 	Ext         map[string]string `json:"ext,omitempty"`
+	// Trimming (see trim.go): Hidden — a technical scenario that lists skip;
+	// Minor — steps folded into the step before them (the viewer plays the rest).
+	Hidden bool     `json:"hidden,omitempty"`
+	Minor  []string `json:"minor,omitempty"`
 }
 
 type graph struct {

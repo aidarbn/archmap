@@ -85,6 +85,7 @@ func buildModel(f *facts.Facts, set *spec.Set) Model {
 		mergeSpec(&m, sm)
 		m.Spec = &sm
 	}
+	g.trimFlows(m.Flows, m.Journeys)
 	return m
 }
 
