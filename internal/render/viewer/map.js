@@ -126,6 +126,7 @@ function clearPlay(svg) { svg.classList.remove('play'); svg.querySelectorAll('.h
 function wireSelect(svg, cam, onSel, onDrill) {
   svg.addEventListener('click', (e) => {
     if (cam && cam.justDragged) return;
+    if (pathClick(e)) return; // a scenario is open: the node of the next step steps forward
     clearPlay(svg);
     const n = e.target.closest('.n');
     onSel(n ? n.getAttribute('data-id') : null);
@@ -160,6 +161,20 @@ function extLabel(x) {
   (x.functions || []).forEach((id) => { const f = D.fns[id]; if (!f) return; (f.callees || []).concat(f.async_callees || []).forEach((c) => { const g = D.fns[c]; if (g && mods.has(g.module) && !names.includes(g.name) && !/^(New|new|init|Init|With|Base|base)[A-Z_]|^(New|init|BaseURL|String|Error)$/.test(g.name)) names.push(g.name); }); });
   if (!names.length) return '';
   return names.slice(0, 2).join(', ') + (names.length > 2 ? ' +' + (names.length - 2) : '');
+}
+// the one line under the name of an actor or an external system: its description when the code has one
+// ("61 · Админский сервис…"), else the count of handles / the kind
+function sysSub(p, n) {
+  if (p.kind === 'actor' || p.actor) {
+    const a = p.a, d = actorDesc(a).desc;
+    if (!d) return cut(actorSub(a), n);
+    return cut((a.eps.length ? a.eps.length + ' · ' : '') + d, n);
+  }
+  return cut(extDesc(p.ext) || t('kinds')[p.ext.kind] || p.ext.kind, n);
+}
+function sysTip(p) {
+  if (p.kind === 'actor' || p.actor) { const d = actorDesc(p.a).desc; return actorName(p.a) + ' — ' + actorSub(p.a) + (d ? '\n' + d : ''); }
+  const d = extDesc(p.ext); return p.ext.name + ' · ' + (t('kinds')[p.ext.kind] || p.ext.kind) + (d ? '\n' + d : '');
 }
 function actorLabel(a) {
   const sv = Array.from(a.services).map((s) => s.replace(/(Service|Server|Handler|Controller)$/, '')).slice(0, 2);
@@ -247,9 +262,10 @@ function buildSystem() {
     const actor = p.kind === 'actor';
     S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: actor ? r.h / 2 : 12, class: 'card' }, n);
     if (actor) actorIcon(n, r.x + 18, r.y + 18); else sysIcon(n, p.kind, r.x + 16, r.y + 18);
-    const name = actor ? actorName(p.a) : p.ext.name, sub = actor ? actorSub(p.a) : (t('kinds')[p.ext.kind] || p.ext.kind);
+    const name = actor ? actorName(p.a) : p.ext.name, sub = sysSub(p, 26);
     S_('text', { x: r.x + 52, y: r.y + (actor ? 29 : 26), class: 't1' }, n, cut(name, 20));
-    S_('text', { x: r.x + 52, y: r.y + (actor ? 46 : 43), class: 't3' }, n, cut(sub, 26));
+    S_('text', { x: r.x + 52, y: r.y + (actor ? 46 : 43), class: 't3' }, n, sub);
+    S_('title', {}, n, sysTip(p));
     sys.nodes[id] = { el: n, r, p };
   }
   // edges with labels
@@ -465,9 +481,10 @@ function extCard(gn, id, r) {
   const n = S_('g', { class: 'n x', 'data-id': id }, gn);
   S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: r.actor ? 25 : 10, class: 'card', style: 'stroke-dasharray:4 3' }, n);
   if (r.actor) actorIcon(n, r.x + 14, r.y + 12); else sysIcon(n, r.ext.kind, r.x + 14, r.y + 17);
-  const name = r.actor ? actorName(r.a) : r.ext.name, sub = r.actor ? actorSub(r.a) : (t('kinds')[r.ext.kind] || r.ext.kind);
+  const name = r.actor ? actorName(r.a) : r.ext.name;
   S_('text', { x: r.x + 48, y: r.y + (r.actor ? 22 : 24), class: 't1' }, n, cut(name, 18));
-  S_('text', { x: r.x + 48, y: r.y + (r.actor ? 39 : 41), class: 't3' }, n, cut(sub, 24));
+  S_('text', { x: r.x + 48, y: r.y + (r.actor ? 39 : 41), class: 't3' }, n, sysSub(r, 24));
+  S_('title', {}, n, sysTip(r));
   map.nodes[id] = { el: n, r };
 }
 function paintMap() {
@@ -617,11 +634,13 @@ function buildFns(mod) {
     S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 9, class: 'card' }, n);
     if (flowSet.has(k)) S_('rect', { x: r.x + 8, y: r.y + 10, width: 3, height: r.h - 20, rx: 1.5, fill: 'var(--accent)' }, n);
     S_('text', { x: r.x + 20, y: r.y + 26, class: 't1 mono', style: 'font-size:15px' }, n, (f.entry ? '⚑ ' : '') + cut(f.name, f.entry ? 25 : 27));
-    S_('text', { x: r.x + 20, y: r.y + 50, class: 't3', style: 'font-size:12.5px' }, n, `${(f.file || '').split('/').pop()}:${f.s}–${f.e} · ${f.e - f.s + 1} ${t('lines')}`);
+    // the second line: the description when the code has one, else where the function is
+    const loc = `${(f.file || '').split('/').pop()}:${f.s}–${f.e} · ${f.e - f.s + 1} ${t('lines')}`, fd = fnDesc(k);
+    S_('text', { x: r.x + 20, y: r.y + 50, class: 't3', style: 'font-size:12.5px' }, n, fd ? cut(fd, 38) : loc);
     if (srcOf(k)) S_('text', { x: r.x + r.w - 12, y: r.y + 24, 'text-anchor': 'end', class: 't3', style: 'font-size:10px' }, n, '{ }');
     if (f.status) S_('text', { x: r.x + r.w - 12, y: r.y + 50, 'text-anchor': 'end', class: 'badge', fill: f.status === 'added' ? 'var(--add)' : 'var(--mod)' }, n, f.status === 'added' ? '+' : '~');
     if (state.only && !f.status) n.classList.add('dim');
-    S_('title', {}, n, k);
+    S_('title', {}, n, k + '\n' + loc + (fd ? '\n' + fd : ''));
     fv.nodes[k] = { el: n, r };
   });
   if (all.length > 16) {
@@ -801,6 +820,7 @@ function setLevel(lvl, fid) {
 function afterLevel() {
   $('.zoomctl').style.display = state.level === 3 ? 'none' : '';
   renderCrumbs();
+  drawPath(); // an open scenario: its path on the new level
   bus.emit('level', state.level);
 }
 // the crumbs in the header: where I am — system › modules › module › function (a click goes back up);
@@ -882,6 +902,7 @@ function restorePlay() {
   if (state.level === 0) hotOn(sys.nodes, 'svc');
   else if (state.level === 1) { const b = unitFor(s.mod), a = s.prev && D.fns[s.prev] ? unitFor(D.fns[s.prev].module) : null; hotOn(map.nodes, b); if (a) { hotOn(map.nodes, a); hotEdge(map.edges, a, b); } }
   else if (state.level === 2) hotOn(fv.nodes, s.fid);
+  drawPath();
 }
 
 Object.assign(AM, {

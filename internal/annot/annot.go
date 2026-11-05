@@ -5,7 +5,9 @@
 // Directives, one per comment line above a function or method:
 //
 //	arch:flow <id> "Name"          scenario that starts at this function
-//	arch:actor <who>               who starts it (applies to the last flow)
+//	arch:actor <who> ["what it is"] who starts it (applies to the last flow);
+//	                               the quoted text describes the actor and may
+//	                               stand alone, without a flow
 //	arch:exit "how it ends"        how it ends (applies to the last flow)
 //	arch:step <flow-id> "caption"  this function is a step of the flow
 //	arch:ext <System>[, <System>]  the function talks to an external system
@@ -122,6 +124,16 @@ func Parse(lines []Line) (*facts.ArchNote, []Error) {
 			n.Then = append(n.Then, facts.ThenNote{Journey: tk[0], Flows: tk[1:]})
 		case "actor", "exit":
 			v, err := unquote(rest)
+			if verb == "actor" {
+				var desc string
+				v, desc, err = actorArgs(rest)
+				if err == nil && v != "" && desc != "" {
+					n.Actors = append(n.Actors, facts.ActorDoc{Name: v, Desc: desc, Line: l.N})
+					if last == "" { // a description alone needs no flow
+						continue
+					}
+				}
+			}
 			switch {
 			case err != nil:
 				bad("arch:%s: %v", verb, err)
@@ -295,6 +307,39 @@ func parseOn(rest string) (facts.OnNote, error) {
 		}
 	}
 	return facts.OnNote{}, fmt.Errorf(`want <condition> -> <flow-id> or <condition> "text"`)
+}
+
+// actorArgs parses `<Name> ["description"]`: the name is bare (spaces allowed)
+// or quoted, the optional description is the quoted text after it.
+func actorArgs(rest string) (name, desc string, err error) {
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		return "", "", nil
+	}
+	if rest[0] == '"' || strings.HasPrefix(rest, "“") {
+		tk, err := tokens(rest)
+		switch {
+		case err != nil:
+			return "", "", err
+		case len(tk) == 1:
+			return tk[0], "", nil
+		case len(tk) == 2:
+			return tk[0], strings.TrimSpace(tk[1]), nil
+		}
+		return "", "", fmt.Errorf(`want <who> ["description"]`)
+	}
+	i := strings.IndexAny(rest, `"“`)
+	if i < 0 {
+		return rest, "", nil
+	}
+	tk, err := tokens(rest[i:])
+	if err != nil {
+		return "", "", err
+	}
+	if len(tk) != 1 {
+		return "", "", fmt.Errorf(`want <who> ["description"]`)
+	}
+	return strings.TrimSpace(rest[:i]), strings.TrimSpace(tk[0]), nil
 }
 
 func closer(r rune) rune {

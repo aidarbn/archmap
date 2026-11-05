@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aidarbn/archmap/internal/facts"
+	"github.com/aidarbn/archmap/internal/lang"
 )
 
 // buildEndpoints collects the externally reachable entries of the repository.
@@ -194,13 +195,18 @@ func shortType(t string) string {
 func (c *apiCtx) protoEndpoints(pl policy) []facts.Endpoint {
 	var eps []facts.Endpoint
 	for _, p := range c.pathsWhere(func(p string) bool { return strings.HasSuffix(p, ".proto") }) {
-		src := blankKeepLines(c.read(p))
+		raw := c.read(p)
+		src := blankKeepLines(raw)
+		rawLines := strings.Split(raw, "\n")
+		lineAt := func(off int) int { return strings.Count(src[:off], "\n") + 1 }
 		pkg := ""
 		if m := protoPkgRE.FindStringSubmatch(src); m != nil {
 			pkg = m[1]
 		}
 		for _, sm := range protoSvcRE.FindAllStringSubmatchIndex(src, -1) {
 			svc := src[sm[2]:sm[3]]
+			svcLine := lineAt(sm[0])
+			c.addService(svc, facts.Service{Kind: "grpc", Desc: lang.Summary(commentAbove(rawLines, svcLine)), File: p, Line: svcLine})
 			open := sm[1] - 1
 			body := src[open : matchBrace(src, open)+1]
 			for _, rm := range protoRPCRE.FindAllStringSubmatchIndex(body, -1) {
@@ -210,7 +216,8 @@ func (c *apiCtx) protoEndpoints(pl policy) []facts.Endpoint {
 				if pkg != "" {
 					full = "/" + pkg + "." + svc + "/" + name
 				}
-				e := facts.Endpoint{Kind: "grpc", Service: svc, Name: name, Path: full, Request: req, Response: resp, Source: "proto"}
+				rpcLine := lineAt(open + rm[0])
+				e := facts.Endpoint{Kind: "grpc", Service: svc, Name: name, Path: full, Request: req, Response: resp, Source: "proto", Line: rpcLine, Desc: lang.Summary(commentAbove(rawLines, rpcLine))}
 				if rm[8] >= 0 && body[rm[8]:rm[9]] == "{" {
 					blk := body[rm[9]-1 : matchBrace(body, rm[9]-1)+1]
 					if hi := protoHTTPRE.FindStringIndex(blk); hi != nil {

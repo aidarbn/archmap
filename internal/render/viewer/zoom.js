@@ -10,9 +10,10 @@ const AFTER_UP = 0.4; // after leaving, the card we left takes this share of the
 const PAUSE = 300;   // ms after a transition when no new one may start
 const GESTURE_GAP = 140; // ms of silence that separates one wheel gesture from the next (trackpad inertia is one gesture)
 const CODE_MAX = 2.5, CODE_LEAVE = 0.65;
-// The auto-dive is off in the minimal interface: zoom only scales, the level changes by a double click, Esc or the
-// crumbs. The code below stays for a later opt-in (AZ.on).
-const AZ = { on: false, armed: true, until: 0, last: 0, cz: 1 };
+// The dive is always on and has no switch: pinch / Cmd+wheel into a card past DIVE opens its level, zooming the
+// level out past LEAVE goes a level up (the crumbs follow). A plain wheel / two-finger scroll only pans. Scenario
+// steps never move by themselves: only zoom changes the level here.
+const AZ = { on: true, armed: true, until: 0, last: 0, cz: 1 };
 
 const autoBusy = () => state.busy;
 function setupZoom() {

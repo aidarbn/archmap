@@ -28,24 +28,43 @@ controls come back only when they prove necessary.
 - **⌘K** (a click on the field, Cmd/Ctrl+K or `/`) is the only place to control
   the page. It finds modules, functions, files, scenarios (flows and through
   paths), API endpoints, tables and state machines, grouped; ↑/↓ choose, Enter
-  opens (Shift+Enter opens a function in its code), Esc closes. It also runs the
+  opens (Shift+Enter opens a function in its code), Esc closes. An endpoint or a
+  module shows its description as the grey second text. With an empty query it
+  lists every scenario folded by actor (Enter or a click on an actor unfolds
+  it). It also runs the
   commands: **View: Map / API / Data / Statuses**, **Language**, **Theme**,
   **Show / hide the details panel**, **Back**, **Close the scenario** and, on a
   branch with changes, **Only changed**.
 - **Map**: one scene with four levels — system (who uses it and what it talks
   to) → modules → functions of a module → code. A click selects an element and
   its links, a double click dives in, Esc or the breadcrumbs go up. A two-finger
-  scroll (or the wheel) pans, a pinch or Cmd/Ctrl+wheel zooms; zoom never changes
-  the level by itself. Small +/−/fit buttons sit in the corner.
-- **Details panel**: appears only when something is selected (module, function,
-  step, endpoint, table, status) and floats over the right side; ✕, `]` or
-  Cmd/Ctrl+. hide it until the next selection; drag its left edge to resize.
-- **Scenarios** go only by hand — there is no auto play and nothing starts by
-  itself. Pick a scenario in ⌘K: the map shows its first step and a bar appears
-  at the bottom: `<name>  ← Step k/N →  <the step>  ✕`. → and ← (or the arrows
-  of the bar) step, Home goes back to the first step, Esc closes it. The camera
-  moves smoothly and only when the step is off screen; at a fork the bar offers
-  the branches.
+  scroll (or the wheel) pans. A pinch or Cmd/Ctrl+wheel zooms, and zooming into
+  a card far enough dives into it (system → modules → the functions of a module →
+  code); zooming a level out far enough goes back up, and the crumbs follow. There
+  is no switch for it. Small +/−/fit buttons sit in the corner. Under the name, an
+  actor, an outside system, a module or a function shows one short line of its
+  description when the code has one (an actor: `61 · Admin service…`).
+- **Details panel**: appears only when something is selected (actor, outside
+  system, module, function, step, endpoint, table, status) and floats over the
+  right side. The first line under the name is the description. ✕, `]` or
+  Cmd/Ctrl+. hide it until the next selection; drag its left edge to resize. An
+  **actor** card says what it is (protocol, service, where it is defined
+  `file:line`, the implementing type), lists its through paths and scenarios and
+  then its endpoints grouped by service, each with its description; a click on
+  an endpoint opens its scenario (▶) or its function. Module and function cards
+  list the **scenarios through them**.
+- **Scenarios** go only by hand: there is no auto play and nothing starts by
+  itself. Pick a scenario in ⌘K, an actor, module or function card: the map shows
+  its first step and a bar appears at the bottom: `<name>  ← Step k/N →  <the
+  step>  ✕`. The whole path is drawn on the level you are on. The current leg is
+  bright with a bigger number and glows once, passed legs are a calm accent, the
+  coming ones pale and dashed with their numbers, the rest of the map is dimmed;
+  on the modules the module of the step lights up, inside a module the function.
+  → and ← (or the arrows of the bar) step, a click on a leg or its number goes
+  to that step (the tooltip says `Step k: …`), a click on the node of the next
+  step steps forward. Home goes back to the first step, Esc closes it. The camera
+  moves smoothly and only when the step is off screen. At a fork the branches are
+  pale legs (and buttons in the bar): a click takes one.
 - **API** (⌘K → View: API) lists the endpoints grouped by service; the card shows
   the request and response types, the function, the scenario from it and the
   tables it reaches through its calls (a table opens in Data).
@@ -89,7 +108,19 @@ description files, no network.
   authors already wrote: the README and package manifests (`package.json`,
   `Cargo.toml`, `pyproject.toml`), package/module comments and
   docstrings, and the comment block directly above a function (a detached or
-  trailing comment is not a doc; `//!` describes a module only).
+  trailing comment is not a doc; `//!` describes a module only). Tool directives
+  in that block are not prose and are dropped: `//nolint`, `//go:…`, `//lint:`,
+  `# noqa`, `# type: ignore`, `// eslint-…`, `// @ts-…`, `// swiftlint:`,
+  `// MARK:` and `arch:` markup.
+- **Endpoints** are described by the comment right above `rpc X(...)` in the
+  `.proto` file, else by the doc comment of the handler function. A **service**
+  (`service X {`) by the comment above it, else the doc comment of the type that
+  implements it, else that type's package doc. An **actor** takes the description
+  from `arch:actor <Name> "…"` (see below) when the code gives one, else that of
+  the service most of its endpoints belong to. An **outside system** (Kaspi,
+  Postgres, …) takes the package doc of its client module. Nothing is made up:
+  without a comment there is no description, and `archmap lint --missing-docs`
+  lists where one is missing.
 - **Layers** (entry, UI, domain, adapter, infra, test) come from the structure:
   folder names (`handlers`, `services`, `repository`, `clients`...), what a
   module contains (entry points, `main`, screens) and, for Cargo workspaces,
@@ -155,7 +186,7 @@ archmap extract [--root DIR] [--base REF] [--tests] [--no-src] --out facts.json
 archmap render  --facts facts.json --out arch.html [--no-src]
 archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
 archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
-archmap lint    [--root DIR] [--format text|json] [--tests] [--strict]
+archmap lint    [--root DIR] [--format text|json] [--tests] [--strict] [--missing-docs]
 archmap version
 ```
 
@@ -237,6 +268,10 @@ Directives:
 
 - `arch:flow <id> "Name"` declares a scenario that starts at this function. Optional
   `arch:actor <who>` and `arch:exit "how it ends"` below it belong to that flow.
+  `arch:actor <who> "what it is"` also describes the actor (`arch:actor Tablet
+  "the tablet in the dining room; guests order through it"`): the text is shown
+  on the actor's card and under its name on the map and wins over the description
+  of its service. Such a line may stand alone, on any function, without a flow.
   Several flows on one function are fine; ids are letters, digits, `_`, `-`, `.`.
 - `arch:step <flow-id> "caption"` makes the function a step of the flow. There are
   no step numbers: the order comes from the call graph (calls, then queue
@@ -306,7 +341,7 @@ marked "through path").
 ### Lint
 
 ```sh
-archmap lint [--root DIR] [--format text|json] [--tests] [--strict]
+archmap lint [--root DIR] [--format text|json] [--tests] [--strict] [--missing-docs]
 ```
 
 `--strict` counts warnings as errors (for CI). Checks the markup and exits with 1 when something is wrong, so it fits CI:
@@ -316,6 +351,18 @@ from the flow's entry point; `ext` and `state` of a wrong shape; a journey that 
 flow that is not declared, a `then` of an unknown journey, a journey id declared twice. A gap
 in a journey (two neighbouring flows with no link in the code) is a warning and does not change
 the exit code. The same run checks the `.arch` spec, see below.
+
+It also prints, as information that never fails the run, how much of the system is described in
+the code:
+
+```
+info: descriptions: modules 54/56, entry points 127/149, endpoints 144/150, actors 6/8, externals 9/9
+```
+
+(modules with functions, functions that are entry points, endpoints and tasks, actors grouped as on
+the map, before the "other roles" fold, and outside systems). `--missing-docs` lists every place
+without a description as `file:line: no description (kind name)`, ready to fill in; the JSON format
+has the same under `docs`. `archmap map` prints the summary line to stderr.
 
 ## Designing with .arch
 

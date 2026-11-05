@@ -351,7 +351,7 @@ func doc(src []byte, d *def) string {
 			if strings.HasPrefix(line, "<") {
 				line = strings.TrimSpace(xmlTag.ReplaceAllString(line, ""))
 			}
-			if line != "" && !lang.IsArchLine(line) {
+			if line != "" && !lang.IsDirectiveLine(line) {
 				return clip(line)
 			}
 		}

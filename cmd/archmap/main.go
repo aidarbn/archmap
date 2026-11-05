@@ -24,6 +24,7 @@ import (
 	"github.com/aidarbn/archmap/internal/extract"
 	"github.com/aidarbn/archmap/internal/facts"
 	"github.com/aidarbn/archmap/internal/lang/all"
+	"github.com/aidarbn/archmap/internal/lint"
 	"github.com/aidarbn/archmap/internal/render"
 	"github.com/aidarbn/archmap/internal/serve"
 	"github.com/aidarbn/archmap/internal/spec"
@@ -39,7 +40,7 @@ Usage:
   archmap render  --facts facts.json --out arch.html [--no-src]
   archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
   archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
-  archmap lint    [--root DIR] [--format text|json] [--tests] [--strict]
+  archmap lint    [--root DIR] [--format text|json] [--tests] [--strict] [--missing-docs]
   archmap version
 `
 
@@ -219,6 +220,7 @@ func cmdMap(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintln(stdout, extract.Summary(f))
 	fmt.Fprintln(stdout, "\n"+*out)
+	fmt.Fprintln(stderr, "archmap: "+lint.Docs(f).Line()+" (archmap lint --missing-docs lists the gaps)")
 	if *open {
 		return openBrowser(*out)
 	}

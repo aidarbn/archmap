@@ -206,7 +206,10 @@ async function showStep() {
   renderPlayer(); setSel({ t: 'step' });
   bus.emit('step', s);
   if (state.view !== 'map') return;
-  if (s.planned) return planHop(s);
+  if (s.planned) { planHop(s); return drawPath(); }
+  try { await hopTo(s); } finally { if (state.step === s.i) drawPath(); }
+}
+async function hopTo(s) {
   if (state.level === 0) await sysHop(s);
   else if (state.level === 1) await mapHop(s);
   else if (state.level === 2) {
@@ -275,7 +278,7 @@ function takeBranch(b) {
     doStep(1);
   } else {
     state.exitText = b.text || b.cond;
-    renderPlayer(); bus.emit('step', curStep());
+    renderPlayer(); bus.emit('step', curStep()); drawPath();
   }
 }
 // back to the first step of the scenario (Home)
@@ -283,6 +286,143 @@ async function resetRun() {
   if (!state.run || state.busy) return;
   state.run = buildRun(state.run.key); state.step = -1; state.exitText = null;
   await doStep(1);
+}
+
+/* ---------- the whole path on the current map level ----------
+ * While a scenario is open its path is drawn over the level the user is on: every hop between two nodes of the
+ * level is a leg with the numbers of its steps. The current leg is bright (accent, thick, one soft glow when it
+ * appears), the passed ones are a calm accent, the future ones pale and dashed; nodes off the path are dimmed. A
+ * click on a leg (or its number) goes to its step, a click on the node of the next step steps forward, a pale
+ * branch leg at a fork takes that branch. Nothing moves by itself: the overlay is redrawn by ← / → only. */
+addI18n({ ru: { pathStep: (k, s) => 'Шаг ' + k + ': ' + s, pathBranch: (c) => 'Ветка: ' + c }, en: { pathStep: (k, s) => 'Step ' + k + ': ' + s, pathBranch: (c) => 'Branch: ' + c } });
+const PATH = { legs: [] };
+// node ids of step i on the given level (sc: sys | map | fv); null when the step is not on it
+function pathNode(level, i) {
+  const s = stepAt(i); if (!s || s.planned) return null;
+  if (level === 0) return 'svc';
+  if (level === 1) { const u = unitFor(s.mod); return u && map.nodes[u] ? u : null; }
+  if (level === 2) return fv.nodes[s.fid] ? s.fid : null;
+  return null;
+}
+// legs of the run on a level: [{a, b, steps: [i], kind}] (a, b — node ids of the scene, ports as 'port:in|out:<m>')
+function pathLegs(level) {
+  const L_ = runList(), legs = new Map();
+  const add = (a, b, i, kind) => { if (!a || !b || a === b) return; const k = a + '\0' + b; if (!legs.has(k)) legs.set(k, { a, b, steps: [], kind }); legs.get(k).steps.push(i); };
+  for (let i = 0; i < L_.length; i++) {
+    const s = stepAt(i); if (!s || s.planned) continue;
+    if (level === 0) {
+      if (s.actor && sys.nodes[s.actor.id]) add(s.actor.id, 'svc', i, 'entry');
+      const q = D.externals.find((x) => x.kind === 'queue');
+      if (s.kind === 'async' && q && sys.nodes[q.id]) add('svc', q.id, i, 'async');
+      s.exts.slice(0, 2).forEach((x) => { if (sys.nodes[x.id] && !(s.kind === 'async' && x === q)) add('svc', x.id, i, 'ext'); });
+    } else if (level === 1) {
+      const b = pathNode(1, i);
+      const a = s.prev && D.fns[s.prev] ? unitFor(D.fns[s.prev].module) : s.actor && map.nodes[s.actor.id] ? s.actor.id : null;
+      if (b && a && map.nodes[a]) add(a, b, i, s.kind);
+      // the outside system of the current step only (as its hop shows it): every step touches Postgres somewhere
+      const xx = b && i === state.step ? s.exts.find((x) => map.nodes[x.id]) : null;
+      if (xx) add(b, xx.id, i, 'ext');
+    } else if (level === 2) {
+      const b = fv.nodes[s.fid] ? s.fid : null, pm = s.prev && D.fns[s.prev] ? D.fns[s.prev].module : null;
+      const a = s.prev && fv.nodes[s.prev] ? s.prev : pm && fv.ports['in:' + pm] ? 'port:in:' + pm : null;
+      if (b && a) add(a, b, i, s.kind);
+      else if (!b && a && fv.nodes[a] && fv.ports['out:' + s.mod]) add(a, 'port:out:' + s.mod, i, s.kind);
+    }
+  }
+  return Array.from(legs.values());
+}
+const pathRect = (sc, id) => { const p = sc.nodes[id] || (sc.ports && sc.ports[String(id).replace(/^port:/, '')]); return p ? (p.r || (sc.pos && sc.pos[id])) : (sc.pos && sc.pos[id]) || null; };
+function pathLayer(sc) {
+  if (!sc.pg || !sc.pg.isConnected) { sc.pg = S_('g', { class: 'pathov' }); sc.g.insertBefore(sc.pg, sc.fx); }
+  return sc.pg;
+}
+function clearPath() {
+  [sys, map, fv].forEach((sc) => { if (!sc) return; if (sc.pg) sc.pg.innerHTML = ''; sc.svg.classList.remove('pathmode'); sc.svg.querySelectorAll('.pn').forEach((e) => e.classList.remove('pn', 'pn-done', 'pn-cur', 'pn-next')); });
+  PATH.legs = [];
+}
+function drawPath() {
+  clearPath();
+  if (!state.run || state.view !== 'map' || state.level > 2 || state.step < 0) return;
+  const lvl = state.level, sc = [sys, map, fv][lvl]; if (!sc) return;
+  const g = pathLayer(sc), cur = state.step, legs = pathLegs(lvl);
+  // the numbers keep a readable size on screen when the level is zoomed out (fixed when drawn)
+  const sw = sc.svg.getBoundingClientRect().width || 1000, zk = Math.max(1, Math.min(3, (sc.cam ? sc.cam.vb.w : sw) / sw));
+  const zoomAround = (p) => (zk === 1 ? null : `translate(${p.x},${p.y}) scale(${zk}) translate(${-p.x},${-p.y})`);
+  sc.svg.classList.add('pathmode');
+  const markNode = (id, st) => { const n = sc.nodes[id] || (sc.ports && sc.ports[String(id).replace(/^port:/, '')]); if (!n || !n.el) return; n.el.classList.add('pn'); if (st === 'cur' || !n.el.classList.contains('pn-cur')) { n.el.classList.remove('pn-done', 'pn-next'); n.el.classList.add('pn-' + st); } };
+  const pairs = new Set(legs.map((l) => l.a + '\0' + l.b));
+  // future legs first, the current one last: on top
+  const stOf = (l) => (l.steps.includes(cur) ? 'cur' : l.steps.some((i) => i < cur) ? 'done' : 'next');
+  const order = { next: 0, done: 1, cur: 2 };
+  legs.sort((p, q) => order[stOf(p)] - order[stOf(q)]).forEach((l) => {
+    const ra = pathRect(sc, l.a), rb = pathRect(sc, l.b); if (!ra || !rb) return;
+    const st = stOf(l), back = pairs.has(l.b + '\0' + l.a);
+    const d = hop(ra, rb, back ? 0.22 : 0.1);
+    const grp = S_('g', { class: 'pleg ' + st + (l.kind === 'async' ? ' async' : '') }, g);
+    const shown = st === 'cur' ? cur : st === 'done' ? Math.max(...l.steps.filter((i) => i <= cur)) : Math.min(...l.steps);
+    const tip = l.steps.map((i) => t('pathStep', i + 1, stepLabel(i))).join('\n');
+    const v = S_('path', { d, class: 'v', 'marker-end': st === 'next' ? 'url(#arrM)' : 'url(#arrA)' }, grp);
+    const hit = S_('path', { d, class: 'hit' }, grp);
+    S_('title', {}, hit, tip);
+    const len = v.getTotalLength ? v.getTotalLength() : 0, mid = len ? v.getPointAtLength(len / 2) : ctr(ra);
+    const nums = l.steps.map((i) => i + 1), txt = nums.length > 3 ? nums[0] + '…' + nums[nums.length - 1] : nums.join(',');
+    const big = st === 'cur', num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = Math.max(big ? 26 : 20, txt.length * (big ? 9 : 7) + 10);
+    S_('rect', { x: mid.x - w / 2, y: mid.y - (big ? 13 : 10), width: w, height: big ? 26 : 20, rx: big ? 13 : 10 }, num);
+    S_('text', { x: mid.x, y: mid.y + (big ? 5 : 4), 'text-anchor': 'middle' }, num, big ? String(cur + 1) : txt);
+    S_('title', {}, num, tip);
+    grp.addEventListener('click', (e) => { e.stopPropagation(); AM.play.go(st === 'cur' ? cur : shown); });
+    markNode(l.a, st === 'next' ? 'next' : 'done'); markNode(l.b, st);
+    PATH.legs.push({ a: l.a, b: l.b, steps: l.steps, st });
+  });
+  // the node of the current step even when no leg reaches it on this level (the first step, a step inside a module)
+  const here = pathNode(lvl, cur); if (here) markNode(here, 'cur');
+  // the step stays inside the node (a call within one module): its number sits on the node
+  if (here && !legs.some((l) => l.steps.includes(cur))) {
+    const r = pathRect(sc, here);
+    if (r) {
+      const grp = S_('g', { class: 'pleg cur inside' }, g), num = S_('g', { class: 'pnum', transform: zoomAround({ x: r.x + r.w - 3, y: r.y }) }, grp);
+      S_('rect', { x: r.x + r.w - 16, y: r.y - 13, width: 26, height: 26, rx: 13 }, num);
+      S_('text', { x: r.x + r.w - 3, y: r.y + 5, 'text-anchor': 'middle' }, num, String(cur + 1));
+      S_('title', {}, grp, t('pathStep', cur + 1, stepLabel(cur)));
+    }
+  }
+  if (lvl === 0 && sc.nodes.svc) markNode('svc', 'cur');
+  // a fork at the current step: the branches pale, a click takes one
+  const brs = atBranch() ? branchesHere() : null;
+  if (brs && here) {
+    brs.forEach((b, k) => {
+      const tf = b.flow && D.flowById[b.flow], first = tf && flowSteps(tf).find((f) => D.fns[f]);
+      let to = null;
+      if (first && lvl === 1) to = unitFor(D.fns[first].module);
+      else if (first && lvl === 2) to = fv.nodes[first] ? first : fv.ports['out:' + D.fns[first].module] ? 'port:out:' + D.fns[first].module : null;
+      const ra = pathRect(sc, here), rb = to && pathRect(sc, to);
+      const grp = S_('g', { class: 'pleg br' }, g), lab = cut(b.cond || b.text || '?', 22);
+      let mid;
+      if (rb && to !== here) {
+        const d = hop(ra, rb, 0.18 + k * 0.08);
+        const v = S_('path', { d, class: 'v', 'marker-end': 'url(#arrM)' }, grp); S_('path', { d, class: 'hit' }, grp);
+        mid = v.getPointAtLength(v.getTotalLength() / 2);
+      } else mid = { x: ra.x + ra.w + 16, y: ra.y + 12 + k * 26 }; // the branch ends here: a pill next to the node
+      const num = S_('g', { class: 'pnum', transform: zoomAround(mid) }, grp), w = lab.length * 6.6 + 18;
+      S_('rect', { x: mid.x - (rb && to !== here ? w / 2 : 0), y: mid.y - 10, width: w, height: 20, rx: 10 }, num);
+      S_('text', { x: mid.x + (rb && to !== here ? 0 : w / 2), y: mid.y + 4, 'text-anchor': 'middle' }, num, (tf ? '↪ ' : '⏹ ') + lab);
+      S_('title', {}, grp, t('pathBranch', (b.cond || '') + (b.text ? ' — ' + b.text : '') + (tf ? ' → ' + tf.name : '')));
+      grp.addEventListener('click', (e) => { e.stopPropagation(); takeBranch(b); });
+    });
+  }
+  // the glow of the current leg plays once, when it appears
+  g.querySelectorAll('.pleg.cur').forEach((x) => x.classList.add('flash'));
+}
+// a click on the map while a scenario is open: the node of the next step steps forward; true when it was taken
+function pathClick(e) {
+  if (!state.run || state.busy || state.level > 2) return false;
+  const n = e.target.closest && e.target.closest('.n'); if (!n) return false;
+  const id = n.getAttribute('data-id'), nx = state.step + 1;
+  if (nx >= runList().length) return false;
+  const want = pathNode(state.level, nx);
+  if (!want || want !== id || want === pathNode(state.level, state.step)) return false;
+  doStep(1);
+  return true;
 }
 
 /* ---------- badges ---------- */
@@ -339,6 +479,7 @@ function stepLabel(i) { const it = runList()[i]; if (!it) return ''; const fl = 
 function loadRun(key) {
   state.run = buildRun(key); state.step = -1; state.played = false; state.exitText = null;
   [sys, map, fv].forEach((x) => { if (x) { clearPlay(x.svg); x.fx.innerHTML = ''; } });
+  clearPath();
   if (fv && state.level === 2) { buildFns(fv.mod); fitFns(); }
   showChoice(false); renderPlayer(); renderCrumbs();
   bus.emit('flow', state.run); bus.emit('step', null);

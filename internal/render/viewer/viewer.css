@@ -168,6 +168,14 @@ main.presize { user-select: none; cursor: col-resize; }
 .rel-list li:hover { background: var(--surface-2); }
 .rel-list .fn { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rel-list .md { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+/* a row with a description: the name on top, the description under it in grey */
+.rel-list li.dsc { flex-wrap: wrap; row-gap: 1px; }
+.rel-list li.dsc .fn { flex: 0 1 auto; min-width: 0; max-width: 72%; }
+.rel-list li.dsc .ds { flex-basis: 100%; font-size: 11.5px; color: var(--text-2); line-height: 1.35; padding-left: 2px; }
+.rel-list li .run { color: var(--accent); font-size: 10px; }
+.pane h3 .hs { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text-2); font-size: 11.5px; margin-top: 2px; }
+.pane .nodesc { font-size: 11.5px; color: var(--muted); margin: -8px 0 12px; }
+.pane .nodesc code { font-family: var(--mono); font-size: 11px; }
 .rel-list .q { font-size: 10px; color: var(--accent); border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line)); border-radius: 4px; padding: 0 4px; }
 .st-a { color: var(--add); font-weight: 700; } .st-m { color: var(--mod); font-weight: 700; } .st-d { color: var(--del); font-weight: 700; }
 .code { font-family: var(--mono); font-size: calc(12px * var(--cz, 1)); line-height: 1.6; position: relative; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow: auto; max-height: 360px; }
@@ -327,6 +335,9 @@ main.presize { user-select: none; cursor: col-resize; }
 .qi.act, .qi:hover { background: var(--accent-soft); }
 .qi .ico { width: 16px; flex: none; text-align: center; color: var(--muted); font-weight: 500; }
 .qi .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; min-width: 0; }
+/* a "code" row of ⌘K is not a code block: only its name is monospace */
+.qi.code { font-family: inherit; font-size: inherit; line-height: inherit; background: none; border: 0; border-radius: 0; overflow: visible; max-height: none; position: static; }
+.qi.code.act, .qi.code:hover { background: var(--accent-soft); }
 .qi.code .nm { font-family: var(--mono); font-size: 12.5px; }
 .qi .sb { margin-left: auto; padding-left: 10px; color: var(--muted); font-size: 11px; white-space: nowrap; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
 .qi .sb kbd { font: 10.5px var(--mono); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 4px; }
@@ -384,3 +395,43 @@ g.tr.lmark path, .seqv .msg.lmark line, .seqv .msg.lmark path { stroke: var(--hl
 .jv-plate.link { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
 .jv-plate.good { border-color: var(--good); }
 .jv-plate.bad { border-color: var(--critical); }
+
+/* the path of an open scenario on the map (playback.js drawPath): passed legs calm, the current one bright, the
+   future ones pale and dashed; nodes off the path dimmed */
+svg.pathmode .n:not(.pn):not(.hot) { opacity: .22; }
+svg.pathmode .n.pn { opacity: 1; }
+svg.pathmode .n.pn-next:not(.hot) { opacity: .62; }
+svg.pathmode .n.pn-done .card { stroke: color-mix(in oklab, var(--accent) 45%, var(--line-2)); stroke-width: 1.6; }
+svg.pathmode .n.pn-cur .card { stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 45%, transparent)); }
+svg.pathmode .e:not(.hot) { opacity: .06; }
+svg.pathmode .elabel { opacity: .2; }
+.pleg { cursor: pointer; }
+.pleg .v { fill: none; stroke-linecap: round; pointer-events: none; }
+.pleg .hit { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; }
+.pleg.done .v { stroke: color-mix(in oklab, var(--accent) 55%, var(--text-2)); stroke-width: 2.2; opacity: .8; }
+.pleg.cur .v { stroke: var(--accent); stroke-width: 4; }
+.pleg.next .v { stroke: var(--muted); stroke-width: 1.8; stroke-dasharray: 5 6; opacity: .7; }
+.pleg.async .v { stroke-dasharray: 2 6; }
+.pleg.br .v { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 3 5; opacity: .75; }
+.pleg:hover .v { opacity: 1; stroke-width: 3.2; }
+.pleg.cur:hover .v { stroke-width: 4.6; }
+.pnum rect { fill: var(--surface); stroke: var(--line-2); stroke-width: 1; }
+.pnum text { font: 600 11px var(--font); fill: var(--text-2); font-variant-numeric: tabular-nums; pointer-events: none; }
+.pleg.done .pnum rect { stroke: color-mix(in oklab, var(--accent) 50%, var(--line-2)); }
+.pleg.done .pnum text { fill: var(--accent); }
+.pleg.next .pnum rect { stroke-dasharray: 2 2; }
+.pleg.next .pnum text { fill: var(--muted); }
+.pleg.cur .pnum rect { fill: var(--accent); stroke: var(--accent); }
+.pleg.cur .pnum text { fill: #fff; font-size: 14px; font-weight: 700; }
+.pleg.br .pnum rect { stroke-dasharray: 3 2; }
+.pleg.br .pnum text { fill: var(--text-2); font-size: 10.5px; }
+.pleg.br:hover .pnum rect { stroke: var(--accent); }
+/* one soft glow when the current leg appears (no timers: a CSS animation that runs once) */
+.pleg.cur.flash .v { animation: plglow .9s ease-out 1; }
+@keyframes plglow { 0% { stroke-width: 9; filter: drop-shadow(0 0 10px var(--accent)); } 100% { stroke-width: 4; filter: none; } }
+@media (prefers-reduced-motion: reduce) { .pleg.cur.flash .v { animation: none; } }
+/* ⌘K with an empty query: scenarios folded by actor */
+.qi.qgrp .nm { font-weight: 600; }
+.qi.qgrp .ico { color: var(--text-2); }
+.qi.ind { padding-left: 30px; }
+.pleg .v, .pleg .hit { vector-effect: non-scaling-stroke; }

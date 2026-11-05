@@ -387,7 +387,7 @@ func (p *state) doc(n *sitter.Node) string {
 			ln = strings.TrimPrefix(ln, "//")
 			ln = strings.TrimSuffix(ln, "*/")
 			ln = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ln), "*"))
-			if ln != "" {
+			if ln != "" && !lang.IsDirectiveLine(ln) {
 				if len(ln) > 200 {
 					ln = ln[:200]
 				}

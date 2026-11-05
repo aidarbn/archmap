@@ -35,6 +35,7 @@ type apiCtx struct {
 	djObjRE   *regexp.Regexp
 	prismaAcc map[string]string
 	ormRepo   map[string]string
+	services  map[string]*facts.Service // gRPC services of .proto files
 }
 
 var apiSkipDirs = map[string]bool{

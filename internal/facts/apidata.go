@@ -15,6 +15,35 @@ type Endpoint struct {
 	Request  string `json:"request,omitempty"`
 	Response string `json:"response,omitempty"`
 	Source   string `json:"source"` // proto | router | annotation | code
+	// Desc is the description found in the code: the comment above the rpc in
+	// the .proto file, else the doc comment of the handler function.
+	Desc string `json:"desc,omitempty"`
+	// Line is the 1-based line of the rpc in its .proto file (proto endpoints).
+	Line int `json:"line,omitempty"`
+}
+
+// Service is a group of endpoints declared together: a gRPC service of a
+// .proto file, or the type that implements handlers. Desc comes from the code:
+// the comment above `service X {`, else the doc comment of the type that
+// implements it, else the doc of that type's package (DescFrom says which).
+type Service struct {
+	Kind     string `json:"kind"` // grpc | http
+	Desc     string `json:"desc,omitempty"`
+	DescFrom string `json:"descFrom,omitempty"` // proto | type | package
+	File     string `json:"file,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Impl     string `json:"impl,omitempty"` // the implementing type
+	ImplFile string `json:"implFile,omitempty"`
+	ImplLine int    `json:"implLine,omitempty"`
+}
+
+// ActorDoc is the description of an actor given in the markup:
+// `arch:actor <Name> "description"`.
+type ActorDoc struct {
+	Name string `json:"name"`
+	Desc string `json:"desc"`
+	File string `json:"file,omitempty"`
+	Line int    `json:"line,omitempty"`
 }
 
 // DataModel is the persistent data schema found in the code.

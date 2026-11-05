@@ -97,6 +97,7 @@
   const accKind = (e) => { const a = (e.auth || '').trim(); return !a || a === 'public' || a === 'none' ? 'public' : a === 'authenticated' ? 'authed' : 'role'; };
   const accLabel = (e) => { const k = accKind(e); return k === 'public' ? t('apiPublic') : k === 'authed' ? t('apiAuthed') : t('apiRole', AM.epRole(e)); };
   const epName = (e) => e.name || e.path || '?';
+  const svcDesc = (s) => { const x = s && (D.F.services || {})[s]; return x && x.desc ? AM.plainDoc(x.desc) : ''; };
   // 'own' — the endpoint function itself changed; 'deep' — something in its call closure; '' — nothing
   function chgOf(e) {
     const f = fnOf(e.fid); if (!f) return '';
@@ -118,7 +119,7 @@
       if (V.kind && e.kind !== V.kind) return;
       if (V.access) { const k = accKind(e); if (V.access === 'public' || V.access === 'authed') { if (k !== V.access) return; } else if (k !== 'role' || AM.epRole(e) !== V.access.slice(5)) return; }
       if (V.only && !chgOf(e)) return;
-      if (q && !((e.path || '') + ' ' + (e.name || '') + ' ' + (e.service || '') + ' ' + (e.method || '')).toLowerCase().includes(q)) return;
+      if (q && !((e.path || '') + ' ' + (e.name || '') + ' ' + (e.service || '') + ' ' + (e.method || '') + ' ' + (e.desc || '')).toLowerCase().includes(q)) return;
       out.push(i);
     });
     return out;
@@ -140,12 +141,14 @@
   function rowHTML(r) {
     if (r.g != null) {
       return `<div class="api-grp" style="top:${r.y}px;height:${r.h}px" data-g="${esc(r.g)}" role="button" tabindex="-1" aria-expanded="${r.open}" title="${esc(t(r.open ? 'apiCollapse' : 'apiExpand'))}">` +
-        `<span class="api-caret">${r.open ? '▾' : '▸'}</span><b>${esc(r.g)}</b>${r.chg ? `<span class="api-chg own" title="${esc(t('apiChanged'))}">~${r.chg}</span>` : ''}<span class="api-cnt">${r.n}</span></div>`;
+        `<span class="api-caret">${r.open ? '▾' : '▸'}</span><b>${esc(r.g)}</b>${svcDesc(r.g) ? `<span class="api-gd" title="${esc(svcDesc(r.g))}">${esc(svcDesc(r.g))}</span>` : ''}${r.chg ? `<span class="api-chg own" title="${esc(t('apiChanged'))}">~${r.chg}</span>` : ''}<span class="api-cnt">${r.n}</span></div>`;
     }
     const e = EPS()[r.i];
     const hasPath = e.path && e.path !== e.name;
-    return `<div class="api-row${r.i === V.sel ? ' sel' : ''}" style="top:${r.y}px;height:${r.h}px" data-i="${r.i}" role="option" aria-selected="${r.i === V.sel}">` +
-      `${verbBadge(e)}<span class="api-nm">${esc(epName(e))}</span>${hasPath ? `<span class="api-pth">${esc(e.path)}</span>` : '<span class="api-pth"></span>'}` +
+    // the description, when the code has one, takes the place of the path (the path stays in the tooltip)
+    const pth = e.desc ? `<span class="api-pth ds">${esc(e.desc)}</span>` : hasPath ? `<span class="api-pth">${esc(e.path)}</span>` : '<span class="api-pth"></span>';
+    return `<div class="api-row${r.i === V.sel ? ' sel' : ''}" style="top:${r.y}px;height:${r.h}px" data-i="${r.i}" role="option" aria-selected="${r.i === V.sel}" title="${esc([e.path, e.desc].filter(Boolean).join('\n'))}">` +
+      `${verbBadge(e)}<span class="api-nm">${esc(epName(e))}</span>${pth}` +
       `${chgMark(chgOf(e))}${accBadge(e)}</div>`;
   }
   // Virtualisation: only rows inside the viewport (+ buffer) exist in the DOM.
@@ -201,7 +204,9 @@
     let h = `<div class="kicker"><span class="chip">${esc(e.service || t('apiKind')[e.kind] || e.kind)}</span>${accBadge(e)}` +
       `${c ? `<span class="chip ${c === 'own' ? 'm' : ''}">${esc(t(c === 'own' ? 'apiOwnChg' : 'apiClosureChg'))}</span>` : ''}</div>`;
     h += `<h2 class="mono">${esc(epName(e))}</h2>`;
+    if (e.desc) h += `<p class="lead">${esc(e.desc)}</p>`;
     h += `<div class="api-pathline">${verbBadge(e)}<span class="mono">${esc(e.path || '')}</span></div>`;
+    if (svcDesc(e.service)) h += `<p class="loc" style="font-family:inherit">${esc(e.service)}: ${esc(svcDesc(e.service))}</p>`;
     if (e.request || e.response) {
       h += `<h3>${esc(t('apiReqResp'))}</h3><div class="api-io"><div class="sig"><span class="tk-ty">${esc(e.request || '—')}</span></div><div class="sig"><span class="tk-ty">${esc(e.response || '—')}</span></div></div>`;
     }

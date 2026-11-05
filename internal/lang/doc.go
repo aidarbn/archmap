@@ -324,3 +324,36 @@ func StripArch(s string) string {
 func IsArchLine(l string) bool {
 	return strings.HasPrefix(strings.TrimLeft(l, " \t*#/!-"), "arch:")
 }
+
+// directiveRe matches tool directives that live in comments but describe
+// nothing: linter and formatter switches, compiler pragmas, `arch:` markup.
+var directiveRe = regexp.MustCompile(`(?i)^(arch:[a-z]|nolint\b|go:[a-z]|lint:|line \S+:\d|export \w+$|\+build\b|eslint[- ]|prettier-ignore|biome-ignore|deno-lint|@ts-(nocheck|ignore|check|expect-error)|istanbul |c8 ignore|pylint:|noqa\b|type:\s*ignore|mypy:|isort:|fmt:\s*(off|on|skip)|swiftlint:|ktlint|noinspection|nosonar|revive:|#?nosec\b|gosec\b|staticcheck\b|lint-ignore|#?(end)?region\b|mark:\s*-?|pragma\b)`)
+
+// IsDirectiveLine reports whether one comment line (with or without the comment
+// marker) is a tool directive (`//nolint`, `//go:generate`, `# noqa`,
+// `// eslint-disable`, `arch:` markup, ...) rather than prose.
+func IsDirectiveLine(l string) bool {
+	return directiveRe.MatchString(strings.TrimSpace(strings.TrimLeft(l, " \t*#/!-")))
+}
+
+// Summary cleans a comment block written as a description (a proto comment,
+// an actor description): directive lines are dropped, the first paragraph is
+// joined and cut to its first sentences (Shorten). Unlike Describe, short
+// texts ("Меню ресторана") are kept.
+func Summary(raw string) string {
+	var keep []string
+	for _, l := range strings.Split(raw, "\n") {
+		l = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(l), "*#/!"))
+		if IsDirectiveLine(l) || decoRe.MatchString(l) && strings.Trim(l, "-=*_~# ") == "" {
+			continue
+		}
+		if l == "" {
+			if len(keep) > 0 {
+				break
+			}
+			continue
+		}
+		keep = append(keep, l)
+	}
+	return Shorten(strings.Join(keep, " "))
+}
