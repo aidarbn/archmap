@@ -41,7 +41,7 @@ function renderHeader() {
   const chg = D.changed.length || D.deleted.length ? `+${D.nAdded} ~${D.nModified} −${D.deleted.length}` + (D.nLocal ? ` ●${D.nLocal} ${t('uncommitted')}` : '') : '';
   const tip = [name, PJ.description || D.M.summary || '', [F.repo && F.repo !== name ? F.repo : '', F.branch ? t('branch') + ' ' + F.branch + (F.base ? ' vs ' + F.base : '') : '', F.head].filter(Boolean).join(' · '), chg].filter(Boolean).join('\n');
   $('#repoName').textContent = name; $('#repoName').title = tip;
-  $('#hName').textContent = name; $('#hName').title = tip;
+  $('#hName').title = tip; paintHName(); // the name of the current page (side.js)
   const sub = [F.branch ? t('branch') + ' ' + F.branch : F.repo && F.repo !== name ? F.repo : '', chg].filter(Boolean).join(' · ');
   $('#repoSub').textContent = sub; $('#repoSub').title = tip;
   $('#brand').title = name + ' — ' + t('lv')[0]; $('#brand').setAttribute('aria-label', $('#brand').title);
@@ -174,6 +174,9 @@ function init() {
   window.addEventListener('keydown', (e) => {
     const tg = e.target.tagName;
     if (tg === 'SELECT' || tg === 'INPUT' || tg === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
+    // the view on the canvas takes its keys first (a page steps the scenario of a frame with ← / →)
+    const cv = !state.run && VIEWS.find((x) => x.id === state.view);
+    if (cv && cv._mounted && cv.onKey && e.key !== 'Escape') { let took = false; try { took = cv.onKey(e, AM); } catch (err) { console.error('archmap view', cv.id, 'onKey', err); } if (took) { e.preventDefault(); return; } }
     if (e.key === 'Escape') { e.preventDefault(); goBack(); }
     else if (e.key === 'Enter') { if (tg === 'BUTTON') return; e.preventDefault(); if (state.view === 'map') (state.run ? stepIn() : intoSelected()); }
     else if (!state.run) return; // the arrows step only through an open scenario
@@ -185,9 +188,11 @@ function init() {
   rebuildMap();
   renderPlayer(); // no scenario opens by itself: the run bar stays hidden until the sidebar or a card opens one
   const hk = hashRun(); // a scenario named in the hash (#flow= / #journey= …) opens on the canvas: a reload shows the same
+  const hp = hashPage(); // or a page of arch/pages (#page=<id>)
   setView(!hk && VIEWS.some((v) => v.id === qs.get('view')) ? qs.get('view') : 'map');
   renderPanel();
   if (hk) openRunAt(hk.key, hk.step);
+  else if (hp) AM.pages.open(hp);
   if (D.live) { setupLive(); watchMarks(); }
 }
 

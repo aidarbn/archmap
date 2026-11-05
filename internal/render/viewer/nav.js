@@ -23,7 +23,7 @@ const flowActor = (fl) => { if (fl.actor) return fl.actor; const a = fl.steps &&
 /* ---------- ⋯ menu ---------- */
 function menuItems() {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const out = VIEWS.filter((v) => v.id !== 'map').map((v) => ({ nm: t('mnView', viewTitle(v)), cur: state.view === v.id, run: () => { if (state.view === v.id) setView('map'); else setView(v.id); } }));
+  const out = VIEWS.filter((v) => v.id !== 'map' && v.menu !== false).map((v) => ({ nm: t('mnView', viewTitle(v)), cur: state.view === v.id, run: () => { if (state.view === v.id) setView('map'); else setView(v.id); } }));
   if (out.length) out.push(null);
   out.push({ nm: t('mnLang'), run: () => setLang(LANG === 'ru' ? 'en' : 'ru') });
   out.push({ nm: t('mnTheme', dark), run: () => setTheme(dark ? 'light' : 'dark') });
@@ -54,8 +54,11 @@ function setupMenu() {
 }
 
 /* ---------- back ---------- */
-// back: the scenario closes first, then another view returns to the map, then the map goes a level up
+// back: a frame opened from a page returns to the page; the scenario closes first, then another view returns to the
+// map, then the map goes a level up
 function goBack() {
+  // a frame of a page opened on the whole canvas: Esc goes back to the page (views/pages.js)
+  if (AM.pages && AM.pages.back()) return;
   if (state.run) return closeRun();
   if (state.view !== 'map') return setView('map');
   return up();

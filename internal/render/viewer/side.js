@@ -23,6 +23,8 @@ addI18n({
     sdLabel: 'Навигация', sdGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию', sdFold: 'Свернуть', sdUnfold: 'Развернуть',
     chPanelHide: 'Скрыть инспектор', chPanelShow: 'Показать инспектор', chTopHide: 'Свернуть верхнюю строку', chTopShow: 'Показать верхнюю строку',
     chFocusOn: 'Только холст', chFocusOff: 'Вернуть панели',
+    pgPages: 'Страницы', pgSystem: 'Система', pgFold: 'Свернуть список страниц', pgUnfold: 'Показать список страниц',
+    pgBuiltin: 'Страница archmap: строится из кода', pgUser: (f) => 'Страница из ' + f, pgBad: 'Есть ссылки на то, чего нет в коде (archmap lint)',
   },
   en: {
     nvSys: 'System', nvActors: 'Users', nvMods: 'Modules', nvExt: 'Outside systems', nvData: 'Data', nvApi: 'API', nvStatus: 'Statuses',
@@ -31,6 +33,8 @@ addI18n({
     sdLabel: 'Navigation', sdGrip: 'Drag to resize; double-click for the default', sdFold: 'Fold', sdUnfold: 'Unfold',
     chPanelHide: 'Hide the inspector', chPanelShow: 'Show the inspector', chTopHide: 'Fold the toolbar', chTopShow: 'Show the toolbar',
     chFocusOn: 'Canvas only', chFocusOff: 'Bring the panels back',
+    pgPages: 'Pages', pgSystem: 'System', pgFold: 'Fold the page list', pgUnfold: 'Show the page list',
+    pgBuiltin: 'An archmap page: built from the code', pgUser: (f) => 'A page from ' + f, pgBad: 'Names something the code does not have (archmap lint)',
   },
 });
 
@@ -56,7 +60,79 @@ const SIDE_ICON = {
   flow: IC('<path d="M4.5 3.2v7.6L10.6 7z" stroke-linejoin="round"/>'),
   clock: IC('<circle cx="7" cy="7" r="5"/><path d="M7 4.2V7l2 1.4"/>'),
   all: IC('<path d="M2.5 3.5h9M2.5 7h9M2.5 10.5h9"/>'),
+  page: IC('<path d="M3.5 1.5h5l2.5 2.5v8.5h-7.5z"/><path d="M8.5 1.5V4H11"/>'),
+  frame: IC('<path d="M4 1.5v11M10 1.5v11M1.5 4h11M1.5 10h11"/>'),
+  note: IC('<rect x="2" y="2" width="10" height="10" rx="1.5"/><path d="M4.5 5h5M4.5 7.5h5M4.5 10h3"/>'),
 };
+
+/* ---------- pages ----------
+ * Like pages in Figma: the archmap pages built from the code — System (the map and the whole tree), Data, API,
+ * Statuses (the views of the same name) — then the pages of arch/pages/*.arch (views/pages.js draws them: frames,
+ * each a diagram from the code). The list sits on top of the sidebar; the tree under it shows the current page. */
+const PG = { fold: false };
+const userPages = () => ((D.M && D.M.spec && D.M.spec.pages) || []);
+function pageList() {
+  const out = [{ id: 'system', name: t('pgSystem'), view: 'map', icon: 'sys' }];
+  if (hasView('data') && Object.keys(D.tables || {}).length) out.push({ id: 'data', name: t('nvData'), view: 'data', icon: 'table', sec: 'sec:data' });
+  if (hasView('api') && (D.endpoints || []).length) out.push({ id: 'api', name: t('nvApi'), view: 'api', icon: 'api', sec: 'sec:api' });
+  if (hasView('status') && Object.keys(D.states || {}).length) out.push({ id: 'status', name: t('nvStatus'), view: 'status', icon: 'status', sec: 'sec:status' });
+  if (hasView('page')) userPages().forEach((p) => out.push({ id: 'p:' + p.id, name: p.name, view: 'page', icon: 'page', page: p, user: true, bad: (p.frames || []).some((f) => (f.missing || []).length) }));
+  return out;
+}
+// the page on the canvas: a user page while the page view is on, else the archmap page of the view (System for the map)
+function curPage() {
+  const all = pageList();
+  if (state.view === 'page' && AM.pages && AM.pages.cur) return all.find((p) => p.id === 'p:' + AM.pages.cur) || all[0];
+  return all.find((p) => p.view === state.view) || all[0];
+}
+function openPage(id) {
+  const p = pageList().find((x) => x.id === id); if (!p) return;
+  closeMenu();
+  if (AM.pages) AM.pages.forget(); // a page picked by hand: Esc no longer returns to the page a frame came from
+  if (state.run) closeRun();
+  if (p.user) { AM.pages.open(p.page.id); return; }
+  if (state.view !== p.view) setView(p.view);
+  if (p.view === 'map' && state.level > 0) up(0);
+  renderPages(); renderSide(); paintHName(); writeHash();
+}
+function renderPages() {
+  const box = $('#pages'); if (!box || !D.F) return;
+  const all = pageList(), cur = curPage();
+  const chev = `<span class="chev${PG.fold ? '' : ' on'}">${SIDE_ICON.chev}</span>`;
+  let h = `<button type="button" class="pgh" data-pgfold="1" title="${esc(t(PG.fold ? 'pgUnfold' : 'pgFold'))}" aria-expanded="${!PG.fold}">${chev}<span class="nm">${esc(t('pgPages'))}</span>` +
+    (PG.fold ? `<span class="cur">${esc(cur.name)}</span>` : `<span class="ct">${all.length}</span>`) + '</button>';
+  if (!PG.fold) {
+    h += '<div class="pgl" role="listbox" aria-label="' + esc(t('pgPages')) + '">';
+    all.forEach((p, i) => {
+      if (p.user && (i === 0 || !all[i - 1].user)) h += '<div class="pgsep" role="separator"></div>';
+      const tip = p.name + '\n' + (p.user ? t('pgUser', p.page.file || 'arch/pages') : t('pgBuiltin')) + (p.bad ? '\n' + t('pgBad') : '');
+      h += `<button type="button" role="option" class="pg${p.id === cur.id ? ' cur' : ''}${p.bad ? ' bad' : ''}" data-pg="${esc(p.id)}" title="${esc(tip)}" aria-selected="${p.id === cur.id}">${SIDE_ICON[p.icon]}<span class="nm">${esc(p.name)}</span>${p.user ? `<span class="ct">${(p.page.frames || []).length}</span>` : ''}</button>`;
+    });
+    h += '</div>';
+  }
+  box.innerHTML = h;
+}
+function setupPages() {
+  try { PG.fold = localStorage.getItem('archmap.pages.fold') === '1'; } catch (e) { /* file:// without storage */ }
+  $('#pages').addEventListener('click', (e) => {
+    if (e.target.closest('[data-pgfold]')) {
+      PG.fold = !PG.fold;
+      try { localStorage.setItem('archmap.pages.fold', PG.fold ? '1' : '0'); } catch (er) { /* ignore */ }
+      renderPages(); return;
+    }
+    const b = e.target.closest('[data-pg]'); if (b) openPage(b.getAttribute('data-pg'));
+  });
+  renderPages();
+}
+// the tree of the current page: System — the whole navigation; Data / API / Statuses — their section of it; a page of
+// arch/pages — its frames and what is in them (views/pages.js)
+function pageTree() {
+  const p = curPage();
+  if (p.user && AM.pages) return AM.pages.tree(p.page);
+  const full = navTree();
+  if (!p.sec) return full;
+  return kidsOf(full).find((n) => n.key === p.sec) || full;
+}
 // a scenario started by the scheduler: its entry point is a task / cron (background jobs)
 const isScheduled = (fl) => { const f = fl.steps && D.fns[fl.steps[0]], k = f && f.entry ? f.entry.kind : ''; return k === 'task' || k === 'cron'; };
 
@@ -124,8 +200,10 @@ function hashRun() {
 // Old links of the former scenario window (with the solo flag) open the scenario here too and lose the flag.
 const BASE_TITLE = document.title;
 function writeHash() {
-  const want = state.run ? keyHash(state.run.key) : '';
-  document.title = state.run ? state.run.name + ' — ' + BASE_TITLE : BASE_TITLE;
+  // no scenario open: a page of arch/pages keeps its own hash (#page=<id>)
+  const pg = !state.run && state.view === 'page' && AM.pages && AM.pages.cur ? AM.pages.cur : null;
+  const want = state.run ? keyHash(state.run.key) : pg ? '#page=' + encodeURIComponent(pg) : '';
+  document.title = state.run ? state.run.name + ' — ' + BASE_TITLE : pg ? curPage().name + ' — ' + BASE_TITLE : BASE_TITLE;
   if ((location.hash || '') === want) return;
   try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) { /* file:// in some browsers */ }
 }
@@ -140,9 +218,20 @@ async function openRunAt(key, step) {
   if (!state.run || state.run.key !== key) await openRun(key);
   if (step >= 0) { for (let i = 0; i < 40 && state.busy; i++) await sleep(100); AM.play.go(step); }
 }
+// the page of arch/pages the hash names (#page=<id>), when it exists
+function hashPage() {
+  const m = /^#page=([^&]+)/.exec(location.hash || '');
+  const id = m ? decodeURIComponent(m[1]) : null;
+  return id && AM.pages && AM.pages.has(id) ? id : null;
+}
 function setupHash() {
   bus.on('flow', writeHash);
-  window.addEventListener('hashchange', () => { const r = hashRun(); if (r) openRunAt(r.key, r.step); else if (state.run && !location.hash) closeRun(); });
+  window.addEventListener('hashchange', () => {
+    const r = hashRun(), pg = hashPage();
+    if (r) openRunAt(r.key, r.step);
+    else if (pg) { if (state.run) closeRun(); if (state.view !== 'page' || AM.pages.cur !== pg) AM.pages.open(pg); }
+    else if (state.run && !location.hash) closeRun();
+  });
 }
 
 /* ---------- the tree ---------- */
@@ -201,6 +290,7 @@ async function navMod(m) {
 // the node of the current selection (map or view) and the nodes above it
 function selKey() {
   if (state.run) return null; // the open scenario is marked by its own row (renderSide, n.rk)
+  if (state.view === 'page' && AM.pages) return AM.pages.selKey();
   const s = state.sel;
   if (s) {
     if (s.t === 'svc') return 'sys';
@@ -248,7 +338,7 @@ function runAncestors(key) {
 function revealSel() {
   if (state.run) { runAncestors(state.run.key).forEach((x) => SIDE.open.add(x)); SIDE.reveal = true; return; }
   const k = selKey(); if (!k) return;
-  ancestors(k).forEach((x) => SIDE.open.add(x));
+  (state.view === 'page' && AM.pages ? AM.pages.ancestors(k) : ancestors(k)).forEach((x) => SIDE.open.add(x));
   SIDE.reveal = true;
 }
 
@@ -277,11 +367,12 @@ function renderSide() {
       if (!mine && !rows.length) return '';
       return treeRow(n, d, rows.length > 0, hasKids, isCur(n)) + rows.join('');
     }
-    const open = hasKids && SIDE.open.has(n.key);
+    // the root of the page's tree is always unfolded
+    const open = hasKids && (d === 0 || SIDE.open.has(n.key));
     if (open) sub = ks.map((c) => walk(c, d + 1));
-    return treeRow(n, d, open, hasKids, isCur(n)) + sub.join('');
+    return treeRow(n, d, open, d > 0 && hasKids, isCur(n)) + sub.join('');
   };
-  const h = walk(navTree(), 0);
+  const h = walk(pageTree(), 0);
   box.innerHTML = h || `<div class="sn">${esc(t('sdNone'))}</div>`;
   box.scrollTop = top;
   const c = box.querySelector('.ti.cur');
@@ -297,8 +388,15 @@ function paintSide() {
   const g = $('#sideGrip'); g.title = t('sdGrip'); g.setAttribute('aria-label', t('sdGrip'));
   paintHName(); paintChrome();
 }
-// the project name in the centre of the toolbar: only while the sidebar (which has it on top) is hidden and no run is open
-function paintHName() { const n = $('#hName'); if (n) n.hidden = !SIDE.hidden || !!state.run; }
+// the name of the current page in the centre of the toolbar (the project name with the sidebar hidden and on the
+// System page); the run bar takes the place while a scenario is open
+function paintHName() {
+  const n = $('#hName'); if (!n) return;
+  n.hidden = !!state.run;
+  if (!D.F) return;
+  const p = curPage(), proj = (D.F.project || {}).name || D.M.title || D.F.repo || 'archmap';
+  n.textContent = p.id === 'system' && SIDE.hidden ? proj : (AM.pages && AM.pages.label ? AM.pages.label(p) : '') || p.name;
+}
 // the canvas changed its width: the scenes take the new size
 const stageResized = () => { rebuildMap(); bus.emit('resize'); };
 function setSideHidden(h) {
@@ -445,10 +543,13 @@ function setupSide() {
   // the tree follows the selection on the map and in the views, and the open scenario
   const follow = () => { revealSel(); renderSide(); };
   ['select', 'level', 'view', 'flow'].forEach((ev) => bus.on(ev, follow));
-  bus.on('lang', () => { paintSide(); renderSide(); });
-  bus.on('data', () => { paintSide(); renderSide(); });
+  bus.on('view', () => { renderPages(); paintHName(); writeHash(); });
+  bus.on('lang', () => { paintSide(); renderSide(); renderPages(); });
+  bus.on('data', () => { paintSide(); renderSide(); renderPages(); });
+  bus.on('live', () => { renderPages(); renderSide(); paintHName(); });
+  setupPages();
   paintSide(); renderSide();
 }
 
-Object.assign(AM, { side: { render: renderSide, setHidden: setSideHidden, setWidth: setSideWidth, get hidden() { return SIDE.hidden; }, get width() { return SIDE.w || SIDE_W.def; }, groups: sideGroups, realDesc, openScenario, hashRun },
+Object.assign(AM, { pageList, curPage, openPage, renderPages, side: { render: renderSide, setHidden: setSideHidden, setWidth: setSideWidth, get hidden() { return SIDE.hidden; }, get width() { return SIDE.w || SIDE_W.def; }, groups: sideGroups, realDesc, openScenario, hashRun },
   chrome: { setTop: setTopHidden, setFocus, get top() { return CHR.top; }, get focus() { return !!CHR.focus; } } });

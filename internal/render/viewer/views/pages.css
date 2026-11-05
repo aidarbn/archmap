@@ -1,0 +1,89 @@
+/* views/pages.css — a page of arch/pages: the canvas of frames (views/pages.js). A frame is a white card on the even
+   canvas with a soft shadow and a hairline, its name above it at the left, small and grey (as frames in Figma). */
+.pv-box { position: absolute; inset: 0; }
+.pv-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; user-select: none; }
+.pv-muted { font-size: 13px; fill: var(--muted); }
+.pf { cursor: default; }
+.pf-name { font: 500 12px var(--font); fill: var(--muted); letter-spacing: .01em; }
+.pf.sel .pf-name, .pf.playing .pf-name { fill: var(--accent-text); }
+.pf-bg { fill: var(--surface); stroke: var(--line); stroke-width: 1; filter: var(--card-sh); }
+.pf:hover .pf-bg { stroke: var(--line-2); }
+.pf.sel .pf-bg { stroke: var(--accent); stroke-width: 1.5; }
+.pf.playing .pf-bg { stroke: var(--accent); stroke-width: 1.5; filter: var(--card-sh-sel); }
+.pf.lit .pf-bg { stroke: color-mix(in oklab, var(--accent) 55%, var(--line)); stroke-width: 1.5; }
+.pf-miss { font-size: 12px; fill: var(--crit-text); }
+.pf-cap { font-size: 12.5px; fill: var(--text-2); }
+.pf.playing .pf-cap { fill: var(--text); font-weight: 500; }
+.pf-title { font: 600 14px var(--font); fill: var(--text); }
+.pbtn-s { cursor: pointer; }
+.pbtn-s rect { fill: var(--surface); stroke: var(--line-2); }
+.pbtn-s text { font: 500 12.5px var(--font); fill: var(--text); pointer-events: none; }
+.pbtn-s:hover rect { fill: var(--hover); }
+.pbtn-s.primary rect { fill: var(--accent); stroke: var(--accent); }
+.pbtn-s.primary text { fill: var(--on-accent); }
+.pbtn-s.primary:hover rect { fill: var(--accent-hover); }
+.pbtn-s.ro { cursor: default; }
+.pbtn-s.ro rect { fill: none; stroke: none; }
+.pbtn-s.ro text { font-variant-numeric: tabular-nums; fill: var(--text-2); }
+.pbtn-s.off { opacity: .35; pointer-events: none; }
+
+/* the scenario of a journey / flow frame: lanes, participants, legs with the step numbers */
+.pv-lane { font: 600 10.5px var(--font); fill: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.pv-node .card { fill: var(--surface); stroke: var(--line); filter: var(--card-sh); transition: stroke var(--t); }
+.pv-node.mod { cursor: pointer; }
+.pv-node .nm { font: 600 13px var(--font); fill: var(--text); }
+.pv-node .sub { font-size: 11px; fill: var(--muted); }
+.pv-node.ext .card { stroke-dasharray: 4 3; stroke: var(--edge); filter: none; }
+.pv-node.cur .card { stroke: var(--accent); stroke-width: 2; filter: var(--card-sh-sel); }
+.pv-node.touch .card { stroke: var(--accent); stroke-width: 1.4; }
+.pv-node.done .card { stroke: color-mix(in oklab, var(--accent) 35%, var(--line)); }
+.pv-leg .ln { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+.pv-leg.async .ln { stroke-dasharray: 6 4; }
+.pv-leg.ext .ln { stroke-dasharray: 2 3; }
+.pv-leg .pill { fill: var(--surface); stroke: var(--line-2); }
+.pv-leg .no { font: 600 10.5px var(--font); fill: var(--text-2); font-variant-numeric: tabular-nums; }
+.pf-in.stepping .pv-leg:not(.cur):not(.done) { opacity: .35; }
+.pf-in.stepping .pv-node:not(.cur):not(.done):not(.touch) { opacity: .45; }
+.pv-leg.done .ln { stroke: color-mix(in oklab, var(--accent) 40%, var(--edge)); }
+.pv-leg.cur .ln { stroke: var(--accent); stroke-width: 2.5; }
+.pv-leg.cur .pill { fill: var(--accent); stroke: var(--accent); }
+.pv-leg.cur .no { fill: var(--on-accent); }
+.pf-in .pv-sub { font: 600 13px var(--mono); fill: var(--text-2); }
+
+/* state machines in a frame: the rules of views/status.css that its .sv-svg scopes */
+.pf-in.st .n { cursor: pointer; }
+.pf-in.st .n.sel .card { stroke: var(--accent); stroke-width: 2; fill: var(--accent-soft); }
+.pf-in.st .tr .hit { fill: none; stroke: transparent !important; stroke-width: 14 !important; pointer-events: stroke; }
+.pf-in.st .tr .ln { pointer-events: none; }
+.pf-in.st .tr.hot path.ln { stroke: var(--accent); stroke-width: 2.8; }
+.pf-in.st .tr .fnl { font: 12px var(--mono); fill: var(--accent); text-decoration: none; }
+.pf-in.st .tr.hot .fnl { font-weight: 700; }
+.pf-in.st .anydot { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.pf-in.st .startdot { fill: var(--text); }
+.pf-in.st .startln { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+.pf-in.st .finalring { fill: none; stroke: var(--text-2); stroke-width: 1.4; pointer-events: none; }
+.pf-in.st .tr.st-code path.ln { stroke: var(--serious); stroke-width: 2; }
+.pf-in.st .tr.st-spec path.ln { stroke: var(--muted); stroke-dasharray: 6 4; }
+
+/* endpoints and functions */
+.pv-ep, .pv-fn, .pv-mod { cursor: pointer; }
+.pv-ep .row { fill: var(--surface-2); stroke: transparent; transition: fill var(--t), stroke var(--t); }
+.pv-ep:hover .row, .pv-fn:hover .row { fill: var(--hover); }
+.pv-ep.hot .row { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.pv-ep .verb { fill: var(--surface); stroke: var(--line-2); }
+.pv-ep .vt { font: 700 10.5px var(--mono); fill: var(--accent-text); }
+.pv-ep .path { font: 600 12.5px var(--mono); fill: var(--text); }
+.pv-ep .svc { font-size: 11.5px; fill: var(--muted); }
+.pf-in .desc { font-size: 12.5px; fill: var(--text-2); }
+.pv-mod .mname { font: 600 14px var(--mono); fill: var(--text); }
+.pv-fn .row { fill: transparent; transition: fill var(--t), stroke var(--t); }
+.pv-fn.hot .row { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.pv-fn .fname { font: 500 12.5px var(--mono); fill: var(--text); }
+.pv-fn .fdoc { font-size: 11.5px; fill: var(--muted); }
+.pv-note { font-size: 15px; fill: var(--text-2); }
+
+/* the inspector of a page: the kind chip of a frame keeps its width */
+#pane .rel-list li[data-pf] .chip { flex: none; }
+
+/* the tree of a page: refs the code does not have */
+.slist .ti.bad .nm { color: var(--crit-text); }

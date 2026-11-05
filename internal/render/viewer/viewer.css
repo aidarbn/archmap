@@ -392,13 +392,35 @@ main.presize > aside, main.presize > .side { transition: none; }
  * (names only, one line each). Width --sw on main (200–420 px, the right edge drags it); main.noside hides it */
 .side { position: relative; flex: none; width: var(--sw); z-index: 8; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0;
   transition: width var(--chrome-t) var(--ease), border-width var(--chrome-t), visibility 0s; }
-.side > .shd, .side > .sq, .side > .slist { min-width: calc(var(--sw) - 1px); }
+.side > .shd, .side > .pgs, .side > .sq, .side > .slist { min-width: calc(var(--sw) - 1px); }
 .side > .sq { min-width: calc(var(--sw) - 25px); }
 main.noside > .side { width: 0; border-right-width: 0; overflow: hidden; visibility: hidden; transition: width var(--chrome-t) var(--ease), border-width var(--chrome-t), visibility 0s linear var(--chrome-t); }
 .side .shd { flex: none; padding: 16px 18px 10px; min-width: 0; }
 .side .shd b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.005em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side .shd small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .side .shd small:empty { display: none; }
+/* the pages (as Pages in Figma): a compact block on top of the sidebar — a header with a fold chevron, then one row
+   per page, the current one highlighted; folded, the header names the current page */
+.side .pgs { flex: none; padding: 2px 8px 8px; border-top: 1px solid var(--line); }
+.pgs .pgh { display: flex; align-items: center; gap: 6px; width: 100%; height: 30px; border: 0; background: none; padding: 0 10px 0 4px; cursor: pointer; color: var(--text-2); font-size: 12px; font-weight: 600; text-align: left; border-radius: var(--r-sm); }
+.pgs .pgh:hover { background: var(--hover); color: var(--text); }
+.pgs .pgh .chev { width: 16px; height: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.pgs .pgh .chev svg { width: 8px; height: 8px; fill: currentColor; transition: transform 120ms; }
+.pgs .pgh .chev.on svg { transform: rotate(90deg); }
+.pgs .pgh .nm { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pgs .pgh .cur { flex: 0 1 auto; min-width: 0; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pgs .pgh .ct { flex: none; font-size: 11.5px; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.pgs .pgl { display: flex; flex-direction: column; gap: 1px; max-height: 30vh; overflow: auto; scrollbar-width: thin; }
+.pgs .pg { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; border: 0; border-radius: var(--r-sm); background: none; padding: 0 10px 0 24px; cursor: pointer; color: var(--text); font-size: 13px; text-align: left; transition: background-color 100ms; }
+.pgs .pg:hover { background: var(--hover); }
+.pgs .pg:focus-visible, .pgs .pgh:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pgs .pg.cur { background: var(--accent-soft); font-weight: 500; }
+.pgs .pg .ico { width: 15px; height: 15px; flex: none; fill: none; stroke: var(--text-2); stroke-width: 1.5; }
+.pgs .pg.cur .ico { stroke: var(--accent); }
+.pgs .pg .nm { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pgs .pg .ct { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pgs .pg.bad .nm { text-decoration: underline wavy color-mix(in oklab, var(--critical) 60%, transparent); text-underline-offset: 3px; }
+.pgs .pgsep { height: 1px; background: var(--line); margin: 4px 10px 4px 24px; }
 .side .sq { position: relative; flex: none; margin: 4px 12px 10px; }
 .side .sq svg { position: absolute; left: 10px; top: 9px; width: 14px; height: 14px; fill: none; stroke: var(--muted); stroke-width: 1.5; pointer-events: none; }
 .side .sq input { width: 100%; height: 32px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); padding: 0 10px 0 31px; font-size: 13px; outline: none; transition: border-color 120ms; }

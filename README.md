@@ -71,8 +71,9 @@ nodes as white cards on a soft shadow, one typeface; and a dark theme.
 - **Sidebar** — the base of the page, a docked column at the left (260 px; drag
   its right edge for 200–420 px, double-click for the default, remembered by
   the browser; the toolbar button or `[` hides it). On top the project name
-  with the branch under it, then a compact **filter** that narrows the whole
-  tree, then the **full navigation of the project as one tree**, like the
+  with the branch under it, then the **Pages** list (below), then a compact
+  **filter** that narrows the tree, then the **tree of the current page** — on
+  **System** the **full navigation of the project as one tree**, like the
   layers of Figma — names only, one line each (the full name in the tooltip), a
   small grey counter on sections and groups: **System** → **Users** (actors) →
   **Modules** by layer (Entry, Domain, Adapters, Infrastructure …; a module
@@ -86,6 +87,15 @@ nodes as white cards on a soft shadow, one typeface; and a dark theme.
   map (going to its level) or opens its view in the centre (Data, API,
   Statuses), and the inspector shows it. The tree follows a selection made on
   the map or in a view: it unfolds down to the selected node and scrolls to it.
+  On **Data**, **API**, **Statuses** the tree is that section; on a page of
+  `arch/pages` — its frames and what is in them.
+- **Pages**, as pages in Figma: the architecture is a set of different
+  diagrams, and a page puts the ones you need side by side. archmap builds four
+  pages itself — **System** (the map), **Data**, **API**, **Statuses** — and
+  adds one per `page` block of `arch/pages/*.arch` (see "Pages" below). The
+  list is a compact block on top of the sidebar (the current page highlighted;
+  its header folds the list and then names the current page); the toolbar shows
+  the name of the current page.
 - **Everything in one window.** A click on a path or a scenario (in the tree, ▶
   at an endpoint, "Scenarios through this node" in a card, a scenario inside a
   path) turns the canvas into **its diagram** (below) with a fade; the
@@ -322,7 +332,7 @@ archmap version
   turns that endpoint off).
 - `lint` checks `arch:` scenario markup, see [Annotating flows](#annotating-flows),
   and the optional `arch/*.arch` spec against the code, see [Designing with .arch](#designing-with-arch).
-- `diff` compares the diagrams (scenarios, journeys, state machines) of the tree
+- `diff` compares the diagrams (scenarios, journeys, state machines, pages) of the tree
   with a base revision (`--base origin/main` by default, or `--base-root DIR`)
   and prints what appeared, disappeared, changed or broke — as text, JSON or a
   Markdown PR comment. See [CI: diagrams diff in PRs](docs/diff.md#ci-diagrams-diff-in-prs).
@@ -533,6 +543,49 @@ journey guest-kaspi "The guest pays with Kaspi": create-order > kaspi-pay > conf
   and `PUT /spec/file`; every write is followed by the usual rebuild and live update.
 
 Full grammar, the JSON model and the operations: [docs/spec.md](docs/spec.md).
+
+### Pages
+
+A page puts several diagrams of the code side by side, like a page in Figma.
+Write it in `arch/pages/<name>.arch` (a `page` block may also sit in any
+`arch/*.arch`); one line is one frame, in this order:
+
+```
+page "Оплата Kaspi"                         # or: page kaspi "Оплата Kaspi"
+  journey guest-pay-kaspi                   # a journey (arch:journey or arch/*.arch)
+  flow    kaspi-pay                         # a scenario (arch:flow or arch/*.arch)
+  states  Order, Payment                    # state machines of these entities
+  tables  orders, payments, kaspi_payment_details
+  api     RequestKaspiQRForOrder, CancelOrder   # Name, Service.Name, a path or "POST /path"
+  module  services/kaspi                    # a module and its functions
+  note    "Free text that explains the page"
+```
+
+- The page only **picks and orders** diagrams; every frame is drawn from the
+  code by the same code as the views: a journey / flow as the participants of
+  the scenario in layers (overview, then steps), a state machine as on
+  **Statuses**, the tables and the references between them as on **Data**, the
+  endpoints as a compact list with their descriptions from the code, the module
+  with its functions, the note as text.
+- The canvas pans and zooms like the map. Frames are white cards with their name
+  above at the left; they flow left to right, top to bottom, the scenarios first
+  and twice as wide (state machines too). A click on a frame shows it in the
+  inspector, a click on an element inside — that element; a **double click opens
+  the diagram on the whole canvas** (the scenario on the map, the view of the
+  machine / tables / endpoint, the module on the map), **Esc** comes back to the
+  page.
+- **Step through** the scenario of a journey / flow frame (its buttons, ← / →,
+  Home — the overview): on the other frames lights what the step touches, only
+  from the code — the tables of its data access, the status transitions
+  (`arch:state` of the step / the transitions the function makes), the endpoint
+  the scenario entered through, the step's function in the module frame. The
+  toolbar reads **page · Step k/N**, the inspector shows the step.
+- A reference to something the code does not have (journey, flow, table,
+  entity, endpoint, module) is a `lint` error with `file:line`, a frame marked
+  "not in the code", and a broken diagram in `archmap diff` — which also lists
+  pages that appeared, disappeared or changed their frames.
+- `#page=<id>` in the address opens the page. Creating pages from the interface
+  is not there yet: pages are files.
 
 ### Edit mode
 
