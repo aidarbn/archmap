@@ -235,12 +235,13 @@ is dropped.
 ```
 {id, name, desc, actor, exit, declared: bool, top: bool,
  flows: [flow id],            // unique; flows[0] is where it starts
- links: [{from: flow id, to: flow id, via: "on"|"queue"|"declared", cond?}]}
+ links: [{from: flow id, to: flow id, via: "on"|"queue"|"client", cond?}]}
 ```
 
 `links` is a graph (a tree with joins) over `flows`, never a cycle. `via:"on"` — `arch:on` with a
 condition (`cond`); `"queue"` — a step puts a job on a queue whose handler is the entry point of
-`to`; `"declared"` — the order was written by hand and the code shows no link (draw it dashed).
+`to`; `"client"` — the order was written by hand and the code shows no link: the client calls the
+next flow itself (draw it dashed).
 A declared journey lists its flows in the written order and has one link per neighbouring pair
 (several when both an `on` and a queue connect them); automatic ones (`declared:false`, id
 `"j:" + <first flow id>`) are branching walks from every flow that a person starts (actor not

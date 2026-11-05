@@ -198,20 +198,58 @@ read the files.
 `/data.json` and `archmap map` embed the spec merged into the usual data.
 
 `model.spec` is the model above. `model.flows[]` gets, for flows the spec
-declares: `spec: true`, `planned` (step id → true), `unspecified` (step id →
-true), `ext` (step id → system), `planMod` (planned step id → module of `in`). A
-planned step has the id `plan:<flow id>:<position in the spec flow>` in `steps`
-(there is no function); `labels[step id]` holds its caption. The player plays
-planned steps like the others (a dashed node, no code to open).
+declares: `spec: true`, `unspecified` (step id → true), `ext` (step id →
+system) and `plan` — the separate plan layer: `[{id, text, module?, after?}]`,
+one per `step plan`, `id` = `plan:<flow id>:<position in the spec flow>`,
+`after` = the code step (fid) it follows in the spec. Planned steps are never in
+`steps`: a diagram shows what the code does (see "Annotations do not change the
+logic" below).
 
 - Flow with the same id as an `arch:flow` of the code: the spec wins on `name`,
-  `actor`, `exit`, captions and the order of steps; code steps the spec flow does
-  not list follow the spec ones and are in `unspecified`. `alt` lines become
-  `branches` (`at` is the last real step). `variants` are dropped for such a flow.
+  `actor`, `exit` and captions; its steps join the `arch:step` ones and all of
+  them go in the order of the call graph from the entry point; code steps the
+  spec flow does not list are in `unspecified`. `alt` lines become `branches`
+  (`at` is the last step). `variants` are dropped for such a flow.
 - A spec-only flow: `kind: "declared"`, `top: true`, `spec: true`, placed after
-  the other declared flows.
+  the other declared flows. Its entry point is the step no other step of it
+  reaches by calls; the steps follow the call graph from there.
 - Journeys: a spec journey with the id of a code journey replaces its flow list; a
   new one is added, `declared: true`. Flow ids that exist nowhere are left out.
+  Each link is the one the code shows (`on`, `queue`), else `via: "client"`.
+
+## Annotations do not change the logic
+
+archmap reads what calls what from the code. A diagram is a simplified view of
+that graph; `arch:` markup and `.arch` files only **name and describe** (titles,
+captions, actors, outcomes), **add knowledge from outside the code** (client
+links, the plan layer) or **hide**. They never invent a step, a link or an order:
+
+1. **A step must be reachable.** `arch:step <flow>` on a function that the walk
+   from the flow's entry point does not reach is a lint error. The walk uses the
+   edges autosem builds scenarios from: calls in the body (direct, through fields
+   and interfaces as the extractor resolves them) and queue hand-offs (a worker
+   of the same flow is reachable). A step after an `arch:on -> other` belongs to
+   `other` and is checked against its entry point. The same holds for a spec
+   `step`: error `unreachable-step` when the entry point (the `arch:flow`
+   function, else the root step) does not reach it. A call the extractor does not
+   see (through a function value, reflection, generated code) makes a false
+   finding: the fix belongs in the extractor, not in a weaker rule.
+2. **The order of steps is the order of the call graph**: depth-first from the
+   entry point, calls in body order, then queue hand-offs. Neither the file
+   order, nor the order of the markup, nor the order of a spec flow changes it.
+3. **A state transition must be in the code.** `arch:state E: a -> b` with no
+   code transition to `b` of the machine `E` made by the function or anything it
+   reaches is reported by lint: as a warning for now (an error with `--strict`),
+   because the extractor does not yet see a status passed as an argument
+   (`repo.SetStatus(ctx, id, StatusPaid)`) or written by SQL text, so most such
+   findings on real projects are extractor gaps.
+4. **A journey link with no link in the code is a client link** (`via:
+   "client"`: the client calls the next flow itself). Not a fault: lint lists it
+   as information, the viewer draws it dashed.
+5. **Planned steps (`step plan`) are a separate plan layer** (`flows[].plan`),
+   never part of `steps` and never a lint problem (information only).
+
+`archmap diff` reports broken diagrams with the same rules.
 
 `facts.states[entity]` (the state machines): for each `states` entity of the spec,
 transitions the code lacks are added with `source: "spec"`, `drift:
@@ -234,8 +272,9 @@ warnings too. Text output prints `path:line: message`, warnings as `warning: …
   target state; `*` matches any source.
 - warning: a spec transition the code does not make ("not implemented").
 - error: a `step` that names no function; a `step` name that matches several.
-- warning: a step not reachable by calls from the previous resolved step and not
-  from the first step of the flow (siblings called by a common caller are fine).
+- error: a step not reachable by calls from the entry point of the flow (the
+  `arch:flow` function, else the root step). The order of the steps in the file
+  does not matter: the call graph orders them.
 - error: an `alt … -> flow` or a journey that names a flow declared neither in the
   spec nor with `arch:flow`.
 - warning: `state Entity: a -> b` in a flow where `a` or `b` is not in that

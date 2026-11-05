@@ -35,6 +35,9 @@ type Result struct {
 	Spec      bool `json:"spec"`       // spec files declare something
 	SpecFlows int  `json:"spec_flows"` // flows declared in the spec
 	Planned   int  `json:"planned"`    // planned steps (no code yet)
+	// ClientLinks counts the journey links with no link in the code (via
+	// "client": the client calls the next flow); listed in Info.
+	ClientLinks int `json:"client_links"`
 	// Docs is the description coverage (information only, set by the command).
 	Docs *DocCoverage `json:"docs,omitempty"`
 }
@@ -138,22 +141,9 @@ func RunWith(root string, f *facts.Facts, set *spec.Set) Result {
 			continue
 		}
 		for _, s := range a.Steps {
-			entry, ok := entryOf[s.Flow]
-			if !ok {
-				if specFlows[s.Flow] {
-					continue // a flow declared only in arch/*.arch has no entry point to walk from
-				}
+			// reachability from the entry point: UnreachableSteps below
+			if _, ok := entryOf[s.Flow]; !ok && !specFlows[s.Flow] {
 				add(fn.File, at(fid, "arch:step", " "+s.Flow), "arch:step refers to flow %q, which has no arch:flow (no entry point)", s.Flow)
-				continue
-			}
-			if entry == fid {
-				continue
-			}
-			if reach[entry] == nil {
-				reach[entry] = autosem.Reachable(f, entry)
-			}
-			if !reach[entry][fid] {
-				add(fn.File, at(fid, "arch:step", " "+s.Flow), "step of flow %q is not reachable by calls from its entry point %s", s.Flow, f.Functions[entry].Name)
 			}
 		}
 		for _, o := range a.On {
@@ -173,6 +163,15 @@ func RunWith(root string, f *facts.Facts, set *spec.Set) Result {
 				add(fn.File, at(fid, "arch:state", s.Entity), "arch:state %s: %q -> %q changes nothing", s.Entity, s.From, s.To)
 			}
 		}
+	}
+	for _, u := range UnreachableSteps(f) {
+		add(u.File, at(u.Fid, "arch:step", " "+u.Flow), "%s", u.Msg(f))
+	}
+	// a warning (an error with --strict): the extractor does not yet see a
+	// status passed as an argument or written by SQL text, so on real projects
+	// most findings are gaps of the extractor, not of the markup
+	for _, u := range UnbackedStates(f) {
+		res.Warnings = append(res.Warnings, Problem{u.File, at(u.Fid, "arch:state", u.Entity), u.Msg(f)})
 	}
 	// journeys: ids, references, gaps
 	type site struct {
@@ -217,8 +216,10 @@ func RunWith(root string, f *facts.Facts, set *spec.Set) Result {
 			continue
 		}
 		for _, l := range j.Links {
-			if l.Via == autosem.ViaDeclared {
-				res.Warnings = append(res.Warnings, Problem{s.file, s.line, fmt.Sprintf("journey %q: flows %q and %q follow each other with no link in the code (no arch:on, no queue); fine if the client calls them in turn", j.ID, l.From, l.To)})
+			if l.Via == autosem.ViaClient {
+				// knowledge from outside the code, not a fault: information
+				res.Info = append(res.Info, Problem{s.file, s.line, fmt.Sprintf("journey %q: %q -> %q is a client link (no arch:on or queue in the code: the client calls the next flow itself)", j.ID, l.From, l.To)})
+				res.ClientLinks++
 			}
 		}
 	}

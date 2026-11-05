@@ -42,14 +42,16 @@ journey j-new "Новый путь": pay > retry
 		t.Fatalf("merged flow: %+v", fl)
 	}
 	id := func(n string) string { return "internal/x/f.go::" + n }
-	if !reflect.DeepEqual(fl.Steps[:3], []string{id("save"), PlannedID("pay", 1), id("requestQR")}) {
-		t.Fatalf("spec order wins: %v", fl.Steps)
+	// the spec lists save before requestQR; the code calls requestQR first: the graph wins
+	if !reflect.DeepEqual(fl.Steps, []string{id("Pay"), id("requestQR"), id("save"), id("Poll")}) {
+		t.Fatalf("call-graph order must win over the spec order: %v", fl.Steps)
 	}
-	if fl.Labels[id("save")] != "Сохраняем" || fl.Labels[PlannedID("pay", 1)] != "Проверить лимит" || fl.Labels[id("requestQR")] == "" {
+	if fl.Labels[id("save")] != "Сохраняем" || fl.Labels[id("requestQR")] == "" {
 		t.Fatalf("labels: %v", fl.Labels)
 	}
-	if !fl.Planned[PlannedID("pay", 1)] || fl.Ext[id("requestQR")] != "Kaspi" || fl.PlanMod[PlannedID("pay", 1)] != "internal/x" {
-		t.Fatalf("planned/ext: %v %v", fl.Planned, fl.Ext)
+	// planned steps live in the plan layer, never among the steps
+	if !reflect.DeepEqual(fl.Plan, []PlanStep{{ID: PlannedID("pay", 1), Text: "Проверить лимит", Module: "internal/x", After: id("save")}}) || fl.Ext[id("requestQR")] != "Kaspi" {
+		t.Fatalf("plan/ext: %+v %v", fl.Plan, fl.Ext)
 	}
 	if len(fl.Unspecified) == 0 || fl.Unspecified[id("save")] {
 		t.Fatalf("code steps without spec must be marked: %v", fl.Unspecified)
@@ -72,7 +74,7 @@ journey j-new "Новый путь": pay > retry
 	}
 
 	re := flowByID(m, "retry")
-	if re == nil || !re.Spec || re.Kind != KindDeclared || len(re.Steps) != 1 || !re.Planned[re.Steps[0]] || re.Name != "Повтор" {
+	if re == nil || !re.Spec || re.Kind != KindDeclared || len(re.Steps) != 0 || len(re.Plan) != 1 || re.Name != "Повтор" {
 		t.Fatalf("spec-only flow: %+v", re)
 	}
 	// spec-only flows sit among the declared ones, before the automatic ones
@@ -91,7 +93,7 @@ journey j-new "Новый путь": pay > retry
 		t.Fatalf("spec model: %+v", m.Spec)
 	}
 	b, err := JSONWith(f, specSet(t, "flow retry\n  step plan \"x\"\n"))
-	if err != nil || !strings.Contains(string(b), `"planned"`) || !strings.Contains(string(b), `"spec":`) {
+	if err != nil || !strings.Contains(string(b), `"plan":[{"id":"plan:retry:0"`) || !strings.Contains(string(b), `"spec":`) {
 		t.Fatalf("json: %v %s", err, b)
 	}
 }

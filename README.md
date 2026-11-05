@@ -251,6 +251,8 @@ archmap render  --facts facts.json --out arch.html [--no-src]
 archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
 archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
 archmap lint    [--root DIR] [--format text|json] [--tests] [--strict] [--missing-docs]
+archmap diff    [--root DIR] [--base REF | --base-root DIR] [--format text|markdown|json]
+                [--lang en|ru] [--out FILE] [--fail-on broken] [--tests]
 archmap version
 ```
 
@@ -275,6 +277,10 @@ archmap version
   turns that endpoint off).
 - `lint` checks `arch:` scenario markup, see [Annotating flows](#annotating-flows),
   and the optional `arch/*.arch` spec against the code, see [Designing with .arch](#designing-with-arch).
+- `diff` compares the diagrams (scenarios, journeys, state machines) of the tree
+  with a base revision (`--base origin/main` by default, or `--base-root DIR`)
+  and prints what appeared, disappeared, changed or broke — as text, JSON or a
+  Markdown PR comment. See [CI: diagrams diff in PRs](docs/diff.md#ci-diagrams-diff-in-prs).
 
 ## Annotating flows
 
@@ -414,8 +420,11 @@ syntax errors (with the line); a `step` or `on -> …` that names a flow that is
 not declared; a flow id declared twice; a step that cannot be reached by calls
 from the flow's entry point; `ext` and `state` of a wrong shape; a journey that names a
 flow that is not declared, a `then` of an unknown journey, a journey id declared twice. A gap
-in a journey (two neighbouring flows with no link in the code) is a warning and does not change
-the exit code. The same run checks the `.arch` spec, see below.
+in a journey (two neighbouring flows with no link in the code) is a client link (`via:
+"client"`), reported as information. An `arch:state` transition that neither the function nor
+anything it calls makes is a warning (an error with `--strict`). Markup only names and describes,
+it never changes steps, links or their order: see docs/spec.md, "Annotations do not change the
+logic". The same run checks the `.arch` spec, see below.
 
 It also prints, as information that never fails the run, how much of the system is described in
 the code:

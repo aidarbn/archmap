@@ -168,7 +168,7 @@ func (g *graph) minorSteps(fl Flow) []string {
 	prev := ""
 	for i, s := range fl.Steps {
 		fn, ok := g.f.Functions[s]
-		keep := i == 0 || !ok || marked[s] || fl.Planned[s]
+		keep := i == 0 || !ok || marked[s]
 		if !keep && ok {
 			keep = g.meaningful(s, fn, prev, keptMod, trans, extFn)
 		}

@@ -107,3 +107,45 @@ func TestDeclaredFlowsFirst(t *testing.T) {
 		t.Fatalf("%d flows from Pay", n)
 	}
 }
+
+// The order of the steps of a declared flow comes from the call graph (calls in
+// body order, then queue hand-offs), never from where the marked functions sit
+// in the files or in what order the markup was written.
+func TestDeclaredStepOrderFromCallGraph(t *testing.T) {
+	id := func(n string) string { return "internal/x/f.go::" + n }
+	step := func(text string) *facts.ArchNote {
+		return &facts.ArchNote{Steps: []facts.StepNote{{Flow: "pay", Text: text}}}
+	}
+	tests := []struct {
+		name  string
+		funcs map[string]facts.Function
+		want  []string
+	}{
+		{"calls, not file lines", map[string]facts.Function{
+			id("Pay"): {Name: "Pay", Start: 50, Callees: []string{id("c"), id("b"), id("a")}, Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "pay"}}}},
+			id("a"):   {Name: "a", Start: 1, Arch: step("1")},
+			id("b"):   {Name: "b", Start: 10, Arch: step("2")},
+			id("c"):   {Name: "c", Start: 20, Arch: step("3")},
+		}, []string{id("Pay"), id("c"), id("b"), id("a")}},
+		{"depth first through unmarked glue, the queue after the calls", map[string]facts.Function{
+			id("Pay"):  {Name: "Pay", Start: 1, Callees: []string{id("glue"), id("last")}, AsyncCallees: []string{id("work")}, Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "pay"}}}},
+			id("glue"): {Name: "glue", Start: 5, Callees: []string{id("deep")}},
+			id("deep"): {Name: "deep", Start: 90, Arch: step("deep")},
+			id("last"): {Name: "last", Start: 2, Arch: step("last")},
+			id("work"): {Name: "work", Start: 3, Arch: step("worker")},
+		}, []string{id("Pay"), id("deep"), id("last"), id("work")}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &facts.Facts{Modules: map[string]facts.Module{"internal/x": {}}, Functions: map[string]facts.Function{}}
+			for k, fn := range tc.funcs {
+				fn.File, fn.Module, fn.Lang, fn.End = "internal/x/f.go", "internal/x", "go", fn.Start+3
+				f.Functions[k] = fn
+			}
+			fl := flowByID(Build(f), "pay")
+			if fl == nil || !reflect.DeepEqual(fl.Steps, tc.want) {
+				t.Fatalf("got %v, want %v", fl, tc.want)
+			}
+		})
+	}
+}

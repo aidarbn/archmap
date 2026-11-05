@@ -116,13 +116,12 @@ type Flow struct {
 	VariantsMore int       `json:"variantsMore,omitempty"`
 	// From the .arch specification (see mergeSpec):
 	// Spec marks a flow the spec declares (alone or together with arch:flow);
-	// Planned lists the steps that have no code yet (ids from PlannedID);
+	// Plan is the separate "plan" layer: the steps that have no code yet
+	// (`step plan`), never part of Steps — the diagram shows only the code;
 	// Unspecified lists steps found in the code that the spec flow does not list;
-	// Ext names the external system of a step (step id -> system);
-	// PlanMod the module a planned step is meant for (`step plan "…" in <module>`).
+	// Ext names the external system of a step (step id -> system).
 	Spec        bool              `json:"spec,omitempty"`
-	Planned     map[string]bool   `json:"planned,omitempty"`
-	PlanMod     map[string]string `json:"planMod,omitempty"`
+	Plan        []PlanStep        `json:"plan,omitempty"`
 	Unspecified map[string]bool   `json:"unspecified,omitempty"`
 	Ext         map[string]string `json:"ext,omitempty"`
 	// Trimming (see trim.go): Hidden — a technical scenario that lists skip;

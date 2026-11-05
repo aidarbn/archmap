@@ -137,15 +137,16 @@ func TestLintJourneys(t *testing.T) {
 		t.Fatalf("exit %d\n%s", code, out.String())
 	}
 	s := out.String()
-	for _, want := range []string{`no such flow "ghost"`, `no such journey "nojourney"`, `journey "guest" is already declared at main.go:4`, `warning: main.go:4: journey "guest": flows "order" and "qr"`} {
+	for _, want := range []string{`no such flow "ghost"`, `no such journey "nojourney"`, `journey "guest" is already declared at main.go:4`, `info: 1 journey links are client calls`} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in:\n%s", want, s)
 		}
 	}
 }
 
-// A gap between flows is a warning: the exit code stays 0.
-func TestLintJourneyGapIsWarning(t *testing.T) {
+// A gap between flows is a client link: information, the exit code stays 0
+// even with --strict.
+func TestLintJourneyGapIsClientLink(t *testing.T) {
 	src := `package main
 
 // arch:flow order "Order"
@@ -159,10 +160,10 @@ func QR() {}
 func main() { Order(); QR() }
 `
 	var out, errb bytes.Buffer
-	if code := run([]string{"lint", "--root", lintRepo(t, src)}, &out, &errb); code != 0 {
+	if code := run([]string{"lint", "--strict", "--root", lintRepo(t, src)}, &out, &errb); code != 0 {
 		t.Fatalf("exit %d\n%s%s", code, out.String(), errb.String())
 	}
-	if !strings.Contains(out.String(), "warning: main.go:4:") {
+	if !strings.Contains(out.String(), "info: 1 journey links are client calls") || strings.Contains(out.String(), "warning:") {
 		t.Fatal(out.String())
 	}
 }

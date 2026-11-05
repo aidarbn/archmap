@@ -65,6 +65,9 @@ func cmdLint(args []string, stdout, stderr io.Writer) int {
 		for _, m := range docs.Missing {
 			fmt.Fprintln(stdout, "info:", m)
 		}
+		if res.ClientLinks > 0 {
+			fmt.Fprintf(stdout, "info: %d journey links are client calls (no link in the code; --format json lists them)\n", res.ClientLinks)
+		}
 		if res.Planned > 0 {
 			fmt.Fprintf(stdout, "info: %d planned steps in the spec (no code yet)\n", res.Planned)
 		}

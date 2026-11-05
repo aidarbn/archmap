@@ -41,6 +41,8 @@ Usage:
   archmap map     [--root DIR] [--base REF] [--tests] [--out FILE] [--open] [--no-src]
   archmap serve   [--root DIR] [--base REF] [--tests] [--addr 127.0.0.1:0] [--open] [--no-src]
   archmap lint    [--root DIR] [--format text|json] [--tests] [--strict] [--missing-docs]
+  archmap diff    [--root DIR] [--base REF | --base-root DIR] [--format text|markdown|json]
+                  [--lang en|ru] [--out FILE] [--fail-on broken] [--tests]
   archmap version
 `
 
@@ -63,6 +65,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = cmdServe(args[1:], stdout, stderr)
 	case "lint":
 		return cmdLint(args[1:], stdout, stderr)
+	case "diff":
+		return cmdDiff(args[1:], stdout, stderr)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, "archmap", buildVersion())
 		return 0
