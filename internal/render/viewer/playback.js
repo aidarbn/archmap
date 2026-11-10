@@ -894,7 +894,7 @@ async function openRun(key) {
   const down = !BACK.restoring && (!state.run || state.run.key !== key);
   if (down) navPush();
   const from = down ? navFrom() : null;
-  if (state.view !== 'map') setView('map');
+  if (state.view !== 'map' && state.view !== 'seq') setView('map'); // the Sequence page shows the run itself
   for (let i = 0; i < 40 && state.busy; i++) await sleep(100);
   state.navZoom = down;
   try { loadRun(key); } finally { state.navZoom = false; }

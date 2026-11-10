@@ -16,7 +16,7 @@ func TestDocsCoverage(t *testing.T) {
 		},
 		Functions: map[string]facts.Function{
 			"srv/a.go::TabletsServer.Pay": {Name: "Pay", Cls: &cls, File: "srv/a.go", Start: 10, Module: "srv", Doc: "Pay charges.", Entry: &facts.Entry{Kind: "http"},
-				Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "pay", Name: "Pay", Actor: "Планшет"}}}},
+				Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "pay", Name: "Pay", Actor: "Планшет"}}, Steps: []facts.StepNote{{Flow: "pay", Text: "Принять платёж"}}}},
 			"srv/a.go::TabletsServer.Menu": {Name: "Menu", Cls: &cls, File: "srv/a.go", Start: 20, Module: "srv", Entry: &facts.Entry{Kind: "http"},
 				Arch: &facts.ArchNote{Flows: []facts.FlowDecl{{ID: "menu", Name: "Меню"}}}},
 			"cmd/main.go::main": {Name: "main", File: "cmd/main.go", Start: 3, Module: "cmd", Entry: &facts.Entry{Kind: "main"}},
@@ -45,6 +45,7 @@ func TestDocsCoverage(t *testing.T) {
 		{"actors", d.Actors, Count{2, 3}}, // Планшет (markup), tablet (service), admin (none)
 		{"externals", d.Externals, Count{1, 2}},
 		{"flows", d.Flows, Count{1, 2}},
+		{"steps", d.Steps, Count{1, 2}}, // the entry of pay has a caption, the entry of menu has none
 	}
 	for _, c := range cases {
 		if c.got != c.want {
@@ -63,6 +64,7 @@ func TestDocsCoverage(t *testing.T) {
 		"srv/a.go:20: no description (function TabletsServer.Menu)",
 		"out/cache: no description (external Redis)",
 		"srv/a.go:20: no description (flow menu «Меню»)",
+		"srv/a.go:20: no description (step menu → TabletsServer.Menu)",
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("missing %q in\n%s", want, all)

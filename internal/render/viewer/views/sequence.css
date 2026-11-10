@@ -118,3 +118,8 @@
 .seq .sbtn text { font-size: 11px; fill: var(--text-2); }
 .seq .head.ext rect:first-of-type { fill: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) { .seq * { transition: none !important; } }
+/* the page "Sequence": the dock is the whole canvas of the view, none of the dock's own placing controls apply */
+#v-seq .sd-grip, #v-seq .sd-ctl, #v-seq .sd-strip { display: none; }
+.seq-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted); font: 500 14px var(--font); }
+.seq-hint[hidden] { display: none; }
+#v-seq .seq-bar .lnk { display: none; }

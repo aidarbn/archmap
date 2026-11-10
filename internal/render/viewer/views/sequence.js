@@ -18,6 +18,7 @@
  * and scrolled to, a click plays up to the message's first step. */
 AM.addI18n({
   ru: {
+    seqPage: 'Последовательность', seqHint: 'Выберите сценарий в списке слева — здесь будет его диаграмма последовательности',
     seqTitle: 'Сценарий', seqEntry: 'Вход', seqReply: 'ответ', seqPause: 'пауза: задача ждёт в очереди', seqEnq: 'в очередь',
     seqExpand: 'развернуть', seqCollapse: 'свернуть', seqTake: '▶ пройти ветку', seqPick: '▶ выбрать исход',
     seqMapCap: 'Карта модулей', seqEmpty: 'Нет сценария для показа', seqExternal: 'внешняя', seqFlowTo: 'сценарий',
@@ -33,6 +34,7 @@ AM.addI18n({
     dockGrip: 'Потяните, чтобы изменить размер; двойной щелчок — по умолчанию', dockToggle: 'Сценарий: лист и последовательность',
   },
   en: {
+    seqPage: 'Sequence', seqHint: 'Pick a scenario in the list at the left — its sequence diagram appears here',
     seqTitle: 'Scenario', seqEntry: 'Entry', seqReply: 'reply', seqPause: 'pause: the job waits in the queue', seqEnq: 'enqueue',
     seqExpand: 'expand', seqCollapse: 'collapse', seqTake: '▶ take this branch', seqPick: '▶ pick this outcome',
     seqMapCap: 'Module map', seqEmpty: 'No scenario to show', seqExternal: 'external', seqFlowTo: 'scenario',
@@ -61,7 +63,7 @@ let sLevel = 1, sScope = null, sZ = 1, sLink = true;
 const sOpen = new Set(); // expanded branch previews
 const sSub = new Set();  // messages opened into frames (keys)
 const sReq = new Set();  // function bodies already requested for the call lines
-try { sLink = localStorage.getItem('archmap.seqlink') !== '0'; } catch (e) { /* file:// without storage */ }
+sLink = false; // the diagram is a page of its own: its level is not tied to the map's (the checkbox is hidden)
 // the dock shows the scenario sheet (views/sheet.js, the default) or the sequence diagram; the choice is remembered
 let sMode = 'sheet';
 try { if (localStorage.getItem('archmap.seqmode') === 'seq') sMode = 'seq'; } catch (e) { /* file:// without storage */ }
@@ -343,7 +345,7 @@ function seqRender() {
     AM.svg('rect', { x: X[p.key] - w / 2, y: 12, width: w, height: 42, rx: p.kind === 'actor' ? 21 : p.kind === 'fn' ? 5 : 9, style: p.kind === 'ext' || p.kind === 'queue' ? 'stroke-dasharray:4 3' : '' }, hd);
     if (p.kind === 'mod' || p.kind === 'fn') AM.svg('rect', { x: X[p.key] - w / 2 + 8, y: 22, width: 3, height: 22, rx: 1.5, fill: AM.LCOLOR[p.layer], style: 'filter:none;stroke:none' }, hd);
     const kind = p.kind === 'actor' ? AM.t('actor') : p.kind === 'svc' ? AM.t('seqSvc') : p.kind === 'mod' ? AM.t('layers')[p.layer] : p.kind === 'fn' ? AM.short(p.mod) : p.kind === 'queue' ? AM.t('queue') : (AM.t('kinds')[p.ext.kind] || AM.t('seqExternal'));
-    AM.svg('text', { x: X[p.key], y: 29, 'text-anchor': 'middle', class: 'k' }, hd, txt(kind, Math.max(10, Math.floor(w / 7.5))));
+    AM.svg('text', { x: X[p.key], y: 29, 'text-anchor': 'middle', class: 'pk' }, hd, txt(kind, Math.max(10, Math.floor(w / 7.5))));
     AM.svg('text', { x: X[p.key], y: 45, 'text-anchor': 'middle' }, hd, txt(p.name, Math.max(10, Math.floor(w / 7))));
     AM.svg('title', null, hd, p.kind === 'mod' ? p.mod : p.kind === 'fn' ? p.fid : p.name);
     const pick = () => {
@@ -761,7 +763,7 @@ try {
 const sdSave = () => { try { localStorage.setItem(SD_KEY, JSON.stringify(SD)); } catch (e) { /* ignore */ } };
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 let sInitKey = null; // the run the page started with: it does not open the dock by itself
-let sDock = null, sHost = null, sGrip = null, sStrip = null, sFull = false, sUser = null, sRaf = 0;
+let sHint = null, sDock = null, sHost = null, sGrip = null, sStrip = null, sFull = false, sUser = null, sRaf = 0;
 const sCtl = {};
 const ICON = {
   bottom: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M2 9h12" /><rect x="3" y="9.4" width="10" height="3.4" fill="currentColor" stroke="none"/></svg>',
@@ -774,13 +776,11 @@ const ICON = {
 };
 
 // shown: the dock is on screen and open (not the strip) on the map tab — only then the diagram is drawn
-const sShown = () => !!sDock && !sDock.hidden && (!SD.min || sFull) && AM.state.view === 'map';
+const sShown = () => !!sDock && !sDock.hidden && AM.state.view === 'seq';
 // wanted: a scenario, path or variant is chosen or plays (the start-up run waits for a step); the user's choice for this run wins
 function sdWanted() {
   const r = AM.state.run;
-  if (!r || !AM.play.list().length) return false;
-  if (sUser && sUser.key === r.key) return sUser.on;
-  return (r.key !== sInitKey && /^(flow|journey|variant|fn):/.test(r.key)) || AM.state.step >= 0;
+  return AM.state.view === 'seq' && !!r && AM.play.list().length > 0;
 }
 function sdProgress() {
   const r = AM.state.run; if (!r) return '';
@@ -811,30 +811,19 @@ function sdTitles() {
 // place and size; tells the map how much it lost. dur — the camera's animation (0 while dragging)
 function sdLayout(dur) {
   if (!sDock) return;
+  // the sequence diagram is a page of its own: it takes the whole canvas of its view (the map is not shared with it)
   const vis = sdWanted();
-  if (!vis) sFull = false;
+  sFull = vis;
   sDock.hidden = !vis;
+  if (sHint) sHint.hidden = vis;
   const W = sHost.clientWidth || 1000, H = sHost.clientHeight || 600, st = sDock.style;
-  let b = 0, r = 0;
-  if (vis) {
-    if (SD.min) b = SD_STRIP;
-    else if (SD.pos === 'bottom') b = Math.round(clampN(H * SD.bottom, 140, H * 0.7));
-    else r = Math.round(clampN(W * SD.right, 340, W * 0.7));
-  }
-  sDock.dataset.pos = SD.pos;
-  sDock.classList.toggle('min', SD.min && !sFull);
-  sDock.classList.toggle('full', sFull);
-  st.top = st.left = st.right = st.bottom = st.width = st.height = '';
-  if (sFull) { st.top = st.left = st.right = st.bottom = '0'; }
-  else if (SD.min) { st.left = st.right = st.bottom = '0'; st.height = SD_STRIP + 'px'; }
-  else if (SD.pos === 'bottom') { st.left = st.right = st.bottom = '0'; st.height = b + 'px'; }
-  else { st.top = st.right = st.bottom = '0'; st.width = r + 'px'; }
-  sHost.style.setProperty('--dock-b', b + 'px'); sHost.style.setProperty('--dock-r', r + 'px');
-  sHost.dataset.dock = r ? 'r' : b ? 'b' : '';
-  const box = [vis, b, r, sFull, W, H, SD.pos].join();
+  sDock.dataset.pos = 'bottom';
+  sDock.classList.remove('min');
+  sDock.classList.add('full');
+  st.top = st.left = st.right = st.bottom = '0'; st.width = st.height = '';
+  const box = [vis, W, H].join();
   if (box !== sBox) { sBox = box; sDirty = true; } // another size: the diagram is laid out for the width it has
   sdTitles();
-  if (AM.map.setDock) AM.map.setDock(b, r, dur);
 }
 // one place that brings everything in line: visibility, layout, labels, the diagram
 function sdSync(force, dur) {
@@ -859,7 +848,7 @@ function sdFull(on) {
 function sdSet(patch) { Object.assign(SD, patch); sdSave(); sdPop(false); sdSync(true); }
 function sdBuild() {
   if (sDock) return true;
-  sHost = document.getElementById('v-map'); if (!sHost) return false;
+  sHost = document.getElementById('v-seq'); if (!sHost) return false;
   sInitKey = AM.state.run ? AM.state.run.key : null;
   sDock = AM.h('section', { class: 'seqdock', hidden: true, 'aria-label': AM.t('seqTitle') }, sHost);
   sGrip = AM.h('div', { class: 'sd-grip', role: 'separator', tabindex: 0 }, sDock);
@@ -919,9 +908,22 @@ function sdBuild() {
 // Esc: close the open list, then leave the full screen; true when it took the key
 function sdEsc() {
   if (sPopOpen) { sdPop(false); return true; }
-  if (sFull) { sdFull(false); return true; }
   return false;
 }
+// the page "Sequence" of the sidebar list (like Data, API, Statuses): the sequence diagram of the chosen scenario
+AM.registerView({
+  id: 'seq',
+  order: 45,
+  menu: false,
+  title: () => AM.t('seqPage'),
+  mount(el) {
+    sHint = AM.h('div', { class: 'seq-hint' }, el);
+    sHint.textContent = AM.t('seqHint');
+    sdSync(true, 0);
+  },
+  show() { if (sHint) sHint.textContent = AM.t('seqHint'); sdSync(true, 0); },
+  onLang() { if (sHint) sHint.textContent = AM.t('seqHint'); },
+});
 AM.dock = {
   toggle() { const r = AM.state.run; if (!r) return; if (sdBuild()) sdUser(!sdWanted()); },
   // open(full): show the dock for the current run (full screen when asked)

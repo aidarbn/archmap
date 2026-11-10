@@ -4,13 +4,13 @@
 let sys = null, map = null, fv = null;
 const INSET = 34; // px kept free at the top of every scene: the crumbs sit over its top-left corner
 // the sequence dock (views/sequence.js) covers a strip at the bottom or on the right of the map: cameras fit into the rest
-const DOCK = { b: 0, r: 0 };
-const dockInsets = (cam) => { cam.insetBottom = DOCK.b; cam.insetRight = DOCK.r; };
-// setDock(bottom, right, dur): the dock changed; re-frame the current step (or the whole level) in the free area
-function setDock(b, r, dur = 220) {
-  b = Math.max(0, b | 0); r = Math.max(0, r | 0);
-  if (DOCK.b === b && DOCK.r === r) return;
-  DOCK.b = b; DOCK.r = r;
+const DOCK = { b: 0, r: 0, l: 0 }; // l: the steps rail (rail.js)
+const dockInsets = (cam) => { cam.insetBottom = DOCK.b; cam.insetRight = DOCK.r; cam.insetLeft = DOCK.l; };
+// setDock(bottom, right, dur, left): the dock changed; re-frame the current step (or the whole level) in the free area
+function setDock(b, r, dur = 220, l = DOCK.l) {
+  b = Math.max(0, b | 0); r = Math.max(0, r | 0); l = Math.max(0, l | 0);
+  if (DOCK.b === b && DOCK.r === r && DOCK.l === l) return;
+  DOCK.b = b; DOCK.r = r; DOCK.l = l;
   [sys, map, fv].forEach((sc) => { if (sc && sc.cam) dockInsets(sc.cam); });
   if (state.view !== 'map' || state.busy) return;
   const s = curStep();
@@ -18,7 +18,8 @@ function setDock(b, r, dur = 220) {
   else if (state.level === 1 && map) {
     const a = s && s.prev ? unitFor(D.fns[s.prev].module) : s && s.actor && map.nodes[s.actor.id] ? s.actor.id : null, c = s ? unitFor(s.mod) : null;
     const ra = a && map.pos[a], rb = c && map.pos[c];
-    if (rb) map.cam.animTo(bbox([ra, rb]), 160, 1100, RM ? 0 : dur); else map.cam.animTo(map.extent, 10, 0, RM ? 0 : dur);
+    if (FOCUS) map.cam.animTo(map.extent, 28, 560, RM ? 0 : dur); // a scenario: the whole of it, as fitMap does
+    else if (rb) map.cam.animTo(bbox([ra, rb]), 160, 1100, RM ? 0 : dur); else map.cam.animTo(map.extent, 10, 0, RM ? 0 : dur);
   } else if (state.level === 2 && fv) fv.cam.animTo(fv.extent, 10, 0, RM ? 0 : dur);
 }
 
@@ -385,8 +386,12 @@ function drillFromSys(id) {
 }
 
 /* ===================== Level 1: module map ===================== */
-const CW = 196, CH = 68, GX = 14, GY = 16, LBL = 160;
+// a scenario (FOCUS) draws few cards, so they are roomy: whole names, the description on two lines, wide gaps
+let CW = 196, CH = 68;
+const GX = 14, GY = 16, LBL = 160;
+const FOC = { cw: 340, ch: 142, gx: 90, gy: 48, gap: 56, aw: 250, ah: 70, xw: 270, xh: 84, lbl: 130, side: 56 };
 function buildMap() {
+  CW = FOCUS ? FOC.cw : 196; CH = FOCUS ? FOC.ch : 68;
   computeUnits();
   const root = $('#sc1'); root.innerHTML = '';
   const svg = S_('svg', {}, root);
@@ -407,8 +412,8 @@ function buildMap() {
   const perBand = present.map((l) => units.filter((u) => unitLayer(u) === l).length);
   const cols = FOCUS ? Math.max(1, Math.min(6, ...perBand)) : Math.max(5, Math.min(8, Math.ceil(Math.sqrt(units.length))));
   const lay = layered(units.map((u, i) => ({ id: u.id, layer: present.indexOf(unitLayer(u)), order: i })), E.map((e) => [e.a, e.b]),
-    { w: CW, h: CH, gx: FOCUS ? 44 : GX, gy: GY, cols, x0: LBL, y0: 120, head: 40, gap: 22, sweeps: FOCUS ? 0 : 8 });
-  const pos = lay.pos, W = LBL + lay.width + 20;
+    { w: CW, h: CH, gx: FOCUS ? FOC.gx : GX, gy: FOCUS ? FOC.gy : GY, cols, x0: FOCUS ? FOC.lbl : LBL, y0: 120, head: 40, gap: FOCUS ? FOC.gap : 22, sweeps: FOCUS ? 0 : 8 });
+  const pos = lay.pos, W = (FOCUS ? FOC.lbl : LBL) + lay.width + 20;
   const bands = {};
   lay.bands.forEach((b) => { bands[present[b.layer]] = { y: b.y, h: b.h }; });
   map = { svg, g, fx, ge, pos, bands, nodes: {}, edges: [], W, crossings: lay.crossings };
@@ -426,7 +431,7 @@ function buildMap() {
     acts.forEach((o) => { o.y = uy(o.tg); if (o.y == null) o.y = 160; });
     acts.sort((p, q) => p.y - q.y);
     let ly = -1e9;
-    acts.forEach((o) => { const yy = Math.max(o.y - 25, ly + 64); ly = yy; pos[o.a.id] = { x: -240, y: yy, w: 200, h: 50, actor: true, a: o.a, left: true }; });
+    acts.forEach((o) => { const yy = Math.max(o.y - FOC.ah / 2, ly + FOC.ah + 16); ly = yy; pos[o.a.id] = { x: -FOC.aw - FOC.side, y: yy, w: FOC.aw, h: FOC.ah, actor: true, a: o.a, left: true }; });
   } else {
     acts.forEach((o) => { o.x = ux(o.tg); if (o.x == null) o.x = LBL + lay.width / 2; });
     acts.sort((p, q) => p.x - q.x);
@@ -434,18 +439,18 @@ function buildMap() {
     acts.forEach((o) => { o.x = Math.max(o.x - 100, lastX + 214); lastX = o.x; pos[o.a.id] = { x: o.x, y: 30, w: 200, h: 50, actor: true, a: o.a }; });
   }
   // externals (right column), placed level with their adapter modules
-  const EX = W + 90;
+  const EX = W + (FOCUS ? FOC.side : 90), XW = FOCUS ? FOC.xw : 190, XH = FOCUS ? FOC.xh : 56;
   const exts = shownExts().map((x) => ({ x, tg: uniq((FOCUS ? Array.from(FOCUS.extFrom[x.id] || []).concat((x.modules || []).filter((m) => FOCUS.mods.has(m))) : x.modules || []).map((m) => unitOf[m]).filter(Boolean)) }));
   exts.forEach((o) => { o.y = uy(o.tg); if (o.y == null) o.y = 200; });
   exts.sort((p, q) => p.y - q.y);
   let lastY = -1e9;
-  exts.forEach((o) => { const yy = Math.max(o.y - 28, lastY + 70); lastY = yy; pos[o.x.id] = { x: EX, y: yy, w: 190, h: 56, ext: o.x }; });
+  exts.forEach((o) => { const yy = Math.max(o.y - XH / 2, lastY + XH + (FOCUS ? 24 : 14)); lastY = yy; pos[o.x.id] = { x: EX, y: yy, w: XW, h: XH, ext: o.x }; });
   if (exts.length) S_('text', { x: EX, y: pos[exts[0].x.id].y - 16, class: 'grp' }, gb, t('ext'));
   const lastBand = bands[present[present.length - 1]] || { y: 120, h: 100 };
-  const maxY = Math.max(lastBand.y + lastBand.h, ...exts.map((o) => pos[o.x.id].y + 56));
-  const right = Math.max(exts.length ? EX + 190 : W, ...acts.map((o) => pos[o.a.id].x + 200));
+  const maxY = Math.max(lastBand.y + lastBand.h, ...exts.map((o) => pos[o.x.id].y + XH));
+  const right = Math.max(exts.length ? EX + XW : W, ...acts.map((o) => pos[o.a.id].x + pos[o.a.id].w));
   if (FOCUS) {
-    const x0 = acts.length ? -260 : -20, y1 = Math.max(maxY, ...acts.map((o) => pos[o.a.id].y + 50));
+    const x0 = acts.length ? -FOC.aw - FOC.side - 20 : -20, y1 = Math.max(maxY, ...acts.map((o) => pos[o.a.id].y + FOC.ah));
     map.extent = { x: x0, y: 90, w: right + 40 - x0, h: y1 + 20 - 90 };
   } else map.extent = { x: -20, y: acts.length ? 10 : 90, w: right + 40, h: maxY + 20 - (acts.length ? 10 : 90) };
   // cards
@@ -456,7 +461,7 @@ function buildMap() {
   acts.forEach((o) => o.tg.forEach((u) => E.push({ a: o.a.id, b: u, w: 1, dash: true })));
   exts.forEach((o) => o.tg.forEach((u) => E.push({ a: u, b: o.x.id, w: 1, dash: true })));
   drawPortEdges(E, pos, ge);
-  map.cam = new Cam(svg, (vb) => { svg.classList.toggle('lod-lo', (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
+  map.cam = new Cam(svg, (vb) => { svg.classList.toggle('lod-lo', !FOCUS && (svg.parentElement.offsetWidth || 1000) / vb.w < 0.75); });
   map.cam.insetTop = INSET; dockInsets(map.cam); map.cam.maxW = Math.max(map.extent.w, map.extent.h * map.cam.aspect()) * 4; // far enough out for the level to drop below LEAVE (zoom.js)
   wireSelect(svg, map.cam, selectMod, (id) => {
     if (U[id] && U[id].kind === 'g') return expandGroup(U[id].node);
@@ -526,6 +531,17 @@ function mapCard(gn, u, r) {
   S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'card' }, n);
   S_('rect', { x: r.x + 10, y: r.y + 12, width: 3, height: r.h - 24, rx: 1.5, fill: LCOLOR[l], class: 'acc' }, n);
   const nm = short(m), parts = nm.split('/'), lastp = parts.pop();
+  if (FOCUS) { // roomy card: the whole name, the description on two lines — nothing is cut to a few letters
+    const dd = modDesc(m) || (D.MM[m] && D.MM[m].role) || '';
+    S_('text', { x: r.x + 26, y: r.y + 27, class: 't3 mono', style: 'font-size:13px' }, n, cutL(parts.join('/') + (parts.length ? '/' : ''), 30));
+    S_('text', { x: r.x + 26, y: r.y + 56, class: 't1', style: 'font-size:23px' }, n, cut(lastp, 20));
+    S_('text', { x: r.x + r.w - 14, y: r.y + 27, 'text-anchor': 'end', class: 't3', style: 'font-size:13px;font-variant-numeric:tabular-nums' }, n, u.n + ' ' + t('fnShort'));
+    wrapText(dd, 37, 3).forEach((ln, i) => S_('text', { x: r.x + 26, y: r.y + 84 + i * 18, class: 't3', style: 'font-size:14.5px' }, n, ln));
+    chgBadge(n, u.chg, r);
+    S_('title', {}, n, modLabel(m) + (dd ? '\n' + dd : ''));
+    map.nodes[m] = { el: n, r };
+    return;
+  }
   S_('text', { x: r.x + 20, y: r.y + 24, class: 't3 lod-o', style: 'font-size:13px' }, n, cutL(parts.join('/'), 22));
   S_('text', { x: r.x + 20, y: r.y + 50, class: 't1 lod-o', style: 'font-size:19px' }, n, cut(lastp, 16));
   S_('text', { x: r.x + 22, y: r.y + 21, class: 't3 lod-d mono', style: 'font-size:10.5px' }, n, cutL(parts.join('/') + (parts.length ? '/' : ''), 24));
@@ -561,8 +577,13 @@ function extCard(gn, id, r) {
   S_('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: r.actor ? 25 : 10, class: 'card dash' }, n);
   if (r.actor) actorIcon(n, r.x + 14, r.y + 12); else sysIcon(n, r.ext.kind, r.x + 14, r.y + 17);
   const name = r.actor ? actorName(r.a) : r.ext.name;
-  S_('text', { x: r.x + 48, y: r.y + (r.actor ? 22 : 24), class: 't1' }, n, cut(name, 18));
-  S_('text', { x: r.x + 48, y: r.y + (r.actor ? 39 : 41), class: 't3' }, n, sysSub(r, 24));
+  if (FOCUS) { // roomy: the name whole, the sub-line wrapped to two lines
+    S_('text', { x: r.x + 52, y: r.y + 28, class: 't1', style: 'font-size:17px' }, n, cut(name, 22));
+    wrapText(sysSub(r, 200), 28, 2).forEach((ln, i) => S_('text', { x: r.x + 52, y: r.y + 49 + i * 16, class: 't3', style: 'font-size:13px' }, n, ln));
+  } else {
+    S_('text', { x: r.x + 48, y: r.y + (r.actor ? 22 : 24), class: 't1' }, n, cut(name, 18));
+    S_('text', { x: r.x + 48, y: r.y + (r.actor ? 39 : 41), class: 't3' }, n, sysSub(r, 24));
+  }
   S_('title', {}, n, sysTip(r));
   map.nodes[id] = { el: n, r };
 }
@@ -832,7 +853,7 @@ function focusNode(f) {
 }
 function fitMap(focus) {
   const id = focusNode(focus);
-  if (FOCUS) map.cam.fit({ ...map.extent }, 40, 1150); // the whole scenario at once, not blown up when it is small
+  if (FOCUS) map.cam.fit({ ...map.extent }, 28, 560); // the whole scenario at once and large; a tiny one is not blown up past ~1.6x
   else if (id && map.pos[id]) { const r = map.pos[id]; map.cam.fit({ x: r.x - 380, y: r.y - 240, w: r.w + 760, h: r.h + 480 }, 20); }
   else map.cam.fitTop({ ...map.extent }, 40);
 }

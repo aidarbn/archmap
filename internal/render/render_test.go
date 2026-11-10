@@ -210,19 +210,19 @@ func TestLiveFlashVisibleAndPersistent(t *testing.T) {
 	}
 }
 
-// The minimal interface: walk, editor, the sequence dock and the scenario sheet stay in the sources but are not
-// put into the page; there is no auto play, no search or language switch in the markup — the header is the name
+// The minimal interface: walk, editor and the scenario sheet stay in the sources but are not put into the page
+// (the sequence diagram is a separate chart under the map and is in it); there is no auto play, no search or language switch in the markup — the header is the name
 // and ⋯, the scenarios are the list at the left.
 func TestMinimalInterface(t *testing.T) {
 	v := Viewer()
-	for _, name := range []string{"editor", "walk", "sequence", "sheet"} {
+	for _, name := range []string{"editor", "walk", "sheet"} {
 		for _, ext := range []string{".js", ".css"} {
 			if strings.Contains(v, "/* --- views/"+name+ext+" --- */") {
 				t.Errorf("views/%s%s must not be in the page", name, ext)
 			}
 		}
 	}
-	for _, s := range []string{"/* --- views/api.js --- */", "/* --- views/data.js --- */", "/* --- views/status.js --- */", "flowSteps", "planMod"} {
+	for _, s := range []string{"/* --- views/sequence.js --- */", "/* --- views/api.js --- */", "/* --- views/data.js --- */", "/* --- views/status.js --- */", "flowSteps", "planMod"} {
 		if !strings.Contains(v, s) {
 			t.Errorf("%q missing from the page", s)
 		}

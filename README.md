@@ -503,7 +503,9 @@ info: descriptions: modules 54/56, entry points 127/149, endpoints 144/150, acto
 (modules with functions, functions that are entry points, endpoints and tasks, actors grouped as on
 the map, before the "other roles" fold, outside systems, and declared scenarios — an `arch:flow` is
 described by the doc comment of its entry function or the description of its endpoint, e.g. the
-rpc comment). `--missing-docs` lists every place
+rpc comment) and the steps of declared scenarios that have a caption (`arch:step <flow> "…"`) — the
+caption is the text of the step in the viewer's list, without it the first sentence of the doc comment
+or the function name is shown (`step` in the gaps). `--missing-docs` lists every place
 without a description as `file:line: no description (kind name)`, ready to fill in; the JSON format
 has the same under `docs`. `archmap map` prints the summary line to stderr.
 

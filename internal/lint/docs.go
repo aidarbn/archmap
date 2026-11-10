@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/aidarbn/archmap/internal/autosem"
 	"github.com/aidarbn/archmap/internal/facts"
 )
 
@@ -44,13 +45,14 @@ type DocCoverage struct {
 	Actors    Count     `json:"actors"`    // who uses the system (as on the map)
 	Externals Count     `json:"externals"` // outside systems
 	Flows     Count     `json:"flows"`     // declared scenarios (arch:flow)
+	Steps     Count     `json:"steps"`     // steps of the declared scenarios with a caption (arch:step)
 	Missing   []Missing `json:"missing,omitempty"`
 }
 
 // Line is the one-line summary.
 func (d DocCoverage) Line() string {
-	return fmt.Sprintf("descriptions: modules %s, entry points %s, endpoints %s, actors %s, externals %s, scenarios %s",
-		d.Modules, d.Entries, d.Endpoints, d.Actors, d.Externals, d.Flows)
+	return fmt.Sprintf("descriptions: modules %s, entry points %s, endpoints %s, actors %s, externals %s, scenarios %s, step captions %s",
+		d.Modules, d.Entries, d.Endpoints, d.Actors, d.Externals, d.Flows, d.Steps)
 }
 
 // Docs counts the descriptions of f; Missing lists what has none, in the
@@ -155,6 +157,27 @@ func Docs(f *facts.Facts) DocCoverage {
 				name += " «" + fl.Name + "»"
 			}
 			miss = append(miss, Missing{Kind: "flow", Name: name, File: fn.File, Line: fn.Start})
+		}
+	}
+
+	// the text of a step in the viewer's list is its caption (`arch:step <flow> "…"`); without one it falls back to the
+	// first sentence of the doc comment, then to the function name, which reads poorly
+	for _, fl := range autosem.Build(f).Flows {
+		if fl.Kind != "declared" {
+			continue
+		}
+		for _, sid := range fl.Steps {
+			d.Steps.Total++
+			if strings.TrimSpace(fl.Labels[sid]) != "" {
+				d.Steps.Have++
+				continue
+			}
+			fn := f.Functions[sid]
+			name := fn.Name
+			if fn.Cls != nil {
+				name = *fn.Cls + "." + name
+			}
+			miss = append(miss, Missing{Kind: "step", Name: fl.ID + " → " + name, File: fn.File, Line: fn.Start})
 		}
 	}
 

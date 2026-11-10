@@ -26,7 +26,7 @@ function onGesture(el, fn) {
 // new Cam(svg, onChange): drag to pan, wheel to zoom; set/fit/animTo work in world coordinates.
 class Cam {
   constructor(svg, onChange) {
-    this.svg = svg; this.vb = { x: 0, y: 0, w: 100, h: 100 }; this.onChange = onChange; this.maxW = 1e5; this.minW = 120; this.insetTop = 0; this.insetBottom = 0; this.insetRight = 0; // px; the map scenes set them to clear their overlays
+    this.svg = svg; this.vb = { x: 0, y: 0, w: 100, h: 100 }; this.onChange = onChange; this.maxW = 1e5; this.minW = 120; this.insetTop = 0; this.insetBottom = 0; this.insetRight = 0; this.insetLeft = 0; // px; the map scenes set them to clear their overlays
     let drag = null;
     svg.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; drag = { x: e.clientX, y: e.clientY, vb: { ...this.vb }, moved: false }; });
     window.addEventListener('pointermove', (e) => {
@@ -71,12 +71,14 @@ class Cam {
   insetPx() { return Math.min(this.insetTop, this.size().H * 0.25); }
   insetBPx() { return Math.min(this.insetBottom, this.size().H * 0.6); }
   insetRPx() { return Math.min(this.insetRight, this.size().W * 0.6); }
+  insetLPx() { return Math.min(this.insetLeft, this.size().W * 0.5); } // the steps rail at the left (rail.js)
+  insetXPx() { return this.insetLPx() + this.insetRPx(); }
   // aspect of the free area (inside the insets)
-  freeAspect() { const { W, H } = this.size(); return (W - this.insetRPx()) / (H - this.insetPx() - this.insetBPx()); }
+  freeAspect() { const { W, H } = this.size(); return (W - this.insetXPx()) / (H - this.insetPx() - this.insetBPx()); }
   // view box whose free area is w x h (world) and starts at world (x, y0); the free area is the top-left part minus the top strip
   boxBelow(x, y0, w, h) {
-    const { W, H } = this.size(), iT = this.insetPx(), fw = w * W / (W - this.insetRPx()), fh = h * H / (H - iT - this.insetBPx());
-    return { x, y: y0 - fh * iT / H, w: fw, h: fh };
+    const { W, H } = this.size(), iT = this.insetPx(), fw = w * W / (W - this.insetXPx()), fh = h * H / (H - iT - this.insetBPx());
+    return { x: x - fw * this.insetLPx() / W, y: y0 - fh * iT / H, w: fw, h: fh };
   }
   set(vb) {
     this.vb = vb;
@@ -104,13 +106,13 @@ class Cam {
   // contains(r): the rect is fully visible (below the inset)
   contains(r, m = 0) {
     const v = this.vb, k = v.w / this.size().W, top = v.y + this.insetPx() * k;
-    return r.x >= v.x + m && r.y >= top + m && r.x + r.w <= v.x + v.w - this.insetRPx() * k - m && r.y + r.h <= v.y + v.h - this.insetBPx() * k - m;
+    return r.x >= v.x + this.insetLPx() * k + m && r.y >= top + m && r.x + r.w <= v.x + v.w - this.insetRPx() * k - m && r.y + r.h <= v.y + v.h - this.insetBPx() * k - m;
   }
   insetWorld(w) { return this.insetPx() * w / this.size().W; }
   // the part of the scene on screen that no overlay covers (world)
   freeRect() {
     const v = this.vb, k = v.w / this.size().W, t = this.insetPx() * k;
-    return { x: v.x, y: v.y + t, w: v.w - this.insetRPx() * k, h: v.h - t - this.insetBPx() * k };
+    return { x: v.x + this.insetLPx() * k, y: v.y + t, w: v.w - this.insetXPx() * k, h: v.h - t - this.insetBPx() * k };
   }
   animTo(r, pad = 40, minW = 0, dur = DUR) { return this.animToVB(this.rectFor(r, pad, minW), dur); }
   animToVB(to, dur = DUR) {

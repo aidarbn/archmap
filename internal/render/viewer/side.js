@@ -17,7 +17,7 @@
 
 addI18n({
   ru: {
-    nvSys: 'Система', nvActors: 'Пользователи', nvMods: 'Модули', nvExt: 'Внешние системы', nvData: 'Данные', nvApi: 'API', nvStatus: 'Статусы',
+    nvSys: 'Система', nvActors: 'Пользователи', nvMods: 'Модули', nvExt: 'Внешние системы', nvData: 'Данные', nvApi: 'API', nvStatus: 'Статусы', nvSeq: 'Последовательность',
     nvScen: 'Диаграммы', nvPaths: 'Сквозные пути', nvSched: 'По расписанию', nvAll: 'Все сценарии', nvWin: 'Откроется диаграммой на холсте; повторный клик — назад к карте',
     sdFilter: 'Фильтр', sdNone: 'Ничего не найдено', sdHide: 'Скрыть навигацию', sdShow: 'Показать навигацию',
     sdLabel: 'Навигация', sdGrip: 'Потяните, чтобы изменить ширину; двойной клик — по умолчанию', sdFold: 'Свернуть', sdUnfold: 'Развернуть',
@@ -35,7 +35,7 @@ addI18n({
     peNoEp: 'у ручки нет однозначного имени', peOrderNo: 'большие диаграммы (пути, статусы) всегда стоят выше — порядок только внутри своей группы',
   },
   en: {
-    nvSys: 'System', nvActors: 'Users', nvMods: 'Modules', nvExt: 'Outside systems', nvData: 'Data', nvApi: 'API', nvStatus: 'Statuses',
+    nvSys: 'System', nvActors: 'Users', nvMods: 'Modules', nvExt: 'Outside systems', nvData: 'Data', nvApi: 'API', nvStatus: 'Statuses', nvSeq: 'Sequence',
     nvScen: 'Diagrams', nvPaths: 'Through paths', nvSched: 'Scheduled', nvAll: 'All scenarios', nvWin: 'Opens as a diagram on the canvas; click again to go back to the map',
     sdFilter: 'Filter', sdNone: 'Nothing found', sdHide: 'Hide the navigation', sdShow: 'Show the navigation',
     sdLabel: 'Navigation', sdGrip: 'Drag to resize; double-click for the default', sdFold: 'Fold', sdUnfold: 'Unfold',
@@ -95,6 +95,7 @@ function pageList() {
   if (hasView('data') && Object.keys(D.tables || {}).length) out.push({ id: 'data', name: t('nvData'), view: 'data', icon: 'table', sec: 'sec:data' });
   if (hasView('api') && (D.endpoints || []).length) out.push({ id: 'api', name: t('nvApi'), view: 'api', icon: 'api', sec: 'sec:api' });
   if (hasView('status') && Object.keys(D.states || {}).length) out.push({ id: 'status', name: t('nvStatus'), view: 'status', icon: 'status', sec: 'sec:status' });
+  if (hasView('seq') && (D.flows || []).length) out.push({ id: 'seq', name: t('nvSeq'), view: 'seq', icon: 'flow' });
   if (hasView('page')) userPages().forEach((p) => out.push({ id: 'p:' + p.id, name: p.name, view: 'page', icon: 'page', page: p, user: true, bad: (p.frames || []).some((f) => (f.missing || []).length) }));
   return out;
 }
@@ -108,7 +109,7 @@ function openPage(id) {
   const p = pageList().find((x) => x.id === id); if (!p) return;
   closeMenu();
   if (AM.pages) AM.pages.forget(); // a page picked by hand: Esc no longer returns to the page a frame came from
-  if (state.run) closeRun();
+  if (state.run && p.view !== 'seq') closeRun(); // the Sequence page draws the scenario that is open
   if (p.user) { AM.pages.open(p.page.id); return; }
   if (state.view !== p.view) setView(p.view);
   if (p.view === 'map' && state.level > 0) up(0);
